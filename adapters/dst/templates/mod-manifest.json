@@ -1,0 +1,7 @@
+{
+  "game": "dst",
+  "policy": "embedded",
+  "mods": [],
+  "load_order": [],
+  "note": "MVP 默认无模组。后续玩家上传模组后，由平台更新本文件并生成 modoverrides.lua。"
+}
