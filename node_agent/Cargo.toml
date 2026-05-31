@@ -1,0 +1,19 @@
+[package]
+name = "node_agent"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["clock", "serde"] }
+prost = "0.13"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tonic = "0.12"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[build-dependencies]
+protoc-bin-vendored = "3"
+tonic-build = "0.12"

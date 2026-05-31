@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+package nodeagent.v1;
+
+service NodeAgentService {
+  rpc PrepareGameBuild(PrepareGameBuildRequest) returns (PrepareGameBuildResponse);
+  rpc StartInstance(StartInstanceRequest) returns (StartInstanceResponse);
+  rpc StopInstance(StopInstanceRequest) returns (StopInstanceResponse);
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (RestoreSnapshotResponse);
+  rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
+  rpc InspectInstance(InspectInstanceRequest) returns (InspectInstanceResponse);
+  rpc GetHeartbeat(GetHeartbeatRequest) returns (GetHeartbeatResponse);
+}
+
+message PrepareGameBuildRequest {
+  string node_id = 1;
+  GameBuild build = 2;
+}
+
+message PrepareGameBuildResponse {
+  NodeOperation operation = 1;
+  BuildPreparationResult result = 2;
+}
+
+message StartInstanceRequest {
+  InstanceRuntimeSpec instance = 1;
+}
+
+message StartInstanceResponse {
+  NodeOperation operation = 1;
+  InstanceRuntimeRecord runtime = 2;
+}
+
+message StopInstanceRequest {
+  string instance_id = 1;
+}
+
+message StopInstanceResponse {
+  NodeOperation operation = 1;
+}
+
+message CreateSnapshotRequest {
+  string instance_id = 1;
+  string snapshot_id = 2;
+}
+
+message CreateSnapshotResponse {
+  NodeOperation operation = 1;
+  SnapshotArtifact snapshot = 2;
+}
+
+message RestoreSnapshotRequest {
+  string instance_id = 1;
+  string snapshot_id = 2;
+  string storage_uri = 3;
+  optional string manifest_uri = 4;
+  optional string checksum = 5;
+}
+
+message RestoreSnapshotResponse {
+  NodeOperation operation = 1;
+  SnapshotRestoreResult result = 2;
+}
+
+message GetOperationRequest {
+  string operation_id = 1;
+}
+
+message GetOperationResponse {
+  NodeOperation operation = 1;
+}
+
+message InspectInstanceRequest {
+  string instance_id = 1;
+}
+
+message InspectInstanceResponse {
+  InstanceRuntimeRecord runtime = 1;
+}
+
+message GetHeartbeatRequest {}
+
+message GetHeartbeatResponse {
+  NodeHeartbeat heartbeat = 1;
+}
+
+message GameBuild {
+  string build_id = 1;
+  GameKind game = 2;
+  optional string channel = 3;
+  optional string adapter_version = 4;
+  optional string custom_game = 5;
+}
+
+message ResourceRequirements {
+  uint32 cpu_millis = 1;
+  uint32 memory_mb = 2;
+  uint32 disk_mb = 3;
+}
+
+message InstanceSpec {
+  string cluster_name = 1;
+  uint32 max_players = 2;
+  ResourceRequirements resources = 3;
+  optional string world_preset = 4;
+  optional string mod_manifest_id = 5;
+}
+
+message SnapshotReference {
+  string snapshot_id = 1;
+  optional string storage_uri = 2;
+  optional string manifest_uri = 3;
+  optional string checksum = 4;
+}
+
+message InstanceAssignment {
+  string node_id = 1;
+}
+
+message Endpoint {
+  string host = 1;
+  uint32 game_port = 2;
+  optional uint32 query_port = 3;
+}
+
+message InstanceRuntimeSpec {
+  string instance_id = 1;
+  GameKind game = 2;
+  GameBuild build = 3;
+  DesiredRuntimeState desired_state = 4;
+  InstanceSpec spec = 5;
+  InstanceAssignment assignment = 6;
+  optional SnapshotReference latest_snapshot = 7;
+}
+
+message BuildPreparationResult {
+  string build_root = 1;
+  string prepared_at = 2;
+}
+
+message SnapshotArtifact {
+  string snapshot_id = 1;
+  string instance_data_path = 2;
+  string storage_uri = 3;
+  optional string manifest_uri = 4;
+  optional string checksum = 5;
+  string captured_at = 6;
+}
+
+message SnapshotRestoreResult {
+  string snapshot_id = 1;
+  string restore_path = 2;
+  string restored_at = 3;
+}
+
+message FailureInfo {
+  string message = 1;
+  bool retryable = 2;
+}
+
+message InstanceRuntimeRecord {
+  string instance_id = 1;
+  string node_id = 2;
+  RuntimeState state = 3;
+  optional Endpoint endpoint = 4;
+  optional FailureInfo failure = 5;
+  string updated_at = 6;
+}
+
+message NodeOperation {
+  string operation_id = 1;
+  OperationKind kind = 2;
+  OperationStatus status = 3;
+  optional string instance_id = 4;
+  optional string build_id = 5;
+  optional string message = 6;
+  string started_at = 7;
+  optional string finished_at = 8;
+}
+
+message NodeHeartbeat {
+  string node_id = 1;
+  float cpu_usage_pct = 2;
+  float memory_usage_pct = 3;
+  float disk_usage_pct = 4;
+  uint32 running_instances = 5;
+}
+
+enum GameKind {
+  GAME_KIND_UNSPECIFIED = 0;
+  GAME_KIND_DST = 1;
+  GAME_KIND_MINECRAFT = 2;
+  GAME_KIND_CUSTOM = 3;
+}
+
+enum DesiredRuntimeState {
+  DESIRED_RUNTIME_STATE_UNSPECIFIED = 0;
+  DESIRED_RUNTIME_STATE_RUNNING = 1;
+  DESIRED_RUNTIME_STATE_STOPPED = 2;
+}
+
+enum RuntimeState {
+  RUNTIME_STATE_UNSPECIFIED = 0;
+  RUNTIME_STATE_PENDING = 1;
+  RUNTIME_STATE_BUILD_PREPARED = 2;
+  RUNTIME_STATE_STARTING = 3;
+  RUNTIME_STATE_RUNNING = 4;
+  RUNTIME_STATE_STOPPING = 5;
+  RUNTIME_STATE_STOPPED = 6;
+  RUNTIME_STATE_FAILED = 7;
+}
+
+enum OperationKind {
+  OPERATION_KIND_UNSPECIFIED = 0;
+  OPERATION_KIND_PREPARE_BUILD = 1;
+  OPERATION_KIND_START_INSTANCE = 2;
+  OPERATION_KIND_STOP_INSTANCE = 3;
+  OPERATION_KIND_CREATE_SNAPSHOT = 4;
+  OPERATION_KIND_RESTORE_SNAPSHOT = 5;
+}
+
+enum OperationStatus {
+  OPERATION_STATUS_UNSPECIFIED = 0;
+  OPERATION_STATUS_PENDING = 1;
+  OPERATION_STATUS_RUNNING = 2;
+  OPERATION_STATUS_SUCCEEDED = 3;
+  OPERATION_STATUS_FAILED = 4;
+}
