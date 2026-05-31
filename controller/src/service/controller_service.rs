@@ -330,6 +330,38 @@ where
         })
     }
 
+
+    pub async fn get_instance(
+        &self,
+        instance_id: &str,
+    ) -> Result<GameInstance, ControllerError> {
+        self.load_instance(instance_id).await
+    }
+
+    pub async fn list_unfinished_instances(&self) -> Result<Vec<GameInstance>, ControllerError> {
+        self.repository.list_unfinished().await
+    }
+
+    pub async fn report_runtime_status(
+        &self,
+        report: crate::application::commands::RuntimeStatusReport,
+    ) -> Result<GameInstance, ControllerError> {
+        let mut instance = self.load_instance(&report.instance_id.0).await?;
+        instance.runtime_state = report.state;
+        instance.endpoint = report.endpoint;
+        if let Some(message) = report.message {
+            instance.failure = Some(crate::domain::FailureInfo {
+                step: "runtime-status".to_string(),
+                reason: message,
+                retryable: true,
+            });
+        }
+        instance.updated_at = self.clock.now();
+        instance.generation += 1;
+        self.repository.save(&instance).await?;
+        Ok(instance)
+    }
+
     pub async fn mark_failed(
         &self,
         instance_id: &str,

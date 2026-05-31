@@ -16,10 +16,12 @@ use crate::{
         asset_service_server::AssetService as AssetRpc,
         BuildCompatibility as ProtoBuildCompatibility, CompleteSnapshotRequest,
         CompleteSnapshotResponse, CreateSnapshotRequest, CreateSnapshotResponse,
-        GameBuild as ProtoGameBuild, GetGameBuildRequest, GetGameBuildResponse,
-        GetModManifestRequest, GetModManifestResponse, GetSnapshotRequest, GetSnapshotResponse,
-        GetSnapshotRestorePlanRequest, GetSnapshotRestorePlanResponse,
-        ListSnapshotsRequest, ListSnapshotsResponse, ModEntry as ProtoModEntry,
+        FailSnapshotRequest, FailSnapshotResponse, GameBuild as ProtoGameBuild,
+        GetGameBuildRequest, GetGameBuildResponse, GetLatestSnapshotRequest,
+        GetLatestSnapshotResponse, GetModManifestRequest, GetModManifestResponse,
+        GetSnapshotRequest, GetSnapshotResponse, GetSnapshotRestorePlanRequest,
+        GetSnapshotRestorePlanResponse, ListSnapshotsRequest, ListSnapshotsResponse,
+        ModEntry as ProtoModEntry,
         ModManifest as ProtoModManifest, RegisterGameBuildRequest, RegisterGameBuildResponse,
         RegisterModManifestRequest, RegisterModManifestResponse, ResolveGameBuildRequest,
         ResolveGameBuildResponse, SnapshotRecord as ProtoSnapshotRecord,
@@ -27,7 +29,8 @@ use crate::{
     },
     service::{
         AssetService, CompleteSnapshotRequest as CompleteSnapshotCmd,
-        CreateSnapshotRequest as CreateSnapshotCmd, RegisterBuildRequest,
+        CreateSnapshotRequest as CreateSnapshotCmd, FailSnapshotRequest as FailSnapshotCmd,
+        RegisterBuildRequest,
     },
 };
 
@@ -156,6 +159,24 @@ where
         }))
     }
 
+    async fn fail_snapshot(
+        &self,
+        request: Request<FailSnapshotRequest>,
+    ) -> Result<Response<FailSnapshotResponse>, Status> {
+        let request = request.into_inner();
+        let snapshot = self
+            .service
+            .fail_snapshot(FailSnapshotCmd {
+                snapshot_id: request.snapshot_id,
+                failure_message: request.failure_message,
+            })
+            .await
+            .map_err(map_error)?;
+        Ok(Response::new(FailSnapshotResponse {
+            snapshot: Some(map_snapshot(snapshot)),
+        }))
+    }
+
     async fn get_snapshot(
         &self,
         request: Request<GetSnapshotRequest>,
@@ -166,6 +187,35 @@ where
             .await
             .map_err(map_error)?;
         Ok(Response::new(GetSnapshotResponse {
+            snapshot: Some(map_snapshot(snapshot)),
+        }))
+    }
+
+    async fn get_latest_snapshot(
+        &self,
+        request: Request<GetLatestSnapshotRequest>,
+    ) -> Result<Response<GetLatestSnapshotResponse>, Status> {
+        let snapshot = self
+            .service
+            .get_latest_snapshot(&request.into_inner().instance_id)
+            .await
+            .map_err(map_error)?;
+        Ok(Response::new(GetLatestSnapshotResponse {
+            snapshot: snapshot.map(map_snapshot),
+        }))
+    }
+
+    async fn set_latest_snapshot(
+        &self,
+        request: Request<asset_service::SetLatestSnapshotRequest>,
+    ) -> Result<Response<asset_service::SetLatestSnapshotResponse>, Status> {
+        let request = request.into_inner();
+        let snapshot = self
+            .service
+            .set_latest_snapshot(&request.instance_id, &request.snapshot_id)
+            .await
+            .map_err(map_error)?;
+        Ok(Response::new(asset_service::SetLatestSnapshotResponse {
             snapshot: Some(map_snapshot(snapshot)),
         }))
     }

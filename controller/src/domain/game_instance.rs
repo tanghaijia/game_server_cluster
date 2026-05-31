@@ -109,7 +109,7 @@ impl GameInstance {
         ensure_state(
             &self.instance_id.0,
             &self.runtime_state,
-            &[RuntimeState::PreparingBuild],
+            &[RuntimeState::PreparingBuild, RuntimeState::RestoringSnapshot],
             "start instance",
         )?;
         self.runtime_state = RuntimeState::Starting;

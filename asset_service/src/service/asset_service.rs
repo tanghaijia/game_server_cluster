@@ -31,6 +31,12 @@ pub struct CompleteSnapshotRequest {
     pub checksum: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct FailSnapshotRequest {
+    pub snapshot_id: String,
+    pub failure_message: String,
+}
+
 pub struct AssetService<B, S, M, C>
 where
     B: BuildRepository,
@@ -150,6 +156,28 @@ where
         snapshot.completed_at = Some(self.clock.now());
         snapshot.failure_message = None;
         self.snapshots.save(&snapshot).await?;
+        self.snapshots
+            .set_latest(&snapshot.instance_id, &snapshot.snapshot_id)
+            .await?;
+        Ok(snapshot)
+    }
+
+    pub async fn fail_snapshot(
+        &self,
+        request: FailSnapshotRequest,
+    ) -> Result<SnapshotRecord, AssetServiceError> {
+        let id = SnapshotId(request.snapshot_id.clone());
+        let mut snapshot = self
+            .snapshots
+            .get(&id)
+            .await?
+            .ok_or(AssetServiceError::SnapshotNotFound {
+                snapshot_id: request.snapshot_id,
+            })?;
+        snapshot.status = SnapshotStatus::Failed;
+        snapshot.failure_message = Some(request.failure_message);
+        snapshot.completed_at = Some(self.clock.now());
+        self.snapshots.save(&snapshot).await?;
         Ok(snapshot)
     }
 
@@ -198,6 +226,28 @@ where
         instance_id: &str,
     ) -> Result<Vec<SnapshotRecord>, AssetServiceError> {
         self.snapshots.list_by_instance(instance_id).await
+    }
+
+    pub async fn get_latest_snapshot(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<SnapshotRecord>, AssetServiceError> {
+        self.snapshots.get_latest(instance_id).await
+    }
+
+    pub async fn set_latest_snapshot(
+        &self,
+        instance_id: &str,
+        snapshot_id: &str,
+    ) -> Result<SnapshotRecord, AssetServiceError> {
+        let id = SnapshotId(snapshot_id.to_string());
+        self.snapshots.set_latest(instance_id, &id).await?;
+        self.snapshots
+            .get(&id)
+            .await?
+            .ok_or_else(|| AssetServiceError::SnapshotNotFound {
+                snapshot_id: snapshot_id.to_string(),
+            })
     }
 
     pub async fn register_mod_manifest(

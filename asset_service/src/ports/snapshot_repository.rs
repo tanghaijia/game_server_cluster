@@ -18,4 +18,15 @@ pub trait SnapshotRepository: Send + Sync {
         &self,
         instance_id: &str,
     ) -> Result<Vec<SnapshotRecord>, AssetServiceError>;
+
+    async fn set_latest(
+        &self,
+        instance_id: &str,
+        snapshot_id: &SnapshotId,
+    ) -> Result<(), AssetServiceError>;
+
+    async fn get_latest(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<SnapshotRecord>, AssetServiceError>;
 }

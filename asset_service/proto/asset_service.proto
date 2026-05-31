@@ -8,7 +8,10 @@ service AssetService {
   rpc GetGameBuild(GetGameBuildRequest) returns (GetGameBuildResponse);
   rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
   rpc CompleteSnapshot(CompleteSnapshotRequest) returns (CompleteSnapshotResponse);
+  rpc FailSnapshot(FailSnapshotRequest) returns (FailSnapshotResponse);
   rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
+  rpc GetLatestSnapshot(GetLatestSnapshotRequest) returns (GetLatestSnapshotResponse);
+  rpc SetLatestSnapshot(SetLatestSnapshotRequest) returns (SetLatestSnapshotResponse);
   rpc GetSnapshotRestorePlan(GetSnapshotRestorePlanRequest) returns (GetSnapshotRestorePlanResponse);
   rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
   rpc RegisterModManifest(RegisterModManifestRequest) returns (RegisterModManifestResponse);
@@ -64,11 +67,37 @@ message CompleteSnapshotResponse {
   SnapshotRecord snapshot = 1;
 }
 
+message FailSnapshotRequest {
+  string snapshot_id = 1;
+  string failure_message = 2;
+}
+
+message FailSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
 message GetSnapshotRequest {
   string snapshot_id = 1;
 }
 
 message GetSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message GetLatestSnapshotRequest {
+  string instance_id = 1;
+}
+
+message GetLatestSnapshotResponse {
+  optional SnapshotRecord snapshot = 1;
+}
+
+message SetLatestSnapshotRequest {
+  string instance_id = 1;
+  string snapshot_id = 2;
+}
+
+message SetLatestSnapshotResponse {
   SnapshotRecord snapshot = 1;
 }
 
