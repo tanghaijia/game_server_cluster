@@ -1,0 +1,5 @@
+.idea/
+game_node/target
+game_node/.idea
+game_node/.vscode
+game_node/Cargo.lock
