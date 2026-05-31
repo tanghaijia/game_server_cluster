@@ -68,6 +68,7 @@ where
         &self,
         request: Request<ResolveGameBuildRequest>,
     ) -> Result<Response<ResolveGameBuildResponse>, Status> {
+        println!("[resolve_game_build] ");
         let request = request.into_inner();
         let selector = request
             .selector
