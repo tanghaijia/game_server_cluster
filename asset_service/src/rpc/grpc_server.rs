@@ -5,9 +5,9 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     domain::{
-        BuildCompatibility, BuildId, BuildStatus, GameBuild, GameKind, ModEntry, ModManifest,
-        ModManifestId, SnapshotRecord, SnapshotRestorePlan, SnapshotStatus, SnapshotType,
-        VersionSelector,
+        AdapterId, AdapterVersion, BuildCompatibility, BuildId, BuildStatus, GameBuild, GameKind,
+        InvalidAdapterVersion, ModEntry, ModManifest, ModManifestId, SnapshotRecord,
+        SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
     ports::{BuildRepository, Clock, ModManifestRepository, SnapshotRepository},
@@ -338,11 +338,19 @@ fn map_game_kind(value: i32, custom: Option<String>) -> Result<GameKind, Status>
 }
 
 fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
+    let adapter_version: AdapterVersion = value
+        .adapter_version
+        .as_deref()
+        .unwrap_or("0.0.0")
+        .parse()
+        .map_err(|e: InvalidAdapterVersion| Status::invalid_argument(e.to_string()))?;
+
     Ok(GameBuild {
         build_id: BuildId(value.build_id),
         game: map_game_kind(value.game, value.custom_game)?,
         channel: value.channel,
-        adapter_version: value.adapter_version,
+        adapter_id: AdapterId(value.adapter_id),
+        adapter_version,
         upstream_version: value.upstream_version,
         artifact_uri: value.artifact_uri,
         checksum: value.checksum,
@@ -378,12 +386,13 @@ fn map_build(value: GameBuild) -> ProtoGameBuild {
         build_id: value.build_id.0,
         game: map_game_kind_to_proto(&value.game),
         channel: value.channel,
-        adapter_version: value.adapter_version,
+        adapter_version: Some(value.adapter_version.to_string()),
         upstream_version: value.upstream_version,
         artifact_uri: value.artifact_uri,
         checksum: value.checksum,
         status: map_build_status_to_proto(&value.status),
         pinned: value.pinned,
+        adapter_id: value.adapter_id.0,
         resolved_at: value.resolved_at.to_rfc3339(),
         created_at: value.created_at.to_rfc3339(),
         updated_at: value.updated_at.to_rfc3339(),

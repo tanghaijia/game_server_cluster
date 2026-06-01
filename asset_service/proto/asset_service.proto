@@ -163,6 +163,7 @@ message GameBuild {
   string created_at = 11;
   string updated_at = 12;
   optional string custom_game = 13;
+  string adapter_id = 14;
 }
 
 message SnapshotRecord {

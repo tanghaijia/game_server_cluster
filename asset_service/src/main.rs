@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use asset_service::{
-    domain::{BuildId, BuildStatus, GameBuild, GameKind},
+    domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild, GameKind},
     ports::SystemClock,
     proto::asset_service::asset_service_server::AssetServiceServer,
     repositories::{
@@ -46,7 +46,8 @@ async fn seed_demo_builds(service: Arc<AssetService<InMemoryBuildRepository, InM
             build_id: BuildId("dst-public-demo-build".to_string()),
             game: GameKind::Dst,
             channel: Some("public".to_string()),
-            adapter_version: Some("adapter-demo-v1".to_string()),
+            adapter_id: AdapterId("dst".to_string()),
+            adapter_version: AdapterVersion::new(0, 1, 0),
             upstream_version: Some("demo-upstream".to_string()),
             artifact_uri: Some("memory://builds/dst-public-demo-build.tar.zst".to_string()),
             checksum: Some("sha256:dst-public-demo-build".to_string()),

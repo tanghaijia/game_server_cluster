@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{BuildId, ModManifestId, SnapshotId};
+use super::{AdapterId, AdapterVersion, BuildId, ModManifestId, SnapshotId};
 
 /// 游戏类型。
 ///
@@ -52,8 +52,10 @@ pub struct GameBuild {
     pub game: GameKind,
     /// 发布通道，如 `"stable"`, `"beta"`，用于按通道解析最新版本
     pub channel: Option<String>,
-    /// 适配器脚本的版本号。适配器负责将原始上游产物转为集群可运行的格式
-    pub adapter_version: Option<String>,
+    /// 构建所用适配器的标识，如 `"dst"`、`"minecraft"`
+    pub adapter_id: AdapterId,
+    /// 构建所用适配器的版本号
+    pub adapter_version: AdapterVersion,
     /// 上游平台的原始版本号，如 Steam 的 build id、Mojang 的版本名
     pub upstream_version: Option<String>,
     /// 构建产物的下载地址（S3 / Docker Registry URI 等）

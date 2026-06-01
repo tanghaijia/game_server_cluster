@@ -21,3 +21,7 @@ impl ModManifestId {
         Self(Uuid::new_v4().to_string())
     }
 }
+
+/// 适配器标识，如 `"dst"`、`"minecraft"`。
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AdapterId(pub String);
