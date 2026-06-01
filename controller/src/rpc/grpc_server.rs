@@ -29,6 +29,7 @@ use crate::{
         RestoreSnapshotRequest as ProtoRestoreSnapshotRequest,
         RestoreSnapshotResponse as ProtoRestoreSnapshotResponse,
     },
+    runtime::ReconcileDispatcher,
     service::ControllerService,
 };
 
@@ -42,6 +43,7 @@ where
     C: Clock,
 {
     service: Arc<ControllerService<R, B, S, N, P, C>>,
+    dispatcher: Option<ReconcileDispatcher>,
 }
 
 impl<R, B, S, N, P, C> GrpcControllerServer<R, B, S, N, P, C>
@@ -54,7 +56,24 @@ where
     C: Clock,
 {
     pub fn new(service: Arc<ControllerService<R, B, S, N, P, C>>) -> Self {
-        Self { service }
+        Self { service, dispatcher: None }
+    }
+
+    pub fn with_dispatcher(
+        service: Arc<ControllerService<R, B, S, N, P, C>>,
+        dispatcher: ReconcileDispatcher,
+    ) -> Self {
+        Self {
+            service,
+            dispatcher: Some(dispatcher),
+        }
+    }
+
+    async fn enqueue_reconcile(&self, instance_id: InstanceId) -> Result<(), Status> {
+        if let Some(dispatcher) = &self.dispatcher {
+            dispatcher.enqueue(instance_id).await.map_err(map_error)?;
+        }
+        Ok(())
     }
 }
 
@@ -75,6 +94,7 @@ where
             version_selector: map_version_selector(request.version_selector.ok_or_else(|| Status::invalid_argument("version_selector is required"))?)?,
             spec: map_instance_spec(request.spec.ok_or_else(|| Status::invalid_argument("spec is required"))?)?,
         }).await.map_err(map_error)?;
+        self.enqueue_reconcile(response.instance.instance_id.clone()).await?;
         Ok(Response::new(ProtoCreateInstanceResponse {
             instance: Some(map_instance(response.instance)),
         }))
@@ -106,6 +126,7 @@ where
             instance_id: InstanceId(request.instance_id),
             reason: request.reason,
         }).await.map_err(map_error)?;
+        self.enqueue_reconcile(response.instance_id.clone()).await?;
         Ok(Response::new(ProtoRequestStopInstanceResponse {
             instance: Some(map_instance(response)),
         }))
@@ -129,6 +150,7 @@ where
             instance_id: InstanceId(request.instance_id),
             snapshot_id: request.snapshot_id,
         }).await.map_err(map_error)?;
+        self.enqueue_reconcile(response.instance.instance_id.clone()).await?;
         Ok(Response::new(ProtoRestoreSnapshotResponse {
             instance: Some(map_instance(response.instance)),
             snapshot: Some(map_snapshot_reference(response.snapshot)),
@@ -154,6 +176,7 @@ where
             endpoint: request.endpoint.map(map_endpoint_from_proto),
             message: request.message,
         }).await.map_err(map_error)?;
+        self.enqueue_reconcile(response.instance_id.clone()).await?;
         Ok(Response::new(ReportRuntimeStatusResponse {
             instance: Some(map_instance(response)),
         }))

@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use controller::{
     clients::{AssetServiceGrpcClient, NodeAgentGrpcClient},
@@ -6,6 +6,7 @@ use controller::{
     ports::SystemClock,
     proto::controller::controller_service_server::ControllerServiceServer,
     rpc::GrpcControllerServer,
+    runtime::ReconcileDispatcher,
     service::ControllerService,
 };
 use tonic::transport::Server;
@@ -34,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         asset_client,
         clock,
     ));
-    let grpc = GrpcControllerServer::new(service);
+    let dispatcher = ReconcileDispatcher::new(service.clone(), 256, Duration::from_secs(5));
+    let grpc = GrpcControllerServer::with_dispatcher(service, dispatcher);
 
     println!("controller listening on {}", addr);
     Server::builder()
