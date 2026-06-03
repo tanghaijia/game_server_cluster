@@ -6,11 +6,11 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    domain::{BuildId, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
+    domain::{BuildId, Game, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
     error::AssetServiceError,
     ports::{
-        BuildRepository, ModManifestRepository, SnapshotRepository, SteamBranch,
-        SteamBranchRepository,
+        BuildRepository, GameRepository, ModManifestRepository, SnapshotRepository,
+        SteamBranch, SteamBranchRepository,
     },
 };
 
@@ -209,5 +209,35 @@ impl SteamBranchRepository for InMemorySteamBranchRepository {
             .and_then(|branches: &Vec<SteamBranch>| {
                 branches.iter().find(|b| b.name == branch_name).cloned()
             }))
+    }
+}
+
+#[derive(Default)]
+pub struct InMemoryGameRepository {
+    games: Arc<Mutex<HashMap<String, Game>>>,
+}
+
+#[async_trait]
+impl GameRepository for InMemoryGameRepository {
+    async fn save(&self, game: &Game) -> Result<(), AssetServiceError> {
+        let mut store = self.games.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("game repository lock poisoned: {e}"),
+        })?;
+        store.insert(game.id.clone(), game.clone());
+        Ok(())
+    }
+
+    async fn get(&self, game_id: &str) -> Result<Option<Game>, AssetServiceError> {
+        let store = self.games.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("game repository lock poisoned: {e}"),
+        })?;
+        Ok(store.get(game_id).cloned())
+    }
+
+    async fn list(&self) -> Result<Vec<Game>, AssetServiceError> {
+        let store = self.games.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("game repository lock poisoned: {e}"),
+        })?;
+        Ok(store.values().cloned().collect())
     }
 }
