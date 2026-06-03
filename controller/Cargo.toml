@@ -13,6 +13,13 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tonic = "0.12"
 uuid = { version = "1", features = ["serde", "v4"] }
+reqwest = { version = "0.12", features = ["json"] } # HTTP 客户端
+serde_json = "1.0"
+keyvalues-serde = "0.2"
+anyhow = "1.0.102"
+
+[dev-dependencies]
+mockito = "1"
 
 [build-dependencies]
 protoc-bin-vendored = "3"

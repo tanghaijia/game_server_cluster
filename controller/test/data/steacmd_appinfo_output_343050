@@ -1,0 +1,320 @@
+steamcmd.sh[1970800]: Starting  /home/gameserver/.local/share/Steam/steamcmd/linux32/steamcmd
+Redirecting stderr to '/home/gameserver/.local/share/Steam/logs/stderr.txt'
+Logging directory: '/home/gameserver/.local/share/Steam/logs'
+[  0%] Checking for available updates...
+[----] Verifying installation...
+UpdateUI: skip show logo
+Steam Console Client (c) Valve Corporation - version 1780356001
+-- type 'quit' to exit --
+Loading Steam API...IPC function call IClientUtils::GetSteamRealm took too long: 50 msec
+OK
+
+Connecting anonymously to Steam Public...OK
+Waiting for client config...OK
+Waiting for user info...OK
+AppID : 343050, change number : 36273812/0, last change : Wed Jun  3 15:26:57 2026
+"343050"
+{
+        "common"
+        {
+                "name"          "Don't Starve Together Dedicated Server"
+                "section_type"          "ownersonly"
+                "type"          "Tool"
+                "oslist"                "windows,macos,linux"
+                "logo"          "25bf2cbe5673dac84349029965749c5334a079a5"
+                "logo_small"            "25bf2cbe5673dac84349029965749c5334a079a5_thumb"
+                "icon"          "a80aa6cff8eebc1cbc18c367d9ab063e1553b0ee"
+                "clienttga"             "a6b716e1809b13db2fb96d455b78ebab0246c8eb"
+                "clienticon"            "5176d189ff929acc8d29a2e5f0466e18798db436"
+                "eulas"
+                {
+                        "0"
+                        {
+                                "id"            "343050_eula_0"
+                                "name"          "Don't Starve Together Dedicated Server EULA"
+                                "url"           "http://store.steampowered.com//eula/343050_eula_0"
+                        }
+                }
+                "ReleaseState"          "released"
+                "clienticns"            "513ad959ff55369deac458d6c60020f4d54174cf"
+                "linuxclienticon"               "23b3e8bf7f5a6862d4699456117c4fdbfe11969a"
+                "osarch"                ""
+                "osextended"            "macos64,macosnotarized"
+                "freetodownload"                "1"
+                "associations"
+                {
+                }
+                "gameid"                "343050"
+        }
+        "extended"
+        {
+                "gamedir"               ""
+        }
+        "config"
+        {
+                "contenttype"           "3"
+                "installdir"            "Don't Starve Together Dedicated Server"
+                "launch"
+                {
+                        "0"
+                        {
+                                "executable"            "bin64/dontstarve_dedicated_server_nullrenderer_x64.exe"
+                                "workingdir"            "bin64"
+                                "type"          "default"
+                                "config"
+                                {
+                                        "oslist"                "windows"
+                                        "osarch"                "64"
+                                }
+                                "description_loc"
+                                {
+                                        "english"               "Play Don't Starve Together Dedicated Server"
+                                }
+                                "description"           "Play Don't Starve Together Dedicated Server"
+                        }
+                        "1"
+                        {
+                                "executable"            "bin64/scripts/launch_dedicated_server.sh"
+                                "workingdir"            "bin64"
+                                "type"          "default"
+                                "config"
+                                {
+                                        "oslist"                "linux"
+                                        "osarch"                "64"
+                                }
+                                "description_loc"
+                                {
+                                        "english"               "Play Don't Starve Together Dedicated Server"
+                                }
+                                "description"           "Play Don't Starve Together Dedicated Server"
+                        }
+                        "2"
+                        {
+                                "executable"            "dontstarve_dedicated_server_nullrenderer.app"
+                                "type"          "default"
+                                "config"
+                                {
+                                        "oslist"                "macos"
+                                }
+                                "description_loc"
+                                {
+                                        "english"               "Play Don't Starve Together Dedicated Server"
+                                }
+                                "description"           "Play Don't Starve Together Dedicated Server"
+                        }
+                        "3"
+                        {
+                                "executable"            "bin/dontstarve_dedicated_server_nullrenderer.exe"
+                                "workingdir"            "bin"
+                                "type"          "none"
+                                "config"
+                                {
+                                        "oslist"                "windows"
+                                        "osarch"                "32"
+                                }
+                                "description_loc"
+                                {
+                                        "english"               "Play Don't Starve Together Dedicated Server (32-Bit)"
+                                }
+                                "description"           "Play Don't Starve Together Dedicated Server (32-Bit)"
+                        }
+                        "4"
+                        {
+                                "executable"            "bin/scripts/launch_dedicated_server.sh"
+                                "workingdir"            "bin"
+                                "type"          "none"
+                                "config"
+                                {
+                                        "oslist"                "linux"
+                                        "osarch"                "32"
+                                }
+                                "description_loc"
+                                {
+                                        "english"               "Play Don't Starve Together Dedicated Server (32-Bit)"
+                                }
+                                "description"           "Play Don't Starve Together Dedicated Server (32-Bit)"
+                        }
+                }
+        }
+        "depots"
+        {
+                "1004"
+                {
+                        "config"
+                        {
+                                "oslist"                "windows"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "5612541580377302256"
+                                        "size"          "64647928"
+                                        "download"              "22986368"
+                                }
+                        }
+                        "depotfromapp"          "1007"
+                }
+                "1005"
+                {
+                        "config"
+                        {
+                                "oslist"                "macos"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "2135359612286175146"
+                                        "size"          "0"
+                                        "download"              "0"
+                                }
+                        }
+                        "depotfromapp"          "1007"
+                }
+                "1006"
+                {
+                        "config"
+                        {
+                                "oslist"                "linux"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "6403079453713498174"
+                                        "size"          "107911652"
+                                        "download"              "35551408"
+                                }
+                        }
+                        "depotfromapp"          "1007"
+                }
+                "228982"
+                {
+                        "config"
+                        {
+                                "oslist"                "windows"
+                        }
+                        "depotfromapp"          "228980"
+                        "sharedinstall"         "1"
+                }
+                "228988"
+                {
+                        "config"
+                        {
+                                "oslist"                "windows"
+                        }
+                        "depotfromapp"          "228980"
+                        "sharedinstall"         "1"
+                }
+                "343051"
+                {
+                        "config"
+                        {
+                                "oslist"                "windows"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "1125829132299721924"
+                                        "size"          "4375447005"
+                                        "download"              "3035523232"
+                                }
+                                "beforemacoschanges"
+                                {
+                                        "gid"           "4534454870854554447"
+                                        "size"          "3390131066"
+                                        "download"              "2380486432"
+                                }
+                                "updatebeta"
+                                {
+                                        "gid"           "4233467021344447367"
+                                        "size"          "4389988252"
+                                        "download"              "3050002912"
+                                }
+                        }
+                }
+                "343052"
+                {
+                        "config"
+                        {
+                                "oslist"                "linux"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "2334955445349509271"
+                                        "size"          "4304337162"
+                                        "download"              "2938589024"
+                                }
+                                "beforemacoschanges"
+                                {
+                                        "gid"           "4555268090536644559"
+                                        "size"          "3295530575"
+                                        "download"              "2274945136"
+                                }
+                                "updatebeta"
+                                {
+                                        "gid"           "7564320856364878634"
+                                        "size"          "4320898200"
+                                        "download"              "2953870752"
+                                }
+                        }
+                }
+                "343053"
+                {
+                        "config"
+                        {
+                                "oslist"                "macos"
+                        }
+                        "manifests"
+                        {
+                                "public"
+                                {
+                                        "gid"           "7540814621915077986"
+                                        "size"          "4196548470"
+                                        "download"              "2905027344"
+                                }
+                                "beforemacoschanges"
+                                {
+                                        "gid"           "2845679795893720385"
+                                        "size"          "3225653113"
+                                        "download"              "2257541728"
+                                }
+                                "updatebeta"
+                                {
+                                        "gid"           "4778358209530777633"
+                                        "size"          "4211129978"
+                                        "download"              "2919585552"
+                                }
+                        }
+                }
+                "branches"
+                {
+                        "public"
+                        {
+                                "buildid"               "23206748"
+                                "timeupdated"           "1778638905"
+                                "timebuildupdated"              "1778630342"
+                        }
+                        "beforemacoschanges"
+                        {
+                                "buildid"               "12576213"
+                                "description"           "r579121"
+                                "timeupdated"           "1698883395"
+                                "timebuildupdated"              "1698702628"
+                        }
+                        "updatebeta"
+                        {
+                                "buildid"               "23482006"
+                                "description"           "Public Beta"
+                                "timeupdated"           "1780111418"
+                                "timebuildupdated"              "1780110101"
+                        }
+                }
+                "privatebranches"               "1"
+        }
+}
+Unloading Steam API...OK
