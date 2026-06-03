@@ -11,7 +11,6 @@ use asset_service::{
     service::{AssetService, RegisterBuildRequest},
 };
 use chrono::Utc;
-use serde::__private228::de::Content::String;
 use tonic::transport::Server;
 
 #[tokio::main]

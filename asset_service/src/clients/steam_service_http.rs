@@ -80,13 +80,13 @@ impl Default for SteamServiceHttp {
 }
 
 impl SteamServiceHttp {
-    pub fn get_app_info(appid: u32) -> Result<String> {
+    pub fn get_app_info(app_id: &str) -> Result<String> {
         let output = Command::new("steamcmd")
             .args([
                 "+login",
                 "anonymous",
                 "+app_info_print",
-                &appid.to_string(),
+                app_id,
                 "+quit",
             ])
             .output()?;
@@ -98,13 +98,13 @@ impl SteamServiceHttp {
         let text = String::from_utf8(output.stdout)?;
 
         let start = text
-            .find(&format!("\"{}\"", appid))
+            .find(&format!("\"{}\"", app_id))
             .ok_or_else(|| anyhow!("app root not found"))?;
 
         Ok(text[start..].to_string())
     }
 
-    pub fn parse_appinfo(vdf: &str) -> Result<Vec<SteamBranch>> {
+    pub fn parse_appinfo(vdf: &str, app_id: &str) -> Result<Vec<SteamBranch>> {
         // 从完整 VDF 中截取 "depots" 片段，避免 common/config/extended 等字段干扰解析
         let depots_key = vdf
             .find("\"depots\"")
@@ -158,6 +158,7 @@ impl SteamServiceHttp {
             }
 
             result.push(SteamBranch {
+                app_id: app_id.to_string(),
                 name: branch_name.clone(),
                 build_id: branch_info.buildid.parse()?,
                 description: branch_info.description.clone(),
@@ -171,7 +172,7 @@ impl SteamServiceHttp {
 
 #[async_trait]
 impl SteamService for SteamServiceHttp {
-    async fn fetch_game_from_steam(&self, app_id: u32) -> Result<GameData, String> {
+    async fn fetch_game_from_steam(&self, app_id: &str) -> Result<GameData, String> {
         let url = format!("{}/api/appdetails?appids={}", self.base_url, app_id);
 
         let response: HashMap<String, SteamResponse> = self
@@ -196,10 +197,10 @@ impl SteamService for SteamServiceHttp {
     }
 
 
-    async fn get_steam_branchs(&self, app_id: u32) -> Result<Vec<SteamBranch>, String> {
+    async fn get_steam_branchs(&self, app_id: &str) -> Result<Vec<SteamBranch>, String> {
         let vdf = Self::get_app_info(app_id).map_err(|e| e.to_string())?;
 
-        let branches = Self::parse_appinfo(&vdf).map_err(|e| e.to_string())?;
+        let branches = Self::parse_appinfo(&vdf, app_id).map_err(|e| e.to_string())?;
 
         Ok(branches)
     }
@@ -218,7 +219,7 @@ mod tests {
         let end = raw[start..].find("\nUnloading").unwrap_or(raw.len() - start);
         let vdf = raw[start..start + end].trim_end();
 
-        let branches = SteamServiceHttp::parse_appinfo(vdf).unwrap();
+        let branches = SteamServiceHttp::parse_appinfo(vdf, "251570").unwrap();
 
         // public branch
         let public = branches.iter().find(|b| b.name == "public").unwrap();
@@ -268,7 +269,7 @@ mod tests {
         let end = raw[start..].find("\nUnloading").unwrap_or(raw.len() - start);
         let vdf = raw[start..start + end].trim_end();
 
-        let branches = SteamServiceHttp::parse_appinfo(vdf).unwrap();
+        let branches = SteamServiceHttp::parse_appinfo(vdf, "251570").unwrap();
 
         // public branch
         let public = branches.iter().find(|b| b.name == "public").unwrap();

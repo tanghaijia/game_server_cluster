@@ -33,6 +33,7 @@ pub struct SteamBranch {
     pub name: String,
     pub build_id: u64,
     pub description: Option<String>,
+    pub app_id: String,
     pub manifests: Vec<DepotManifest>,
 }
 
@@ -48,7 +49,7 @@ pub struct DepotManifest {
 /// 查询游戏元信息。
 #[async_trait]
 pub trait SteamService: Send + Sync {
-    async fn fetch_game_from_steam(&self, app_id: u32) -> Result<GameData, String>;
+    async fn fetch_game_from_steam(&self, app_id: &str) -> Result<GameData, String>;
 
-    async fn get_steam_branchs(&self, app_id: u32) -> Result<Vec<SteamBranch>, String>;
+    async fn get_steam_branchs(&self, app_id: &str) -> Result<Vec<SteamBranch>, String>;
 }
