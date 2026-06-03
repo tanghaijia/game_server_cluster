@@ -5,3 +5,4 @@ pub mod proto;
 pub mod repositories;
 pub mod rpc;
 pub mod service;
+pub mod clients;
