@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        instance_data_path, BuildCompatibility, BuildId, BuildStatus, GameBuild, GameKind,
+        instance_data_path, BuildCompatibility, BuildId, BuildStatus, GameBuild,
         ModManifest, ModManifestId, SnapshotId, SnapshotRecord, SnapshotRestorePlan,
         SnapshotStatus, SnapshotType, VersionSelector,
     },
@@ -68,7 +68,7 @@ where
 
     pub async fn resolve_game_build(
         &self,
-        game: GameKind,
+        game_id: &str,
         selector: VersionSelector,
     ) -> Result<GameBuild, AssetServiceError> {
         match selector {
@@ -78,7 +78,7 @@ where
                 .await?
                 .ok_or(AssetServiceError::BuildNotFound { build_id }),
             VersionSelector::Channel { channel } => {
-                let candidates = self.builds.list_by_game(&game).await?;
+                let candidates = self.builds.list_by_game(game_id).await?;
                 candidates
                     .into_iter()
                     .find(|build| {
@@ -86,7 +86,7 @@ where
                             && matches!(build.status, BuildStatus::Available | BuildStatus::Deprecated)
                     })
                     .ok_or_else(|| AssetServiceError::BuildNotFound {
-                        build_id: format!("{game:?}:{channel}"),
+                        build_id: format!("{game_id}:{channel}"),
                     })
             }
         }
@@ -277,7 +277,7 @@ where
     ) -> Result<BuildCompatibility, AssetServiceError> {
         let build = self.get_game_build(build_id).await?;
         let manifest = self.get_mod_manifest(manifest_id).await?;
-        let compatible = std::mem::discriminant(&build.game) == std::mem::discriminant(&manifest.game);
+        let compatible = build.game_id == manifest.game_id;
 
         Ok(BuildCompatibility {
             compatible,

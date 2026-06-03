@@ -3,16 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{AdapterId, AdapterVersion, BuildId, ModManifestId, SnapshotId};
 
-/// 游戏类型。
-///
-/// `Dst` 和 `Minecraft` 是内置支持的游戏，`Custom` 允许扩展任意游戏。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GameKind {
-    Dst,
-    Minecraft,
-    Custom(String),
-}
-
 /// 指定要解析的游戏版本。
 ///
 /// 两种定位方式：
@@ -49,7 +39,7 @@ pub struct GameBuild {
     /// 构建的唯一标识
     pub build_id: BuildId,
     /// 所属游戏类型
-    pub game: GameKind,
+    pub game_id: String,
     /// 发布通道，如 `"stable"`, `"beta"`，用于按通道解析最新版本
     pub channel: Option<String>,
     /// 构建所用适配器的标识，如 `"dst"`、`"minecraft"`
@@ -156,8 +146,8 @@ pub struct ModEntry {
 pub struct ModManifest {
     /// 清单唯一标识
     pub manifest_id: ModManifestId,
-    /// 适用的游戏类型
-    pub game: GameKind,
+    /// 适用的游戏 ID
+    pub game_id: String,
     /// 模组列表
     pub mods: Vec<ModEntry>,
     /// 模组配置的哈希值，用于判断两份配置是否等价

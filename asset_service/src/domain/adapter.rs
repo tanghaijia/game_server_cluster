@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{AdapterId, GameKind};
+use super::AdapterId;
 
 /// 适配器语义化版本号。
 ///
@@ -81,7 +81,7 @@ pub struct GameAdapter {
     /// 适配器标识，对应适配器代码仓库名称，如 `"dst"`、`"minecraft"`
     pub adapter_id: AdapterId,
     /// 适配的游戏类型
-    pub game: GameKind,
+    pub game_id: String,
     /// 适配器展示名称
     pub name: String,
     /// 适配器描述

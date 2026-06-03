@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use asset_service::{
-    domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild, GameKind},
+    domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild},
     ports::SystemClock,
     proto::asset_service::asset_service_server::AssetServiceServer,
     repositories::{
@@ -11,6 +11,7 @@ use asset_service::{
     service::{AssetService, RegisterBuildRequest},
 };
 use chrono::Utc;
+use serde::__private228::de::Content::String;
 use tonic::transport::Server;
 
 #[tokio::main]
@@ -44,7 +45,7 @@ async fn seed_demo_builds(service: Arc<AssetService<InMemoryBuildRepository, InM
     service.register_game_build(RegisterBuildRequest {
         build: GameBuild {
             build_id: BuildId("dst-public-demo-build".to_string()),
-            game: GameKind::Dst,
+            game_id: "dst".to_string(),
             channel: Some("public".to_string()),
             adapter_id: AdapterId("dst".to_string()),
             adapter_version: AdapterVersion::new(0, 1, 0),

@@ -6,7 +6,7 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    domain::{BuildId, GameBuild, GameKind, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
+    domain::{BuildId, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
     error::AssetServiceError,
     ports::{BuildRepository, ModManifestRepository, SnapshotRepository},
 };
@@ -33,13 +33,13 @@ impl BuildRepository for InMemoryBuildRepository {
         Ok(builds.get(&build_id.0).cloned())
     }
 
-    async fn list_by_game(&self, game: &GameKind) -> Result<Vec<GameBuild>, AssetServiceError> {
+    async fn list_by_game(&self, game_id: &str) -> Result<Vec<GameBuild>, AssetServiceError> {
         let builds = self.builds.lock().map_err(|_| AssetServiceError::Internal {
             message: "build repository lock poisoned".to_string(),
         })?;
         Ok(builds
             .values()
-            .filter(|build| std::mem::discriminant(&build.game) == std::mem::discriminant(game))
+            .filter(|build| &build.game_id == game_id)
             .cloned()
             .collect())
     }
