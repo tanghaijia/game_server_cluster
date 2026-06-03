@@ -5,6 +5,20 @@ use crate::error::ControllerError;
 use super::{NodeId, SnapshotId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SteamBranch {
+    pub name: String,
+    pub build_id: u64,
+    pub description: Option<String>,
+    pub manifests: Vec<DepotManifest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DepotManifest {
+    pub depot_id: u32,
+    pub manifest_gid: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameKind {
     Dst,
     Minecraft,

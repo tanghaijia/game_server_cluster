@@ -28,7 +28,7 @@ struct VersionResponse {
     message: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SteamBranch {
     pub name: String,
     pub build_id: u64,
@@ -36,7 +36,7 @@ pub struct SteamBranch {
     pub manifests: Vec<DepotManifest>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DepotManifest {
     pub depot_id: u32,
     pub manifest_gid: u64,

@@ -8,7 +8,10 @@ use async_trait::async_trait;
 use crate::{
     domain::{BuildId, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
     error::AssetServiceError,
-    ports::{BuildRepository, ModManifestRepository, SnapshotRepository},
+    ports::{
+        BuildRepository, ModManifestRepository, SnapshotRepository, SteamBranch,
+        SteamBranchRepository,
+    },
 };
 
 #[derive(Default)]
@@ -153,5 +156,58 @@ impl ModManifestRepository for InMemoryModManifestRepository {
             message: "mod manifest repository lock poisoned".to_string(),
         })?;
         Ok(manifests.get(&manifest_id.0).cloned())
+    }
+}
+
+pub struct InMemorySteamBranchRepository {
+    /// game_id → Vec<SteamBranch>
+    branches: Arc<Mutex<HashMap<String, Vec<SteamBranch>>>>,
+}
+
+impl Default for InMemorySteamBranchRepository {
+    fn default() -> Self {
+        Self {
+            branches: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+#[async_trait]
+impl SteamBranchRepository for InMemorySteamBranchRepository {
+    async fn save_branches(
+        &self,
+        game_id: &str,
+        branches: &[SteamBranch],
+    ) -> Result<(), AssetServiceError> {
+        let mut store = self.branches.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("steam branch repository lock poisoned: {e}"),
+        })?;
+        store.insert(game_id.to_string(), branches.to_vec());
+        Ok(())
+    }
+
+    async fn get_branches(
+        &self,
+        game_id: &str,
+    ) -> Result<Vec<SteamBranch>, AssetServiceError> {
+        let store = self.branches.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("steam branch repository lock poisoned: {e}"),
+        })?;
+        Ok(store.get(game_id).cloned().unwrap_or_default())
+    }
+
+    async fn get_branch(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<Option<SteamBranch>, AssetServiceError> {
+        let store = self.branches.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("steam branch repository lock poisoned: {e}"),
+        })?;
+        Ok(store
+            .get(game_id)
+            .and_then(|branches: &Vec<SteamBranch>| {
+                branches.iter().find(|b| b.name == branch_name).cloned()
+            }))
     }
 }
