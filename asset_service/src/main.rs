@@ -1,14 +1,16 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use asset_service::{
     domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild},
     ports::SystemClock,
     proto::asset_service::asset_service_server::AssetServiceServer,
     repositories::{
-        InMemoryBuildRepository, InMemoryModManifestRepository, InMemorySnapshotRepository,
+        FakeSteamService, InMemoryBuildRepository, InMemoryGameRepository,
+        InMemoryModManifestRepository, InMemorySnapshotRepository,
+        InMemorySteamBranchRepository,
     },
     rpc::GrpcAssetService,
-    service::{AssetService, RegisterBuildRequest},
+    service::{AssetService, RegisterBuildRequest, SteamBranchSync},
 };
 use chrono::Utc;
 use tonic::transport::Server;
@@ -27,6 +29,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     seed_demo_builds(service.clone()).await?;
+
+    // 启动 Steam 分支定期同步（每 15 分钟）
+    let sync = SteamBranchSync::new(
+        Arc::new(FakeSteamService),
+        Arc::new(InMemorySteamBranchRepository::default()),
+        Arc::new(InMemoryGameRepository::default()),
+        Duration::from_secs(15 * 60),
+    );
+    tokio::spawn(async move {
+        sync.run().await;
+    });
 
     let grpc = GrpcAssetService::new(service);
 

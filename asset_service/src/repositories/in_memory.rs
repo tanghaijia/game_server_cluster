@@ -182,7 +182,18 @@ impl SteamBranchRepository for InMemorySteamBranchRepository {
         let mut store = self.branches.lock().map_err(|e| AssetServiceError::Internal {
             message: format!("steam branch repository lock poisoned: {e}"),
         })?;
-        store.insert(game_id.to_string(), branches.to_vec());
+        // 按 build_id 去重，后出现的覆盖先出现的
+        let mut seen = std::collections::HashSet::new();
+        let deduped: Vec<SteamBranch> = branches
+            .iter()
+            .rev()
+            .filter(|b| seen.insert(b.build_id))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .cloned()
+            .collect();
+        store.insert(game_id.to_string(), deduped);
         Ok(())
     }
 
@@ -239,5 +250,25 @@ impl GameRepository for InMemoryGameRepository {
             message: format!("game repository lock poisoned: {e}"),
         })?;
         Ok(store.values().cloned().collect())
+    }
+}
+
+/// 空的 SteamService 实现，供 demo/开发阶段使用。
+pub struct FakeSteamService;
+
+#[async_trait]
+impl crate::ports::SteamService for FakeSteamService {
+    async fn fetch_game_from_steam(
+        &self,
+        _app_id: &str,
+    ) -> Result<crate::ports::GameData, String> {
+        Err("FakeSteamService: not implemented".to_string())
+    }
+
+    async fn get_steam_branchs(
+        &self,
+        _app_id: &str,
+    ) -> Result<Vec<crate::ports::SteamBranch>, String> {
+        Ok(Vec::new())
     }
 }
