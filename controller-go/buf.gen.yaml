@@ -1,0 +1,23 @@
+version: v2
+# 1. 明确指定输入源：外部的其他目录
+inputs:
+  - directory: "../asset_service/proto"
+  - directory: "../node_agent/proto"
+
+# 2. 托管模式：自动为生成的代码补全 Go 的 package 前缀
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      # 与实际目录结构一致
+      value: controller-go/internal/third
+
+# 3. 插件配置：代码生成到当前项目
+plugins:
+  # 生成 Go 基础结构体
+  - local: protoc-gen-go
+    out: .  # 项目根目录
+
+  # 生成 gRPC 服务代码
+  - local: protoc-gen-go-grpc
+    out: .  # 项目根目录
