@@ -40,8 +40,6 @@ func (g *GameInstance) Advance(ctx context.Context) (status InstanceStatus, err 
 		g.Status = StatusRestoringSnapshot
 	case StatusRestoringSnapshot:
 		g.Status = StatusRunning
-	case StatusRunning:
-		g.Status = StatusStopping
 	case StatusStopping:
 		g.Status = StatusStopped
 	default:
