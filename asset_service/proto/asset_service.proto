@@ -20,9 +20,8 @@ service AssetService {
 }
 
 message ResolveGameBuildRequest {
-  GameKind game = 1;
+  Game game = 1;
   VersionSelector selector = 2;
-  optional string custom_game = 3;
 }
 
 message ResolveGameBuildResponse {
@@ -151,7 +150,7 @@ message VersionSelector {
 
 message GameBuild {
   string build_id = 1;
-  GameKind game = 2;
+  Game game = 2;
   optional string channel = 3;
   optional string adapter_version = 4;
   optional string upstream_version = 5;
@@ -162,8 +161,7 @@ message GameBuild {
   string resolved_at = 10;
   string created_at = 11;
   string updated_at = 12;
-  optional string custom_game = 13;
-  string adapter_id = 14;
+  string adapter_id = 13;
 }
 
 message SnapshotRecord {
@@ -193,12 +191,11 @@ message SnapshotRestorePlan {
 
 message ModManifest {
   string manifest_id = 1;
-  GameKind game = 2;
+  Game game = 2;
   repeated ModEntry mods = 3;
   string config_hash = 4;
   optional string compatibility_note = 5;
   string created_at = 6;
-  optional string custom_game = 7;
 }
 
 message ModEntry {
@@ -212,11 +209,9 @@ message BuildCompatibility {
   optional string reason = 2;
 }
 
-enum GameKind {
-  GAME_KIND_UNSPECIFIED = 0;
-  GAME_KIND_DST = 1;
-  GAME_KIND_MINECRAFT = 2;
-  GAME_KIND_CUSTOM = 3;
+message Game {
+  string id = 1;
+  string name = 2;
 }
 
 enum BuildStatus {

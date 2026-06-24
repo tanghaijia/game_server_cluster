@@ -76,7 +76,7 @@ where
         let build = self
             .service
             .resolve_game_build(
-                proto_game_to_id(request.game, request.custom_game)?.as_str(),
+                &request.game.ok_or_else(|| Status::invalid_argument("game is required"))?.id,
                 map_selector(selector),
             )
             .await
@@ -324,30 +324,16 @@ fn map_selector(value: asset_service::VersionSelector) -> VersionSelector {
     }
 }
 
-/// 将 proto GameKind + custom_game 转为 game_id 字符串。
-fn proto_game_to_id(value: i32, custom: Option<String>) -> Result<String, Status> {
-    match asset_service::GameKind::try_from(value)
-        .unwrap_or(asset_service::GameKind::Unspecified)
-    {
-        asset_service::GameKind::Dst => Ok("dst".to_string()),
-        asset_service::GameKind::Minecraft => Ok("minecraft".to_string()),
-        asset_service::GameKind::Custom => {
-            Ok(custom.unwrap_or_else(|| "unknown".to_string()))
-        }
-        asset_service::GameKind::Unspecified => Err(Status::invalid_argument("game is required")),
-    }
-}
-
-/// 将 game_id 字符串转为 proto GameKind + custom_game。
-fn game_id_to_proto(game_id: &str) -> (i32, Option<String>) {
-    match game_id {
-        "dst" => (asset_service::GameKind::Dst as i32, None),
-        "minecraft" => (asset_service::GameKind::Minecraft as i32, None),
-        _ => (asset_service::GameKind::Custom as i32, Some(game_id.to_string())),
+/// 将 game_id 字符串转为 proto Game 消息。
+fn game_id_to_proto(game_id: &str) -> asset_service::Game {
+    asset_service::Game {
+        id: game_id.to_string(),
+        name: game_id.to_string(),
     }
 }
 
 fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
+    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
     let adapter_version: AdapterVersion = value
         .adapter_version
         .as_deref()
@@ -357,7 +343,7 @@ fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
 
     Ok(GameBuild {
         build_id: BuildId(value.build_id),
-        game_id: proto_game_to_id(value.game, value.custom_game)?,
+        game_id: game.id,
         channel: value.channel,
         adapter_id: AdapterId(value.adapter_id),
         adapter_version,
@@ -373,9 +359,10 @@ fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
 }
 
 fn map_manifest_from_proto(value: ProtoModManifest) -> Result<ModManifest, Status> {
+    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
     Ok(ModManifest {
         manifest_id: ModManifestId(value.manifest_id),
-        game_id: proto_game_to_id(value.game, value.custom_game)?,
+        game_id: game.id,
         mods: value.mods.into_iter().map(map_mod_entry).collect(),
         config_hash: value.config_hash,
         compatibility_note: value.compatibility_note,
@@ -392,10 +379,9 @@ fn map_mod_entry(value: ProtoModEntry) -> ModEntry {
 }
 
 fn map_build(value: GameBuild) -> ProtoGameBuild {
-    let (game, custom_game) = game_id_to_proto(&value.game_id);
     ProtoGameBuild {
         build_id: value.build_id.0,
-        game,
+        game: Some(game_id_to_proto(&value.game_id)),
         channel: value.channel,
         adapter_version: Some(value.adapter_version.to_string()),
         upstream_version: value.upstream_version,
@@ -407,7 +393,6 @@ fn map_build(value: GameBuild) -> ProtoGameBuild {
         resolved_at: value.resolved_at.to_rfc3339(),
         created_at: value.created_at.to_rfc3339(),
         updated_at: value.updated_at.to_rfc3339(),
-        custom_game,
     }
 }
 
@@ -441,10 +426,9 @@ fn map_restore_plan(value: SnapshotRestorePlan) -> ProtoSnapshotRestorePlan {
 }
 
 fn map_manifest(value: ModManifest) -> ProtoModManifest {
-    let (game, custom_game) = game_id_to_proto(&value.game_id);
     ProtoModManifest {
         manifest_id: value.manifest_id.0,
-        game,
+        game: Some(game_id_to_proto(&value.game_id)),
         mods: value
             .mods
             .into_iter()
@@ -457,7 +441,6 @@ fn map_manifest(value: ModManifest) -> ProtoModManifest {
         config_hash: value.config_hash,
         compatibility_note: value.compatibility_note,
         created_at: value.created_at.to_rfc3339(),
-        custom_game,
     }
 }
 

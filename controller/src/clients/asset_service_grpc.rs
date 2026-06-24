@@ -36,9 +36,8 @@ impl BuildResolver for AssetServiceGrpcClient {
         selector: &VersionSelector,
     ) -> Result<GameBuild, ControllerError> {
         let request = asset_service::ResolveGameBuildRequest {
-            game: map_game_kind_to_proto(game),
+            game: Some(map_game_kind_to_proto(game)),
             selector: Some(map_selector_to_proto(selector.clone())),
-            custom_game: match game { GameKind::Custom(name) => Some(name.clone()), _ => None },
         };
         let mut client = self.inner.lock().await;
         let response = client
@@ -135,11 +134,14 @@ fn map_status(status: tonic::Status) -> ControllerError {
     }
 }
 
-fn map_game_kind_to_proto(value: &GameKind) -> i32 {
-    match value {
-        GameKind::Dst => asset_service::GameKind::Dst as i32,
-        GameKind::Minecraft => asset_service::GameKind::Minecraft as i32,
-        GameKind::Custom(_) => asset_service::GameKind::Custom as i32,
+fn map_game_kind_to_proto(value: &GameKind) -> asset_service::Game {
+    asset_service::Game {
+        id: match value {
+            GameKind::Dst => "dst".to_string(),
+            GameKind::Minecraft => "minecraft".to_string(),
+            GameKind::Custom(name) => name.clone(),
+        },
+        name: String::new(),
     }
 }
 
@@ -161,19 +163,21 @@ fn map_snapshot_type_to_proto(value: &SnapshotType) -> i32 {
     }
 }
 
-fn map_game_kind_from_proto(value: i32, custom: Option<String>) -> GameKind {
-    match asset_service::GameKind::try_from(value).unwrap_or(asset_service::GameKind::Unspecified) {
-        asset_service::GameKind::Dst => GameKind::Dst,
-        asset_service::GameKind::Minecraft => GameKind::Minecraft,
-        asset_service::GameKind::Custom => GameKind::Custom(custom.unwrap_or_else(|| "custom".to_string())),
-        asset_service::GameKind::Unspecified => GameKind::Dst,
+fn map_game_kind_from_proto(game: Option<asset_service::Game>) -> GameKind {
+    match game {
+        Some(g) => match g.id.as_str() {
+            "dst" => GameKind::Dst,
+            "minecraft" => GameKind::Minecraft,
+            name => GameKind::Custom(name.to_string()),
+        },
+        None => GameKind::Dst,
     }
 }
 
 fn map_build_from_proto(value: asset_service::GameBuild) -> GameBuild {
     GameBuild {
         build_id: value.build_id,
-        game: map_game_kind_from_proto(value.game, value.custom_game),
+        game: map_game_kind_from_proto(value.game),
         channel: value.channel,
         adapter_version: value.adapter_version,
     }

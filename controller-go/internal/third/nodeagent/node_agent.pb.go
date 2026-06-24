@@ -2269,8 +2269,8 @@ const file_node_agent_proto_rawDesc = "" +
 	"\x0fRestoreSnapshot\x12$.nodeagent.v1.RestoreSnapshotRequest\x1a%.nodeagent.v1.RestoreSnapshotResponse\x12U\n" +
 	"\fGetOperation\x12!.nodeagent.v1.GetOperationRequest\x1a\".nodeagent.v1.GetOperationResponse\x12^\n" +
 	"\x0fInspectInstance\x12$.nodeagent.v1.InspectInstanceRequest\x1a%.nodeagent.v1.InspectInstanceResponse\x12U\n" +
-	"\fGetHeartbeat\x12!.nodeagent.v1.GetHeartbeatRequest\x1a\".nodeagent.v1.GetHeartbeatResponseB\x94\x01\n" +
-	"\x10com.nodeagent.v1B\x0eNodeAgentProtoP\x01Z\x1fcontroller-go/third;nodeagentv1\xa2\x02\x03NXX\xaa\x02\fNodeagent.V1\xca\x02\fNodeagent\\V1\xe2\x02\x18Nodeagent\\V1\\GPBMetadata\xea\x02\rNodeagent::V1b\x06proto3"
+	"\fGetHeartbeat\x12!.nodeagent.v1.GetHeartbeatRequest\x1a\".nodeagent.v1.GetHeartbeatResponseB\x9d\x01\n" +
+	"\x10com.nodeagent.v1B\x0eNodeAgentProtoP\x01Z(controller-go/internal/third;nodeagentv1\xa2\x02\x03NXX\xaa\x02\fNodeagent.V1\xca\x02\fNodeagent\\V1\xe2\x02\x18Nodeagent\\V1\\GPBMetadata\xea\x02\rNodeagent::V1b\x06proto3"
 
 var (
 	file_node_agent_proto_rawDescOnce sync.Once
