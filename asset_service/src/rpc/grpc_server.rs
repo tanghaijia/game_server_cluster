@@ -329,6 +329,7 @@ fn game_id_to_proto(game_id: &str) -> asset_service::Game {
     asset_service::Game {
         id: game_id.to_string(),
         name: game_id.to_string(),
+        app_id: String::new(),
     }
 }
 

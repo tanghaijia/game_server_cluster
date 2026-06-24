@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+/**
+* NodeAgent模型
+**/
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Game {
+pub struct NodeAgent {
     pub id: String,
-    pub name: String,
-    pub app_id: String, // steam的app_id
+    pub node_id: String,
 }

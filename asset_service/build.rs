@@ -7,8 +7,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile_protos(&["proto/asset_service.proto"], &["proto"])?;
+        .compile_protos(
+            &["proto/asset_service.proto", "proto/business_service.proto"],
+            &["proto"],
+        )?;
 
     println!("cargo:rerun-if-changed=proto/asset_service.proto");
+    println!("cargo:rerun-if-changed=proto/business_service.proto");
     Ok(())
 }
