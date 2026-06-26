@@ -5,15 +5,16 @@ use chrono::Utc;
 
 use crate::{
     domain::{
-        instance_data_path, BuildPreparation, BuildPreparationResult, Endpoint, InstanceId,
-        InstanceRuntimeRecord, InstanceRuntimeSpec, NodeId, NodeOperation, OperationId,
-        RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRestoreRequest,
-        SnapshotRestoreResult, SnapshotRestorePlan,
+        instance_data_path, BuildCompatibility, BuildPreparation, BuildPreparationResult,
+        Endpoint, Game, GameBuild, Image, ImageRespository, InstanceId, InstanceRuntimeRecord,
+        InstanceRuntimeSpec, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
+        RemoteImage, RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRecord,
+        SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, InstanceRuntime, NodeHeartbeat, OperationRepository,
-        SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, ImageClient, InstanceRuntime, NodeHeartbeat,
+        OperationRepository, SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
     },
 };
 
@@ -167,6 +168,36 @@ pub struct FakeAssetServiceFace;
 
 #[async_trait]
 impl AssetServiceFace for FakeAssetServiceFace {
+    async fn resolve_game_build(
+        &self,
+        game_id: &str,
+        _channel: &str,
+    ) -> Result<GameBuild, NodeAgentError> {
+        Ok(GameBuild {
+            build_id: format!("{game_id}-fake-build"),
+            game: Game {
+                id: game_id.to_string(),
+                name: game_id.to_string(),
+                app_id: String::new(),
+            },
+            channel: None,
+            adapter_version: Some("0.1.0".to_string()),
+        })
+    }
+
+    async fn get_game_build(&self, build_id: &str) -> Result<GameBuild, NodeAgentError> {
+        Ok(GameBuild {
+            build_id: build_id.to_string(),
+            game: Game {
+                id: "fake-game".to_string(),
+                name: "fake-game".to_string(),
+                app_id: String::new(),
+            },
+            channel: None,
+            adapter_version: Some("0.1.0".to_string()),
+        })
+    }
+
     async fn create_snapshot_record(
         &self,
         _instance_id: &str,
@@ -195,6 +226,77 @@ impl AssetServiceFace for FakeAssetServiceFace {
         Ok(())
     }
 
+    async fn get_snapshot(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<SnapshotRecord, NodeAgentError> {
+        Ok(SnapshotRecord {
+            snapshot_id: snapshot_id.to_string(),
+            instance_id: "fake-instance".to_string(),
+            build_id: None,
+            snapshot_type: 0,
+            instance_data_path: "/data/game-instances/fake".to_string(),
+            storage_uri: Some(format!("memory://snapshots/{snapshot_id}.tar.zst")),
+            manifest_uri: None,
+            checksum: None,
+            status: 4,
+            source_node: None,
+            created_at: Utc::now().to_rfc3339(),
+            completed_at: Some(Utc::now().to_rfc3339()),
+            failure_message: None,
+        })
+    }
+
+    async fn get_latest_snapshot(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<SnapshotRecord>, NodeAgentError> {
+        Ok(Some(SnapshotRecord {
+            snapshot_id: format!("{instance_id}-latest-snapshot"),
+            instance_id: instance_id.to_string(),
+            build_id: None,
+            snapshot_type: 0,
+            instance_data_path: format!("/data/game-instances/{instance_id}"),
+            storage_uri: None,
+            manifest_uri: None,
+            checksum: None,
+            status: 4,
+            source_node: None,
+            created_at: Utc::now().to_rfc3339(),
+            completed_at: None,
+            failure_message: None,
+        }))
+    }
+
+    async fn set_latest_snapshot(
+        &self,
+        _instance_id: &str,
+        _snapshot_id: &str,
+    ) -> Result<(), NodeAgentError> {
+        Ok(())
+    }
+
+    async fn list_snapshots(
+        &self,
+        instance_id: &str,
+    ) -> Result<Vec<SnapshotRecord>, NodeAgentError> {
+        Ok(vec![SnapshotRecord {
+            snapshot_id: format!("{instance_id}-snapshot-1"),
+            instance_id: instance_id.to_string(),
+            build_id: None,
+            snapshot_type: 0,
+            instance_data_path: format!("/data/game-instances/{instance_id}"),
+            storage_uri: None,
+            manifest_uri: None,
+            checksum: None,
+            status: 4,
+            source_node: None,
+            created_at: Utc::now().to_rfc3339(),
+            completed_at: None,
+            failure_message: None,
+        }])
+    }
+
     async fn get_snapshot_restore_plan(
         &self,
         snapshot_id: &str,
@@ -209,12 +311,43 @@ impl AssetServiceFace for FakeAssetServiceFace {
         })
     }
 
+    async fn get_mod_manifest(&self, manifest_id: &str) -> Result<ModManifest, NodeAgentError> {
+        Ok(ModManifest {
+            manifest_id: manifest_id.to_string(),
+            game_id: "fake-game".to_string(),
+            mods: vec![],
+            config_hash: "fake-hash".to_string(),
+            compatibility_note: None,
+            created_at: Utc::now().to_rfc3339(),
+        })
+    }
+
+    async fn check_build_mod_compatibility(
+        &self,
+        _build_id: &str,
+        _manifest_id: &str,
+    ) -> Result<BuildCompatibility, NodeAgentError> {
+        Ok(BuildCompatibility {
+            compatible: true,
+            reason: None,
+        })
+    }
+
     async fn register_node_agent(
         &self,
         _node_id: &str,
         _endpoint: &str,
     ) -> Result<(), NodeAgentError> {
         Ok(())
+    }
+
+    async fn get_node_agent(&self, node_id: &str) -> Result<NodeAgentInfo, NodeAgentError> {
+        Ok(NodeAgentInfo {
+            node_id: node_id.to_string(),
+            endpoint: "http://127.0.0.1:50052".to_string(),
+            status: "online".to_string(),
+            last_heartbeat_at: Utc::now().timestamp(),
+        })
     }
 
     async fn update_node_agent(
@@ -225,5 +358,45 @@ impl AssetServiceFace for FakeAssetServiceFace {
         _last_heartbeat_at: i64,
     ) -> Result<(), NodeAgentError> {
         Ok(())
+    }
+
+    async fn unregister_node_agent(&self, _node_id: &str) -> Result<(), NodeAgentError> {
+        Ok(())
+    }
+
+    async fn list_node_agents(&self) -> Result<Vec<NodeAgentInfo>, NodeAgentError> {
+        Ok(vec![NodeAgentInfo {
+            node_id: "fake-node".to_string(),
+            endpoint: "http://127.0.0.1:50052".to_string(),
+            status: "online".to_string(),
+            last_heartbeat_at: Utc::now().timestamp(),
+        }])
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct FakeImageClient;
+
+#[async_trait]
+impl ImageClient for FakeImageClient {
+    async fn pull_image(&self, _image_respository: &ImageRespository) -> anyhow::Result<Image> {
+        Ok(Image {
+            id: "fake-image-id".to_string(),
+            name: "fake-image".to_string(),
+            version: "0.1.0".to_string(),
+            path: "/images/fake".to_string(),
+            size: 1024,
+            created_at: Utc::now().timestamp(),
+            updated_at: Utc::now().timestamp(),
+            status: crate::domain::ImageStatus::Runnable,
+        })
+    }
+
+    async fn check_image(&self, _image: &RemoteImage) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    async fn last_version(&self, _image: &RemoteImage) -> anyhow::Result<String> {
+        Ok("0.1.0".to_string())
     }
 }

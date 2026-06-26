@@ -12,4 +12,6 @@ pub enum NodeAgentError {
     InstanceNotFound { instance_id: String },
     #[error("internal error: {message}")]
     Internal { message: String },
+    #[error("image repository request fail error: {message}")]
+    ImageRepositoryRequestFail { message: String },
 }

@@ -12,8 +12,8 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{
-        BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime,
-        SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, ImageClient, InstanceRuntime, OperationRepository,
+        SnapshotRuntime, SystemInfoProvider,
     },
     proto::node_agent::{
         self,
@@ -33,38 +33,44 @@ use crate::{
     service::NodeAgentService,
 };
 
-pub struct GrpcNodeAgentServer<B, I, P, O, S>
+pub struct GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
 where
     B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
     S: SystemInfoProvider,
+    A: AssetServiceFace,
+    IMC: ImageClient,
 {
-    service: Arc<NodeAgentService<B, I, P, O, S>>,
+    service: Arc<NodeAgentService<B, I, P, O, S, A, IMC>>,
 }
 
-impl<B, I, P, O, S> GrpcNodeAgentServer<B, I, P, O, S>
+impl<B, I, P, O, S, A, IMC> GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
 where
     B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
     S: SystemInfoProvider,
+    A: AssetServiceFace,
+    IMC: ImageClient,
 {
-    pub fn new(service: Arc<NodeAgentService<B, I, P, O, S>>) -> Self {
+    pub fn new(service: Arc<NodeAgentService<B, I, P, O, S, A, IMC>>) -> Self {
         Self { service }
     }
 }
 
 #[tonic::async_trait]
-impl<B, I, P, O, S> NodeAgentRpc for GrpcNodeAgentServer<B, I, P, O, S>
+impl<B, I, P, O, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
 where
     B: BuildRuntime + 'static,
     I: InstanceRuntime + 'static,
     P: SnapshotRuntime + 'static,
     O: OperationRepository + 'static,
     S: SystemInfoProvider + 'static,
+    A: AssetServiceFace + 'static,
+    IMC: ImageClient + 'static,
 {
     async fn prepare_game_build(
         &self,
@@ -215,7 +221,8 @@ fn map_error(error: NodeAgentError) -> Status {
         NodeAgentError::InstanceNotFound { instance_id } => Status::not_found(instance_id),
         NodeAgentError::BuildPreparationFailed { message }
         | NodeAgentError::InstanceRuntimeFailed { message }
-        | NodeAgentError::Internal { message } => Status::internal(message),
+        | NodeAgentError::Internal { message }
+        | NodeAgentError::ImageRepositoryRequestFail { message } => Status::internal(message),
     }
 }
 

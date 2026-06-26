@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 
@@ -15,30 +15,38 @@ use crate::{
         SystemInfoProvider,
     },
 };
+use crate::domain::{ImageRespository, LocalGameBuildManager};
+use crate::ports::ImageClient;
 
-pub struct NodeAgentService<B, I, P, O, S>
+pub struct NodeAgentService<B, I, P, O, S, A, IMC>
 where
     B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
     S: SystemInfoProvider,
+    A: AssetServiceFace,
+    IMC: ImageClient,
 {
     build_runtime: Arc<B>,
     instance_runtime: Arc<I>,
     snapshot_runtime: Arc<P>,
     operations: Arc<O>,
     system_info: Arc<S>,
-    asset_service: Arc<dyn AssetServiceFace>,
+    asset_service: Arc<A>,
+    image_client: Arc<IMC>,
+    local_game_build_manager: LocalGameBuildManager
 }
 
-impl<B, I, P, O, S> NodeAgentService<B, I, P, O, S>
+impl<B, I, P, O, S, A, IMC> NodeAgentService<B, I, P, O, S, A, IMC>
 where
     B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
     S: SystemInfoProvider,
+    A: AssetServiceFace,
+    IMC: ImageClient
 {
     pub fn new(
         build_runtime: Arc<B>,
@@ -46,7 +54,8 @@ where
         snapshot_runtime: Arc<P>,
         operations: Arc<O>,
         system_info: Arc<S>,
-        asset_service: Arc<dyn AssetServiceFace>,
+        asset_service: Arc<A>,
+        image_client: Arc<IMC>,
     ) -> Self {
         Self {
             build_runtime,
@@ -55,6 +64,8 @@ where
             operations,
             system_info,
             asset_service,
+            image_client,
+            local_game_build_manager: LocalGameBuildManager::new()
         }
     }
 
@@ -62,36 +73,16 @@ where
         &self,
         request: BuildPreparation,
     ) -> Result<(NodeOperation, BuildPreparationResult), NodeAgentError> {
-        let operation_id = OperationId::new();
-        let mut operation = NodeOperation {
-            operation_id,
-            kind: OperationKind::PrepareBuild,
-            status: OperationStatus::Running,
-            instance_id: None,
-            build_id: Some(request.build.build_id.clone()),
-            message: Some("Preparing game build".to_string()),
-            started_at: Utc::now(),
-            finished_at: None,
-        };
-        self.operations.save(&operation).await?;
+        let id = request.build.build_id.clone();
+        let imc = ImageRespository {};
+        let image = self.image_client.pull_image(&imc).await
+            .map_err(|err| NodeAgentError::ImageRepositoryRequestFail { message: err.to_string() })?;
 
-        let result = self.build_runtime.prepare_build(request).await;
-        match result {
-            Ok(prepared) => {
-                operation.status = OperationStatus::Succeeded;
-                operation.finished_at = Some(Utc::now());
-                operation.message = Some("Build prepared".to_string());
-                self.operations.save(&operation).await?;
-                Ok((operation, prepared))
-            }
-            Err(error) => {
-                operation.status = OperationStatus::Failed;
-                operation.finished_at = Some(Utc::now());
-                operation.message = Some(error.to_string());
-                self.operations.save(&operation).await?;
-                Err(error)
-            }
-        }
+        self.local_game_build_manager.record_game_build_from_image(&request.build, &image)
+            .map_err(|e| NodeAgentError::Internal { message: e.to_string() })?;
+
+
+        todo!()
     }
 
     pub async fn start_instance(

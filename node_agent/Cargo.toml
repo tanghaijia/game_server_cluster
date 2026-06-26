@@ -13,6 +13,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tonic = "0.12"
 uuid = { version = "1", features = ["serde", "v4"] }
+anyhow = "1.0.102"
 
 [build-dependencies]
 protoc-bin-vendored = "3"
