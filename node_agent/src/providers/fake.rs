@@ -8,12 +8,12 @@ use crate::{
         instance_data_path, BuildPreparation, BuildPreparationResult, Endpoint, InstanceId,
         InstanceRuntimeRecord, InstanceRuntimeSpec, NodeId, NodeOperation, OperationId,
         RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRestoreRequest,
-        SnapshotRestoreResult,
+        SnapshotRestoreResult, SnapshotRestorePlan,
     },
     error::NodeAgentError,
     ports::{
-        BuildRuntime, InstanceRuntime, NodeHeartbeat, OperationRepository, SnapshotRuntime,
-        StartInstanceResult, SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, InstanceRuntime, NodeHeartbeat, OperationRepository,
+        SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
     },
 };
 
@@ -30,11 +30,7 @@ impl BuildRuntime for FakeBuildRuntime {
         })?;
         prepared.insert((request.node_id.0, request.build.build_id.clone()));
         Ok(BuildPreparationResult {
-            build_root: format!("/srv/game-cache/{}/{}", match request.build.game {
-                crate::domain::GameKind::Dst => "dst".to_string(),
-                crate::domain::GameKind::Minecraft => "minecraft".to_string(),
-                crate::domain::GameKind::Custom(name) => name,
-            }, request.build.build_id),
+            build_root: format!("/srv/game-cache/{}/{}", request.build.game.id, request.build.build_id),
             prepared_at: Utc::now(),
         })
     }
@@ -163,5 +159,71 @@ impl SystemInfoProvider for FakeSystemInfoProvider {
             disk_usage_pct: 48.0,
             running_instances: 0,
         })
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct FakeAssetServiceFace;
+
+#[async_trait]
+impl AssetServiceFace for FakeAssetServiceFace {
+    async fn create_snapshot_record(
+        &self,
+        _instance_id: &str,
+        _build_id: Option<String>,
+        _snapshot_type: i32,
+        _source_node: Option<String>,
+    ) -> Result<String, NodeAgentError> {
+        Ok("fake-snapshot-id".to_string())
+    }
+
+    async fn complete_snapshot_record(
+        &self,
+        _snapshot_id: &str,
+        _storage_uri: &str,
+        _manifest_uri: Option<String>,
+        _checksum: Option<String>,
+    ) -> Result<(), NodeAgentError> {
+        Ok(())
+    }
+
+    async fn fail_snapshot_record(
+        &self,
+        _snapshot_id: &str,
+        _failure_message: &str,
+    ) -> Result<(), NodeAgentError> {
+        Ok(())
+    }
+
+    async fn get_snapshot_restore_plan(
+        &self,
+        snapshot_id: &str,
+    ) -> Result<SnapshotRestorePlan, NodeAgentError> {
+        Ok(SnapshotRestorePlan {
+            snapshot_id: snapshot_id.to_string(),
+            build_id: None,
+            storage_uri: format!("memory://snapshots/{snapshot_id}.tar.zst"),
+            manifest_uri: None,
+            checksum: None,
+            instance_data_path: "/data/game-instances/fake".to_string(),
+        })
+    }
+
+    async fn register_node_agent(
+        &self,
+        _node_id: &str,
+        _endpoint: &str,
+    ) -> Result<(), NodeAgentError> {
+        Ok(())
+    }
+
+    async fn update_node_agent(
+        &self,
+        _node_id: &str,
+        _endpoint: &str,
+        _status: &str,
+        _last_heartbeat_at: i64,
+    ) -> Result<(), NodeAgentError> {
+        Ok(())
     }
 }

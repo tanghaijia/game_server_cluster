@@ -5,14 +5,15 @@ use tonic::{Request, Response, Status};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, GameKind, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
+        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind,
         OperationStatus, ResourceRequirements, RuntimeState, SnapshotArtifact, SnapshotCaptureRequest,
         SnapshotReference, SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime, SystemInfoProvider,
+        BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime,
+        SystemInfoProvider,
     },
     proto::node_agent::{
         self,
@@ -219,19 +220,21 @@ fn map_error(error: NodeAgentError) -> Status {
 }
 
 fn map_game_build(value: ProtoGameBuild) -> Result<GameBuild, Status> {
+    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
     Ok(GameBuild {
         build_id: value.build_id,
-        game: map_game_kind(value.game, value.custom_game)?,
+        game: map_game(game)?,
         channel: value.channel,
         adapter_version: value.adapter_version,
     })
 }
 
 fn map_instance_runtime_spec(value: ProtoInstanceRuntimeSpec) -> Result<InstanceRuntimeSpec, Status> {
+    let build = map_game_build(value.build.ok_or_else(|| Status::invalid_argument("build is required"))?)?;
     Ok(InstanceRuntimeSpec {
         instance_id: InstanceId(value.instance_id),
-        game: map_game_kind(value.game, value.build.as_ref().and_then(|b| b.custom_game.clone()))?,
-        build: map_game_build(value.build.ok_or_else(|| Status::invalid_argument("build is required"))?)?,
+        game: build.game.clone(),
+        build,
         desired_state: match node_agent::DesiredRuntimeState::try_from(value.desired_state)
             .unwrap_or(node_agent::DesiredRuntimeState::Unspecified)
         {
@@ -278,13 +281,12 @@ fn map_snapshot_reference(value: ProtoSnapshotReference) -> SnapshotReference {
     }
 }
 
-fn map_game_kind(value: i32, custom: Option<String>) -> Result<GameKind, Status> {
-    match node_agent::GameKind::try_from(value).unwrap_or(node_agent::GameKind::Unspecified) {
-        node_agent::GameKind::Dst => Ok(GameKind::Dst),
-        node_agent::GameKind::Minecraft => Ok(GameKind::Minecraft),
-        node_agent::GameKind::Custom => Ok(GameKind::Custom(custom.unwrap_or_else(|| "custom".to_string()))),
-        node_agent::GameKind::Unspecified => Err(Status::invalid_argument("game is required")),
-    }
+fn map_game(value: node_agent::Game) -> Result<crate::domain::Game, Status> {
+    Ok(crate::domain::Game {
+        id: value.id,
+        name: value.name,
+        app_id: value.app_id,
+    })
 }
 
 fn map_operation(value: NodeOperation) -> ProtoNodeOperation {

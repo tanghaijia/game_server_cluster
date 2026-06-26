@@ -87,7 +87,7 @@ message GetHeartbeatResponse {
 
 message GameBuild {
   string build_id = 1;
-  GameKind game = 2;
+  Game game = 2;
   optional string channel = 3;
   optional string adapter_version = 4;
   optional string custom_game = 5;
@@ -126,7 +126,7 @@ message Endpoint {
 
 message InstanceRuntimeSpec {
   string instance_id = 1;
-  GameKind game = 2;
+  Game game = 2;
   GameBuild build = 3;
   DesiredRuntimeState desired_state = 4;
   InstanceSpec spec = 5;
@@ -187,11 +187,10 @@ message NodeHeartbeat {
   uint32 running_instances = 5;
 }
 
-enum GameKind {
-  GAME_KIND_UNSPECIFIED = 0;
-  GAME_KIND_DST = 1;
-  GAME_KIND_MINECRAFT = 2;
-  GAME_KIND_CUSTOM = 3;
+message Game {
+  string id = 1;
+  string name = 2;
+  string app_id = 3;
 }
 
 enum DesiredRuntimeState {

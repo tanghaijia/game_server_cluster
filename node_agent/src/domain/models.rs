@@ -1,22 +1,20 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
+use crate::domain::game::Game;
+use crate::domain::game_build::GameBuild;
 use super::{InstanceId, NodeId, OperationId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GameKind {
-    Dst,
-    Minecraft,
-    Custom(String),
+/// 从 asset_service 获取的快照恢复计划。
+#[derive(Debug, Clone)]
+pub struct SnapshotRestorePlan {
+    pub snapshot_id: String,
+    pub build_id: Option<String>,
+    pub storage_uri: String,
+    pub manifest_uri: Option<String>,
+    pub checksum: Option<String>,
+    pub instance_data_path: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GameBuild {
-    pub build_id: String,
-    pub game: GameKind,
-    pub channel: Option<String>,
-    pub adapter_version: Option<String>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceRequirements {
@@ -63,7 +61,7 @@ pub enum DesiredRuntimeState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstanceRuntimeSpec {
     pub instance_id: InstanceId,
-    pub game: GameKind,
+    pub game: Game,
     pub build: GameBuild,
     pub desired_state: DesiredRuntimeState,
     pub spec: InstanceSpec,

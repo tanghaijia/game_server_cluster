@@ -11,7 +11,8 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{
-        BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime, SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime,
+        SystemInfoProvider,
     },
 };
 
@@ -28,6 +29,7 @@ where
     snapshot_runtime: Arc<P>,
     operations: Arc<O>,
     system_info: Arc<S>,
+    asset_service: Arc<dyn AssetServiceFace>,
 }
 
 impl<B, I, P, O, S> NodeAgentService<B, I, P, O, S>
@@ -44,6 +46,7 @@ where
         snapshot_runtime: Arc<P>,
         operations: Arc<O>,
         system_info: Arc<S>,
+        asset_service: Arc<dyn AssetServiceFace>,
     ) -> Self {
         Self {
             build_runtime,
@@ -51,6 +54,7 @@ where
             snapshot_runtime,
             operations,
             system_info,
+            asset_service,
         }
     }
 

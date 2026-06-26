@@ -1,10 +1,12 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use node_agent::{
+    clients::AssetServiceGrpcClient,
+    ports::AssetServiceFace,
     proto::node_agent::node_agent_service_server::NodeAgentServiceServer,
     providers::{
-        FakeBuildRuntime, FakeInstanceRuntime, FakeSnapshotRuntime, FakeSystemInfoProvider,
-        InMemoryOperationRepository,
+        FakeAssetServiceFace, FakeBuildRuntime, FakeInstanceRuntime, FakeSnapshotRuntime,
+        FakeSystemInfoProvider, InMemoryOperationRepository,
     },
     rpc::GrpcNodeAgentServer,
     service::NodeAgentService,
@@ -17,13 +19,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "127.0.0.1:50052".to_string())
         .parse()?;
 
+    // 如果配了 ASSET_SERVICE_ADDR 就连接真实的 asset_service，否则使用 Fake
+    let asset_service: Arc<dyn AssetServiceFace> =
+        if let Ok(asset_addr) = std::env::var("ASSET_SERVICE_ADDR") {
+            println!("connecting to asset_service at {asset_addr}");
+            Arc::new(AssetServiceGrpcClient::connect(&asset_addr).await?)
+        } else {
+            println!("ASSET_SERVICE_ADDR not set, using FakeAssetServiceFace");
+            Arc::new(FakeAssetServiceFace)
+        };
+
     let service = Arc::new(NodeAgentService::new(
         Arc::new(FakeBuildRuntime::default()),
         Arc::new(FakeInstanceRuntime::default()),
         Arc::new(FakeSnapshotRuntime),
         Arc::new(InMemoryOperationRepository::default()),
         Arc::new(FakeSystemInfoProvider::default()),
+        asset_service,
     ));
+
     let grpc = GrpcNodeAgentServer::new(service);
 
     println!("node-agent listening on {}", addr);
