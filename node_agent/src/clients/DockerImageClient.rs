@@ -8,6 +8,14 @@ struct DockerImageClient {
     image_repository: ImageRepository
 }
 
+impl DockerImageClient {
+    fn new(image_repository: ImageRepository) -> Self {
+        DockerImageClient {
+            image_repository
+        }
+    }
+}
+
 #[async_trait]
 impl ImageClient for DockerImageClient {
     async fn pull_image(&self, remote_image: &RemoteImage) -> anyhow::Result<Image> {

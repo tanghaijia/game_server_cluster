@@ -20,7 +20,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()?;
 
     let service = Arc::new(NodeAgentService::new(
-        Arc::new(FakeBuildRuntime::default()),
         Arc::new(FakeInstanceRuntime::default()),
         Arc::new(FakeSnapshotRuntime),
         Arc::new(InMemoryOperationRepository::default()),

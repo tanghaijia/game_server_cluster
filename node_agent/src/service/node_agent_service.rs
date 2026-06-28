@@ -18,9 +18,8 @@ use crate::{
 use crate::domain::{ImageRepository, LocalGameBuildManager, RemoteImage};
 use crate::ports::ImageClient;
 
-pub struct NodeAgentService<B, I, P, O, S, A, IMC>
+pub struct NodeAgentService<I, P, O, S, A, IMC>
 where
-    B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
@@ -28,7 +27,6 @@ where
     A: AssetServiceFace,
     IMC: ImageClient,
 {
-    build_runtime: Arc<B>,
     instance_runtime: Arc<I>,
     snapshot_runtime: Arc<P>,
     operations: Arc<O>,
@@ -38,9 +36,48 @@ where
     local_game_build_manager: LocalGameBuildManager
 }
 
-impl<B, I, P, O, S, A, IMC> NodeAgentService<B, I, P, O, S, A, IMC>
+impl<I, P, O, S, A, IMC> NodeAgentService<I, P, O, S, A, IMC>
 where
-    B: BuildRuntime,
+    I: InstanceRuntime,
+    P: SnapshotRuntime,
+    O: OperationRepository,
+    S: SystemInfoProvider,
+    A: AssetServiceFace,
+    IMC: ImageClient
+{
+    async fn create_operation(&self, kind: OperationKind,
+                        instance_id: Option<InstanceId>,
+                        build_id: Option<String>,
+                        message: Option<String>) -> anyhow::Result<NodeOperation> {
+        let operation_id = OperationId::new();
+        let operation = NodeOperation {
+            operation_id,
+            kind,
+            status: OperationStatus::Running,
+            instance_id,
+            build_id,
+            message,
+            started_at: Utc::now(),
+            finished_at: None,
+        };
+        self.operations.save(&operation).await?;
+
+        Ok(operation)
+    }
+
+    async fn failed_operation(&self, mut operation: NodeOperation,
+                              message: Option<String>) -> anyhow::Result<NodeOperation> {
+        operation.status = OperationStatus::Failed;
+        operation.message = message;
+        operation.finished_at = Some(Utc::now());
+        self.operations.save(&operation).await?;
+
+        Ok(operation)
+    }
+}
+
+impl<I, P, O, S, A, IMC> NodeAgentService<I, P, O, S, A, IMC>
+where
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
@@ -49,7 +86,6 @@ where
     IMC: ImageClient
 {
     pub fn new(
-        build_runtime: Arc<B>,
         instance_runtime: Arc<I>,
         snapshot_runtime: Arc<P>,
         operations: Arc<O>,
@@ -58,7 +94,6 @@ where
         image_client: Arc<IMC>,
     ) -> Self {
         Self {
-            build_runtime,
             instance_runtime,
             snapshot_runtime,
             operations,
@@ -72,26 +107,43 @@ where
     pub async fn prepare_game_build(
         &self,
         request: BuildPreparation,
-    ) -> Result<BuildPreparationResult, NodeAgentError> {
-        let id = request.build.build_id.clone();
+    ) -> Result<(NodeOperation, BuildPreparationResult), NodeAgentError> {
+        let build_id = request.build.build_id.clone();
+        let mut operation = self.create_operation(
+            OperationKind::PrepareBuild,
+            None,
+            Some(build_id.clone()),
+            None
+        ).await.map_err(|err| NodeAgentError::ImageRepositoryRequestFail { message: err.to_string() })?;
+
         let remote_img = RemoteImage {
             id: "id".to_string(),
             name: "name".to_string(),
             tag: "tag".to_string()
         };
-        let image = self.image_client.pull_image(&remote_img).await
-            .map_err(|err| NodeAgentError::ImageRepositoryRequestFail { message: err.to_string() })?;
+        let image = match self.image_client.pull_image(&remote_img).await {
+            Ok(img) => img,
+            Err(e) => {
+                let _ = self.failed_operation(operation, Some("pull image fail.".to_string())).await;
+                return Err(NodeAgentError::ImageRepositoryRequestFail { message: e.to_string() });
+            }
+        };
 
-        self.local_game_build_manager.record_game_build_from_image(&request.build, &image)
-            .map_err(|e| NodeAgentError::Internal { message: e.to_string() })?;
+        match self.local_game_build_manager.record_game_build_from_image(&request.build, &image) {
+            Ok(_) => {}
+            Err(e) => {
+                let _ = self.failed_operation(operation, Some("record game build from image fail.".to_string())).await;
+                return Err(NodeAgentError::ImageRepositoryRequestFail { message: e.to_string() });
+            }
+        }
 
         let res = BuildPreparationResult {
             build_root: "asset_service".to_string(),
             prepared_at: Utc::now(),
-            build_id: id,
+            build_id,
         };
 
-        Ok(res)
+        Ok((operation, res))
     }
 
     pub async fn start_instance(

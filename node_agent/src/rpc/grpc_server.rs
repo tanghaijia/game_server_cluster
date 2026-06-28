@@ -33,9 +33,8 @@ use crate::{
     service::NodeAgentService,
 };
 
-pub struct GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
+pub struct GrpcNodeAgentServer<I, P, O, S, A, IMC>
 where
-    B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
@@ -43,12 +42,11 @@ where
     A: AssetServiceFace,
     IMC: ImageClient,
 {
-    service: Arc<NodeAgentService<B, I, P, O, S, A, IMC>>,
+    service: Arc<NodeAgentService<I, P, O, S, A, IMC>>,
 }
 
-impl<B, I, P, O, S, A, IMC> GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
+impl<I, P, O, S, A, IMC> GrpcNodeAgentServer<I, P, O, S, A, IMC>
 where
-    B: BuildRuntime,
     I: InstanceRuntime,
     P: SnapshotRuntime,
     O: OperationRepository,
@@ -56,15 +54,14 @@ where
     A: AssetServiceFace,
     IMC: ImageClient,
 {
-    pub fn new(service: Arc<NodeAgentService<B, I, P, O, S, A, IMC>>) -> Self {
+    pub fn new(service: Arc<NodeAgentService<I, P, O, S, A, IMC>>) -> Self {
         Self { service }
     }
 }
 
 #[tonic::async_trait]
-impl<B, I, P, O, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<B, I, P, O, S, A, IMC>
+impl<I, P, O, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<I, P, O, S, A, IMC>
 where
-    B: BuildRuntime + 'static,
     I: InstanceRuntime + 'static,
     P: SnapshotRuntime + 'static,
     O: OperationRepository + 'static,
@@ -82,12 +79,13 @@ where
             node_id: NodeId(request.node_id),
             build: map_game_build(build)?,
         };
-        let result = self
+        let (operation, result) = self
             .service
             .prepare_game_build(domain)
             .await
             .map_err(map_error)?;
         Ok(Response::new(PrepareGameBuildResponse {
+            operation: Some(map_operation(operation)),
             result: Some(map_build_preparation_result(result)),
         }))
     }
@@ -222,6 +220,7 @@ fn map_error(error: NodeAgentError) -> Status {
         | NodeAgentError::InstanceRuntimeFailed { message }
         | NodeAgentError::Internal { message }
         | NodeAgentError::ImageRepositoryRequestFail { message } => Status::internal(message),
+        | NodeAgentError::DBOperationFail { message } => Status::internal(message),
     }
 }
 

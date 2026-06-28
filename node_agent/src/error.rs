@@ -14,4 +14,6 @@ pub enum NodeAgentError {
     Internal { message: String },
     #[error("image repository request fail error: {message}")]
     ImageRepositoryRequestFail { message: String },
+    #[error("DB operation fail error: {message}")]
+    DBOperationFail { message: String },
 }
