@@ -82,13 +82,12 @@ where
             node_id: NodeId(request.node_id),
             build: map_game_build(build)?,
         };
-        let (operation, result) = self
+        let result = self
             .service
             .prepare_game_build(domain)
             .await
             .map_err(map_error)?;
         Ok(Response::new(PrepareGameBuildResponse {
-            operation: Some(map_operation(operation)),
             result: Some(map_build_preparation_result(result)),
         }))
     }

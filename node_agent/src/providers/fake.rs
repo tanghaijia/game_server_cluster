@@ -6,7 +6,7 @@ use chrono::Utc;
 use crate::{
     domain::{
         instance_data_path, BuildCompatibility, BuildPreparation, BuildPreparationResult,
-        Endpoint, Game, GameBuild, Image, ImageRespository, InstanceId, InstanceRuntimeRecord,
+        Endpoint, Game, GameBuild, Image, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
         RemoteImage, RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRecord,
         SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
@@ -33,6 +33,7 @@ impl BuildRuntime for FakeBuildRuntime {
         Ok(BuildPreparationResult {
             build_root: format!("/srv/game-cache/{}/{}", request.build.game.id, request.build.build_id),
             prepared_at: Utc::now(),
+            build_id: "fake_build".to_string()
         })
     }
 }
@@ -379,15 +380,13 @@ pub struct FakeImageClient;
 
 #[async_trait]
 impl ImageClient for FakeImageClient {
-    async fn pull_image(&self, _image_respository: &ImageRespository) -> anyhow::Result<Image> {
+    async fn pull_image(&self, _image: &RemoteImage) -> anyhow::Result<Image> {
         Ok(Image {
             id: "fake-image-id".to_string(),
             name: "fake-image".to_string(),
-            version: "0.1.0".to_string(),
-            path: "/images/fake".to_string(),
-            size: 1024,
-            created_at: Utc::now().timestamp(),
-            updated_at: Utc::now().timestamp(),
+            tag: "lastest".to_string(),
+            size: Some(1024),
+            created_at: Utc::now(),
             status: crate::domain::ImageStatus::Runnable,
         })
     }

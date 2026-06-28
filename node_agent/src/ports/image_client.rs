@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 
-use crate::domain::{Image, ImageRespository, RemoteImage};
+use crate::domain::{Image, RemoteImage};
 
 #[async_trait]
 pub trait ImageClient: Send + Sync {
-    async fn pull_image(&self, image_respository: &ImageRespository) -> anyhow::Result<Image>;
+    async fn pull_image(&self, image: &RemoteImage) -> anyhow::Result<Image>;
 
     async fn check_image(&self, image: &RemoteImage) -> anyhow::Result<bool>;
 

@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
-use chrono::Utc;
+use chrono::{Local, Utc};
 
 use crate::{
     domain::{
@@ -15,7 +15,7 @@ use crate::{
         SystemInfoProvider,
     },
 };
-use crate::domain::{ImageRespository, LocalGameBuildManager};
+use crate::domain::{ImageRepository, LocalGameBuildManager, RemoteImage};
 use crate::ports::ImageClient;
 
 pub struct NodeAgentService<B, I, P, O, S, A, IMC>
@@ -72,17 +72,26 @@ where
     pub async fn prepare_game_build(
         &self,
         request: BuildPreparation,
-    ) -> Result<(NodeOperation, BuildPreparationResult), NodeAgentError> {
+    ) -> Result<BuildPreparationResult, NodeAgentError> {
         let id = request.build.build_id.clone();
-        let imc = ImageRespository {};
-        let image = self.image_client.pull_image(&imc).await
+        let remote_img = RemoteImage {
+            id: "id".to_string(),
+            name: "name".to_string(),
+            tag: "tag".to_string()
+        };
+        let image = self.image_client.pull_image(&remote_img).await
             .map_err(|err| NodeAgentError::ImageRepositoryRequestFail { message: err.to_string() })?;
 
         self.local_game_build_manager.record_game_build_from_image(&request.build, &image)
             .map_err(|e| NodeAgentError::Internal { message: e.to_string() })?;
 
+        let res = BuildPreparationResult {
+            build_root: "asset_service".to_string(),
+            prepared_at: Utc::now(),
+            build_id: id,
+        };
 
-        todo!()
+        Ok(res)
     }
 
     pub async fn start_instance(

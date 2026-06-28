@@ -19,8 +19,7 @@ message PrepareGameBuildRequest {
 }
 
 message PrepareGameBuildResponse {
-  NodeOperation operation = 1;
-  BuildPreparationResult result = 2;
+  BuildPreparationResult result = 1;
 }
 
 message StartInstanceRequest {

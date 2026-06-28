@@ -113,6 +113,7 @@ pub struct BuildPreparation {
 pub struct BuildPreparationResult {
     pub build_root: String,
     pub prepared_at: DateTime<Utc>,
+    pub build_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

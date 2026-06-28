@@ -1,5 +1,0 @@
-
-
-pub struct ImageRespository {
-    
-}

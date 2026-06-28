@@ -1,3 +1,5 @@
+mod common;
+
 use std::{net::SocketAddr, sync::Arc};
 
 use node_agent::{
