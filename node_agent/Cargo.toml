@@ -17,6 +17,9 @@ anyhow = "1.0.102"
 lmrc-docker = "0.3.16"
 log = "0.4"
 env_logger = "0.9"
+apalis-core = "1.0.0-rc.9"
+apalis-sqlite = "1.0.0-rc.8"
+sqlx = "=0.8.6"
 
 [build-dependencies]
 protoc-bin-vendored = "3"

@@ -8,7 +8,7 @@ use crate::{
         instance_data_path, BuildCompatibility, BuildPreparation, BuildPreparationResult,
         Endpoint, Game, GameBuild, Image, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
-        RemoteImage, RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRecord,
+        RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord,
         SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
@@ -17,6 +17,7 @@ use crate::{
         OperationRepository, SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
     },
 };
+use crate::proto::node_agent::SnapshotArtifact;
 
 #[derive(Default, Clone)]
 pub struct FakeBuildRuntime {
@@ -98,7 +99,7 @@ impl SnapshotRuntime for FakeSnapshotRuntime {
             storage_uri: format!("memory://snapshots/{}.tar.zst", request.snapshot_id),
             manifest_uri: Some(format!("memory://snapshots/{}.manifest.json", request.snapshot_id)),
             checksum: Some(format!("sha256:{}", request.snapshot_id)),
-            captured_at: Utc::now(),
+            captured_at: Utc::now().to_string(),
         })
     }
 

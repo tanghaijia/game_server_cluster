@@ -123,16 +123,6 @@ pub struct SnapshotCaptureRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SnapshotArtifact {
-    pub snapshot_id: String,
-    pub instance_data_path: String,
-    pub storage_uri: String,
-    pub manifest_uri: Option<String>,
-    pub checksum: Option<String>,
-    pub captured_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotRestoreRequest {
     pub instance_id: InstanceId,
     pub snapshot_id: String,

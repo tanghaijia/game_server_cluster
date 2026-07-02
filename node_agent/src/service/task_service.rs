@@ -1,0 +1,495 @@
+use std::sync::Arc;
+
+use apalis_core::{
+    backend::TaskSink,
+    error::BoxDynError,
+    task::data::Data,
+    worker::builder::WorkerBuilder,
+    worker::context::WorkerContext,
+};
+use apalis_sqlite::{SqlitePool, SqliteStorage};
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex as AsyncMutex;
+
+use crate::{
+    domain::{
+        GameBuild, InstanceId, InstanceRuntimeSpec, LocalGameBuildManager, NodeOperation,
+        OperationId, OperationKind, OperationStatus, RemoteImage, SnapshotCaptureRequest,
+        SnapshotRestoreRequest,
+    },
+    error::NodeAgentError,
+    ports::{AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SnapshotRuntime},
+};
+
+// ============================================================
+// TaskContext — 所有 handler 共享的依赖集合
+// ============================================================
+
+/// 使用 trait object 避免泛型传播到每个 handler 签名
+pub struct TaskContext {
+    pub instance_runtime: Arc<dyn InstanceRuntime>,
+    pub snapshot_runtime: Arc<dyn SnapshotRuntime>,
+    pub operations: Arc<dyn OperationRepository>,
+    pub asset_service: Arc<dyn AssetServiceFace>,
+    pub image_client: Arc<dyn ImageClient>,
+    pub local_game_build_manager: Arc<AsyncMutex<LocalGameBuildManager>>,
+}
+
+impl TaskContext {
+    pub fn new(
+        instance_runtime: Arc<dyn InstanceRuntime>,
+        snapshot_runtime: Arc<dyn SnapshotRuntime>,
+        operations: Arc<dyn OperationRepository>,
+        asset_service: Arc<dyn AssetServiceFace>,
+        image_client: Arc<dyn ImageClient>,
+    ) -> Self {
+        Self {
+            instance_runtime,
+            snapshot_runtime,
+            operations,
+            asset_service,
+            image_client,
+            local_game_build_manager: Arc::new(AsyncMutex::new(LocalGameBuildManager::new())),
+        }
+    }
+}
+
+// ============================================================
+// Job 类型定义（每种操作一个 job struct，需要 Serialize + Deserialize）
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrepareBuildJob {
+    pub build_id: String,
+    pub game_id: String,
+    pub remote_image_name: String,
+    pub remote_image_tag: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartInstanceJob {
+    pub spec: InstanceRuntimeSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StopInstanceJob {
+    pub instance_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSnapshotJob {
+    pub instance_id: String,
+    pub snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoreSnapshotJob {
+    pub instance_id: String,
+    pub snapshot_id: String,
+    pub storage_uri: String,
+    pub manifest_uri: Option<String>,
+    pub checksum: Option<String>,
+}
+
+// ============================================================
+// Operation 辅助函数
+// ============================================================
+
+async fn create_operation(
+    ops: &Arc<dyn OperationRepository>,
+    kind: OperationKind,
+    instance_id: Option<&str>,
+    build_id: Option<&str>,
+    message: &str,
+) -> Result<NodeOperation, NodeAgentError> {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind,
+        status: OperationStatus::Running,
+        instance_id: instance_id.map(|s| InstanceId(s.to_string())),
+        build_id: build_id.map(|s| s.to_string()),
+        message: Some(message.to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    ops.save(&op).await?;
+    Ok(op)
+}
+
+async fn succeed_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperation, msg: &str) {
+    op.status = OperationStatus::Succeeded;
+    op.finished_at = Some(Utc::now());
+    op.message = Some(msg.to_string());
+    let _ = ops.save(&op).await;
+}
+
+async fn fail_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperation, err: &str) {
+    op.status = OperationStatus::Failed;
+    op.finished_at = Some(Utc::now());
+    op.message = Some(err.to_string());
+    let _ = ops.save(&op).await;
+}
+
+// ============================================================
+// Handler 回调函数（apalis 在每个 worker 中消费 job 时的回调）
+// ============================================================
+//
+// 签名规则：
+//   第 1 个参数 = Job 类型（apalis 自动从 storage 反序列化）
+//   后续参数通过 FromRequest 注入：
+//     Data<T>          — WorkerBuilder::data() 传入的共享状态
+//     WorkerContext    — worker 名称、运行计数等元信息
+//   返回值  = Result<(), BoxDynError>
+
+async fn handle_prepare_build(
+    job: PrepareBuildJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let op = create_operation(
+        &ctx.operations,
+        OperationKind::PrepareBuild,
+        None,
+        Some(&job.build_id),
+        "preparing build in background",
+    )
+    .await?;
+
+    let remote_img = RemoteImage {
+        id: String::new(),
+        name: job.remote_image_name.clone(),
+        tag: job.remote_image_tag.clone(),
+    };
+
+    // 拉取镜像
+    let image = match ctx.image_client.pull_image(&remote_img).await {
+        Ok(img) => img,
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    };
+
+    // 注册本地构建
+    let game_build = GameBuild {
+        build_id: job.build_id.clone(),
+        game: crate::domain::Game {
+            id: job.game_id.clone(),
+            name: String::new(),
+            app_id: String::new(),
+        },
+        channel: None,
+        adapter_version: None,
+    };
+
+    {
+        let mgr = ctx.local_game_build_manager.lock().await;
+        if let Err(e) = mgr.record_game_build_from_image(&game_build, &image) {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    succeed_operation(&ctx.operations, op, "build prepared").await;
+    Ok(())
+}
+
+async fn handle_start_instance(
+    job: StartInstanceJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let instance_id_str = job.spec.instance_id.0.clone();
+
+    let op = create_operation(
+        &ctx.operations,
+        OperationKind::StartInstance,
+        Some(&instance_id_str),
+        None,
+        "starting instance in background",
+    )
+    .await?;
+
+    match ctx.instance_runtime.start_instance(job.spec).await {
+        Ok(_result) => {
+            succeed_operation(&ctx.operations, op, "instance started").await;
+        }
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_stop_instance(
+    job: StopInstanceJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let instance_id = InstanceId(job.instance_id.clone());
+
+    let op = create_operation(
+        &ctx.operations,
+        OperationKind::StopInstance,
+        Some(&job.instance_id),
+        None,
+        "stopping instance in background",
+    )
+    .await?;
+
+    match ctx.instance_runtime.stop_instance(&instance_id).await {
+        Ok(()) => {
+            succeed_operation(&ctx.operations, op, "instance stopped").await;
+        }
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_create_snapshot(
+    job: CreateSnapshotJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let instance_id = InstanceId(job.instance_id.clone());
+
+    let op = create_operation(
+        &ctx.operations,
+        OperationKind::CreateSnapshot,
+        Some(&job.instance_id),
+        None,
+        "creating snapshot in background",
+    )
+    .await?;
+
+    let request = SnapshotCaptureRequest {
+        instance_id,
+        snapshot_id: job.snapshot_id.clone(),
+    };
+
+    match ctx.snapshot_runtime.create_snapshot(request).await {
+        Ok(_snapshot) => {
+            succeed_operation(&ctx.operations, op, "snapshot created").await;
+        }
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_restore_snapshot(
+    job: RestoreSnapshotJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let instance_id = InstanceId(job.instance_id.clone());
+
+    let op = create_operation(
+        &ctx.operations,
+        OperationKind::RestoreSnapshot,
+        Some(&job.instance_id),
+        None,
+        "restoring snapshot in background",
+    )
+    .await?;
+
+    let request = SnapshotRestoreRequest {
+        instance_id,
+        snapshot_id: job.snapshot_id.clone(),
+        storage_uri: job.storage_uri.clone(),
+        manifest_uri: job.manifest_uri.clone(),
+        checksum: job.checksum.clone(),
+    };
+
+    match ctx.snapshot_runtime.restore_snapshot(request).await {
+        Ok(_result) => {
+            succeed_operation(&ctx.operations, op, "snapshot restored").await;
+        }
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
+// ============================================================
+// 启动 Worker（每个 job 类型一个独立 worker）
+// ============================================================
+
+/// 启动所有后台任务 worker。
+///
+/// 每个 worker 对应一种 job 类型，共享同一个 context。
+/// Worker 通过 tokio::spawn 并发运行，挂到主 tokio runtime 上。
+pub fn start_all_workers(pool: SqlitePool, task_ctx: Arc<TaskContext>) -> Vec<tokio::task::JoinHandle<()>> {
+    let mut handles = Vec::new();
+
+    // --- PrepareBuild Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("prepare-build-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_prepare_build)
+                .run()
+                .await
+                .expect("prepare-build worker crashed");
+        }));
+    }
+
+    // --- StartInstance Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("start-instance-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_start_instance)
+                .run()
+                .await
+                .expect("start-instance worker crashed");
+        }));
+    }
+
+    // --- StopInstance Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("stop-instance-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_stop_instance)
+                .run()
+                .await
+                .expect("stop-instance worker crashed");
+        }));
+    }
+
+    // --- CreateSnapshot Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("create-snapshot-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_create_snapshot)
+                .run()
+                .await
+                .expect("create-snapshot worker crashed");
+        }));
+    }
+
+    // --- RestoreSnapshot Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("restore-snapshot-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_restore_snapshot)
+                .run()
+                .await
+                .expect("restore-snapshot worker crashed");
+        }));
+    }
+
+    handles
+}
+
+// ============================================================
+// 初始化 backend（建表）
+// ============================================================
+
+pub async fn init_backend() -> Result<SqlitePool, sqlx::Error> {
+    let db_url = "sqlite://jobs.db?mode=rwc&busy_timeout=5000";
+    let pool = SqlitePool::connect(db_url).await?;
+
+    SqliteStorage::<(), (), ()>::setup(&pool)
+        .await
+        .expect("Apalis 建表失败！");
+
+    Ok(pool)
+}
+
+// ============================================================
+// 投递任务的辅助函数（在 gRPC handler 中调用，把操作丢到队列）
+// ============================================================
+
+pub async fn enqueue_prepare_build(
+    pool: &SqlitePool,
+    build_id: String,
+    game_id: String,
+    remote_image_name: String,
+    remote_image_tag: String,
+) {
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(PrepareBuildJob {
+            build_id,
+            game_id,
+            remote_image_name,
+            remote_image_tag,
+        })
+        .await;
+}
+
+pub async fn enqueue_start_instance(pool: &SqlitePool, spec: InstanceRuntimeSpec) {
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage.push(StartInstanceJob { spec }).await;
+}
+
+pub async fn enqueue_stop_instance(pool: &SqlitePool, instance_id: &str) {
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(StopInstanceJob {
+            instance_id: instance_id.to_string(),
+        })
+        .await;
+}
+
+pub async fn enqueue_create_snapshot(pool: &SqlitePool, instance_id: &str, snapshot_id: &str) {
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(CreateSnapshotJob {
+            instance_id: instance_id.to_string(),
+            snapshot_id: snapshot_id.to_string(),
+        })
+        .await;
+}
+
+pub async fn enqueue_restore_snapshot(
+    pool: &SqlitePool,
+    instance_id: &str,
+    snapshot_id: &str,
+    storage_uri: &str,
+    manifest_uri: Option<&str>,
+    checksum: Option<&str>,
+) {
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(RestoreSnapshotJob {
+            instance_id: instance_id.to_string(),
+            snapshot_id: snapshot_id.to_string(),
+            storage_uri: storage_uri.to_string(),
+            manifest_uri: manifest_uri.map(|s| s.to_string()),
+            checksum: checksum.map(|s| s.to_string()),
+        })
+        .await;
+}

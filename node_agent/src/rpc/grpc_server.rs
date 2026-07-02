@@ -7,12 +7,12 @@ use crate::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
         GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind,
-        OperationStatus, ResourceRequirements, RuntimeState, SnapshotArtifact, SnapshotCaptureRequest,
+        OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
         SnapshotReference, SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, ImageClient, InstanceRuntime, OperationRepository,
+        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository,
         SnapshotRuntime, SystemInfoProvider,
     },
     proto::node_agent::{
@@ -32,6 +32,7 @@ use crate::{
     },
     service::NodeAgentService,
 };
+use crate::proto::node_agent::SnapshotArtifact;
 
 pub struct GrpcNodeAgentServer<I, P, O, S, A, IMC>
 where
@@ -332,7 +333,7 @@ fn map_snapshot_artifact(value: SnapshotArtifact) -> ProtoSnapshotArtifact {
         storage_uri: value.storage_uri,
         manifest_uri: value.manifest_uri,
         checksum: value.checksum,
-        captured_at: value.captured_at.to_rfc3339(),
+        captured_at: value.captured_at,
     }
 }
 

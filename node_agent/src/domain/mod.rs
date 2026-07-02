@@ -8,6 +8,8 @@ mod container;
 mod env;
 mod game_build;
 mod image;
+mod snapshot;
+mod job;
 
 pub use asset_models::*;
 pub use game::*;

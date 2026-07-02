@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 
 use crate::{
-    domain::{SnapshotArtifact, SnapshotCaptureRequest, SnapshotRestoreRequest, SnapshotRestoreResult},
+    domain::{SnapshotCaptureRequest, SnapshotRestoreRequest, SnapshotRestoreResult},
     error::NodeAgentError,
 };
+use crate::proto::node_agent::SnapshotArtifact;
 
 #[async_trait]
 pub trait SnapshotRuntime: Send + Sync {

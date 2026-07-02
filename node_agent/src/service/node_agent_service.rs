@@ -1,22 +1,23 @@
 use std::sync::{Arc};
 
-use chrono::{Local, Utc};
+use chrono::{Utc};
 
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, NodeOperation, OperationId, OperationKind, OperationStatus,
-        RuntimeState, SnapshotArtifact, SnapshotCaptureRequest, SnapshotRestoreRequest,
+        RuntimeState, SnapshotCaptureRequest, SnapshotRestoreRequest,
         SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, InstanceRuntime, OperationRepository, SnapshotRuntime,
+        AssetServiceFace, InstanceRuntime, OperationRepository, SnapshotRuntime,
         SystemInfoProvider,
     },
 };
-use crate::domain::{ImageRepository, LocalGameBuildManager, RemoteImage};
+use crate::domain::{LocalGameBuildManager, RemoteImage};
 use crate::ports::ImageClient;
+use crate::proto::node_agent::SnapshotArtifact;
 
 pub struct NodeAgentService<I, P, O, S, A, IMC>
 where
