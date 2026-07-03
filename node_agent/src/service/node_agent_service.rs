@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 
-use crate::domain::{LocalGameBuildManager, RemoteImage};
+use crate::domain::{HostSnapShotDataPath, LocalGameBuildManager, RemoteImage};
 use crate::ports::ImageClient;
 use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
@@ -184,6 +184,8 @@ where
         };
         self.operations.save(&operation).await?;
 
+        let data_path = HostSnapShotDataPath::new(request.instance_id.0.clone());
+
         let result = self.snapshot_runtime.restore_snapshot(request).await;
         match result {
             Ok(snapshot) => {
@@ -259,13 +261,11 @@ where
         operation_id: &OperationId,
     ) -> Result<BuildPreparationResult, NodeAgentError> {
         // 1. 查找已有的 Pending 操作，设为 Running
-        let mut operation = self
-            .operations
-            .get(operation_id)
-            .await?
-            .ok_or_else(|| NodeAgentError::InvalidRequest {
+        let mut operation = self.operations.get(operation_id).await?.ok_or_else(|| {
+            NodeAgentError::InvalidRequest {
                 message: format!("operation {} not found", operation_id.0),
-            })?;
+            }
+        })?;
         operation.status = OperationStatus::Running;
         operation.message = Some("Preparing build...".to_string());
         self.operations
@@ -330,13 +330,11 @@ where
         let node_id = spec.assignment.node_id.clone();
 
         // 1. 查找已有的 Pending 操作，设为 Running
-        let mut operation = self
-            .operations
-            .get(operation_id)
-            .await?
-            .ok_or_else(|| NodeAgentError::InvalidRequest {
+        let mut operation = self.operations.get(operation_id).await?.ok_or_else(|| {
+            NodeAgentError::InvalidRequest {
                 message: format!("operation {} not found", operation_id.0),
-            })?;
+            }
+        })?;
         operation.status = OperationStatus::Running;
         operation.message = Some("Starting instance...".to_string());
         self.operations

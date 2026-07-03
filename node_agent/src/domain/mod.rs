@@ -9,6 +9,7 @@ mod env;
 mod game_build;
 mod image;
 mod snapshot;
+pub use snapshot::*;
 mod job;
 
 pub use asset_models::*;
