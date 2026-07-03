@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use apalis_core::{
-    backend::TaskSink,
-    error::BoxDynError,
-    task::data::Data,
-    worker::builder::WorkerBuilder,
+    backend::TaskSink, error::BoxDynError, task::data::Data, worker::builder::WorkerBuilder,
     worker::context::WorkerContext,
 };
 use apalis_sqlite::{SqlitePool, SqliteStorage};
@@ -12,22 +9,23 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex as AsyncMutex;
 
+use crate::domain::BuildPreparation;
+use crate::service::BackgroundWorker;
 use crate::{
     domain::{
-        GameBuild, InstanceId, InstanceRuntimeSpec, LocalGameBuildManager, NodeOperation,
-        OperationId, OperationKind, OperationStatus, RemoteImage, SnapshotCaptureRequest,
-        SnapshotRestoreRequest,
+        InstanceId, InstanceRuntimeSpec, LocalGameBuildManager, NodeOperation, OperationId,
+        OperationKind, OperationStatus, SnapshotCaptureRequest, SnapshotRestoreRequest,
     },
     error::NodeAgentError,
     ports::{AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SnapshotRuntime},
 };
-
 // ============================================================
 // TaskContext — 所有 handler 共享的依赖集合
 // ============================================================
 
 /// 使用 trait object 避免泛型传播到每个 handler 签名
 pub struct TaskContext {
+    pub node_agent_service: Arc<dyn BackgroundWorker>,
     pub instance_runtime: Arc<dyn InstanceRuntime>,
     pub snapshot_runtime: Arc<dyn SnapshotRuntime>,
     pub operations: Arc<dyn OperationRepository>,
@@ -38,6 +36,7 @@ pub struct TaskContext {
 
 impl TaskContext {
     pub fn new(
+        node_agent_service: Arc<dyn BackgroundWorker>,
         instance_runtime: Arc<dyn InstanceRuntime>,
         snapshot_runtime: Arc<dyn SnapshotRuntime>,
         operations: Arc<dyn OperationRepository>,
@@ -45,6 +44,7 @@ impl TaskContext {
         image_client: Arc<dyn ImageClient>,
     ) -> Self {
         Self {
+            node_agent_service,
             instance_runtime,
             snapshot_runtime,
             operations,
@@ -61,14 +61,13 @@ impl TaskContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrepareBuildJob {
-    pub build_id: String,
-    pub game_id: String,
-    pub remote_image_name: String,
-    pub remote_image_tag: String,
+    pub operation_id: String,
+    pub build_preparation: BuildPreparation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartInstanceJob {
+    pub operation_id: String,
     pub spec: InstanceRuntimeSpec,
 }
 
@@ -147,51 +146,11 @@ async fn handle_prepare_build(
     ctx: Data<Arc<TaskContext>>,
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
-    let op = create_operation(
-        &ctx.operations,
-        OperationKind::PrepareBuild,
-        None,
-        Some(&job.build_id),
-        "preparing build in background",
-    )
-    .await?;
+    let op_id = OperationId(job.operation_id);
+    ctx.node_agent_service
+        .prepare_game_build(job.build_preparation, &op_id)
+        .await?;
 
-    let remote_img = RemoteImage {
-        id: String::new(),
-        name: job.remote_image_name.clone(),
-        tag: job.remote_image_tag.clone(),
-    };
-
-    // 拉取镜像
-    let image = match ctx.image_client.pull_image(&remote_img).await {
-        Ok(img) => img,
-        Err(e) => {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
-            return Err(e.into());
-        }
-    };
-
-    // 注册本地构建
-    let game_build = GameBuild {
-        build_id: job.build_id.clone(),
-        game: crate::domain::Game {
-            id: job.game_id.clone(),
-            name: String::new(),
-            app_id: String::new(),
-        },
-        channel: None,
-        adapter_version: None,
-    };
-
-    {
-        let mgr = ctx.local_game_build_manager.lock().await;
-        if let Err(e) = mgr.record_game_build_from_image(&game_build, &image) {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
-            return Err(e.into());
-        }
-    }
-
-    succeed_operation(&ctx.operations, op, "build prepared").await;
     Ok(())
 }
 
@@ -200,26 +159,10 @@ async fn handle_start_instance(
     ctx: Data<Arc<TaskContext>>,
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
-    let instance_id_str = job.spec.instance_id.0.clone();
-
-    let op = create_operation(
-        &ctx.operations,
-        OperationKind::StartInstance,
-        Some(&instance_id_str),
-        None,
-        "starting instance in background",
-    )
-    .await?;
-
-    match ctx.instance_runtime.start_instance(job.spec).await {
-        Ok(_result) => {
-            succeed_operation(&ctx.operations, op, "instance started").await;
-        }
-        Err(e) => {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
-            return Err(e.into());
-        }
-    }
+    let op_id = OperationId(job.operation_id);
+    ctx.node_agent_service
+        .start_instance(job.spec, &op_id)
+        .await?;
 
     Ok(())
 }
@@ -332,7 +275,10 @@ async fn handle_restore_snapshot(
 ///
 /// 每个 worker 对应一种 job 类型，共享同一个 context。
 /// Worker 通过 tokio::spawn 并发运行，挂到主 tokio runtime 上。
-pub fn start_all_workers(pool: SqlitePool, task_ctx: Arc<TaskContext>) -> Vec<tokio::task::JoinHandle<()>> {
+pub fn start_all_workers(
+    pool: SqlitePool,
+    task_ctx: Arc<TaskContext>,
+) -> Vec<tokio::task::JoinHandle<()>> {
     let mut handles = Vec::new();
 
     // --- PrepareBuild Worker ---
@@ -418,7 +364,12 @@ pub fn start_all_workers(pool: SqlitePool, task_ctx: Arc<TaskContext>) -> Vec<to
 // ============================================================
 
 pub async fn init_backend() -> Result<SqlitePool, sqlx::Error> {
-    let db_url = "sqlite://jobs.db?mode=rwc&busy_timeout=5000";
+    let db_url = if cfg!(debug_assertions) {
+        "file:dev_mem_db?mode=memory&cache=shared"
+    } else {
+        "sqlite://jobs.db?mode=rwc&busy_timeout=5000"
+    };
+
     let pool = SqlitePool::connect(db_url).await?;
 
     SqliteStorage::<(), (), ()>::setup(&pool)
@@ -434,25 +385,60 @@ pub async fn init_backend() -> Result<SqlitePool, sqlx::Error> {
 
 pub async fn enqueue_prepare_build(
     pool: &SqlitePool,
-    build_id: String,
-    game_id: String,
-    remote_image_name: String,
-    remote_image_tag: String,
-) {
+    ops: &Arc<dyn OperationRepository>,
+    prep: BuildPreparation,
+) -> NodeOperation {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind: OperationKind::PrepareBuild,
+        status: OperationStatus::Pending,
+        instance_id: None,
+        build_id: Some(prep.build.build_id.clone()),
+        message: Some("build preparation queued".to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    let _ = ops.save(&op).await;
+
+    let job_op_id = op.operation_id.0.clone();
     let mut storage = SqliteStorage::new(pool);
     let _ = storage
         .push(PrepareBuildJob {
-            build_id,
-            game_id,
-            remote_image_name,
-            remote_image_tag,
+            operation_id: job_op_id,
+            build_preparation: prep,
         })
         .await;
+
+    op
 }
 
-pub async fn enqueue_start_instance(pool: &SqlitePool, spec: InstanceRuntimeSpec) {
+pub async fn enqueue_start_instance(
+    pool: &SqlitePool,
+    ops: &Arc<dyn OperationRepository>,
+    spec: InstanceRuntimeSpec,
+) -> NodeOperation {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind: OperationKind::StartInstance,
+        status: OperationStatus::Pending,
+        instance_id: Some(spec.instance_id.clone()),
+        build_id: Some(spec.build.build_id.clone()),
+        message: Some("instance start queued".to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    let _ = ops.save(&op).await;
+
+    let job_op_id = op.operation_id.0.clone();
     let mut storage = SqliteStorage::new(pool);
-    let _ = storage.push(StartInstanceJob { spec }).await;
+    let _ = storage
+        .push(StartInstanceJob {
+            operation_id: job_op_id,
+            spec,
+        })
+        .await;
+
+    op
 }
 
 pub async fn enqueue_stop_instance(pool: &SqlitePool, instance_id: &str) {

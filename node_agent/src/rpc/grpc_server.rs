@@ -1,38 +1,39 @@
 use std::sync::Arc;
 
+use apalis_sqlite::SqlitePool;
 use tonic::{Request, Response, Status};
 
+use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
-        InstanceRuntimeSpec, InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind,
-        OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
-        SnapshotReference, SnapshotRestoreRequest, SnapshotRestoreResult,
+        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceRuntimeSpec,
+        InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus,
+        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
+        SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository,
-        SnapshotRuntime, SystemInfoProvider,
+        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SnapshotRuntime,
+        SystemInfoProvider,
     },
     proto::node_agent::{
-        self,
-        node_agent_service_server::NodeAgentService as NodeAgentRpc,
-        BuildPreparationResult as ProtoBuildPreparationResult,
-        CreateSnapshotRequest, CreateSnapshotResponse, FailureInfo as ProtoFailureInfo,
-        GameBuild as ProtoGameBuild, GetHeartbeatRequest, GetHeartbeatResponse,
-        GetOperationRequest, GetOperationResponse, InspectInstanceRequest,
-        InspectInstanceResponse, InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
+        self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
+        CreateSnapshotResponse, FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild,
+        GetHeartbeatRequest, GetHeartbeatResponse, GetOperationRequest, GetOperationResponse,
+        InspectInstanceRequest, InspectInstanceResponse,
+        InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
         InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
         NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
-        PrepareGameBuildRequest, PrepareGameBuildResponse, SnapshotArtifact as ProtoSnapshotArtifact,
-        SnapshotReference as ProtoSnapshotReference, SnapshotRestoreResult as ProtoSnapshotRestoreResult,
-        StartInstanceRequest, StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
+        PrepareGameBuildRequest, PrepareGameBuildResponse,
         RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
+        SnapshotArtifact as ProtoSnapshotArtifact, SnapshotReference as ProtoSnapshotReference,
+        SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
+        StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
+        node_agent_service_server::NodeAgentService as NodeAgentRpc,
     },
-    service::NodeAgentService,
+    service::{NodeAgentService, enqueue_prepare_build, enqueue_start_instance},
 };
-use crate::proto::node_agent::SnapshotArtifact;
 
 pub struct GrpcNodeAgentServer<I, P, O, S, A, IMC>
 where
@@ -44,6 +45,8 @@ where
     IMC: ImageClient,
 {
     service: Arc<NodeAgentService<I, P, O, S, A, IMC>>,
+    pool: SqlitePool,
+    operations: Arc<dyn OperationRepository>,
 }
 
 impl<I, P, O, S, A, IMC> GrpcNodeAgentServer<I, P, O, S, A, IMC>
@@ -55,8 +58,16 @@ where
     A: AssetServiceFace,
     IMC: ImageClient,
 {
-    pub fn new(service: Arc<NodeAgentService<I, P, O, S, A, IMC>>) -> Self {
-        Self { service }
+    pub fn new(
+        service: Arc<NodeAgentService<I, P, O, S, A, IMC>>,
+        pool: SqlitePool,
+        operations: Arc<dyn OperationRepository>,
+    ) -> Self {
+        Self {
+            service,
+            pool,
+            operations,
+        }
     }
 }
 
@@ -75,19 +86,17 @@ where
         request: Request<PrepareGameBuildRequest>,
     ) -> Result<Response<PrepareGameBuildResponse>, Status> {
         let request = request.into_inner();
-        let build = request.build.ok_or_else(|| Status::invalid_argument("build is required"))?;
-        let domain = BuildPreparation {
+        let build = request
+            .build
+            .ok_or_else(|| Status::invalid_argument("build is required"))?;
+        let prep = BuildPreparation {
             node_id: NodeId(request.node_id),
             build: map_game_build(build)?,
         };
-        let (operation, result) = self
-            .service
-            .prepare_game_build(domain)
-            .await
-            .map_err(map_error)?;
+        let operation = enqueue_prepare_build(&self.pool, &self.operations, prep).await;
         Ok(Response::new(PrepareGameBuildResponse {
             operation: Some(map_operation(operation)),
-            result: Some(map_build_preparation_result(result)),
+            result: None,
         }))
     }
 
@@ -99,14 +108,15 @@ where
         let spec = request
             .instance
             .ok_or_else(|| Status::invalid_argument("instance is required"))?;
-        let (operation, runtime) = self
-            .service
-            .start_instance(map_instance_runtime_spec(spec)?)
-            .await
-            .map_err(map_error)?;
+        let operation = enqueue_start_instance(
+            &self.pool,
+            &self.operations,
+            map_instance_runtime_spec(spec)?,
+        )
+        .await;
         Ok(Response::new(StartInstanceResponse {
             operation: Some(map_operation(operation)),
-            runtime: Some(map_runtime_record(runtime)),
+            runtime: None,
         }))
     }
 
@@ -221,12 +231,14 @@ fn map_error(error: NodeAgentError) -> Status {
         | NodeAgentError::InstanceRuntimeFailed { message }
         | NodeAgentError::Internal { message }
         | NodeAgentError::ImageRepositoryRequestFail { message } => Status::internal(message),
-        | NodeAgentError::DBOperationFail { message } => Status::internal(message),
+        NodeAgentError::DBOperationFail { message } => Status::internal(message),
     }
 }
 
 fn map_game_build(value: ProtoGameBuild) -> Result<GameBuild, Status> {
-    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
+    let game = value
+        .game
+        .ok_or_else(|| Status::invalid_argument("game is required"))?;
     Ok(GameBuild {
         build_id: value.build_id,
         game: map_game(game)?,
@@ -235,8 +247,14 @@ fn map_game_build(value: ProtoGameBuild) -> Result<GameBuild, Status> {
     })
 }
 
-fn map_instance_runtime_spec(value: ProtoInstanceRuntimeSpec) -> Result<InstanceRuntimeSpec, Status> {
-    let build = map_game_build(value.build.ok_or_else(|| Status::invalid_argument("build is required"))?)?;
+fn map_instance_runtime_spec(
+    value: ProtoInstanceRuntimeSpec,
+) -> Result<InstanceRuntimeSpec, Status> {
+    let build = map_game_build(
+        value
+            .build
+            .ok_or_else(|| Status::invalid_argument("build is required"))?,
+    )?;
     Ok(InstanceRuntimeSpec {
         instance_id: InstanceId(value.instance_id),
         game: build.game.clone(),
@@ -247,10 +265,14 @@ fn map_instance_runtime_spec(value: ProtoInstanceRuntimeSpec) -> Result<Instance
             node_agent::DesiredRuntimeState::Running => DesiredRuntimeState::Running,
             node_agent::DesiredRuntimeState::Stopped => DesiredRuntimeState::Stopped,
             node_agent::DesiredRuntimeState::Unspecified => {
-                return Err(Status::invalid_argument("desired_state is required"))
+                return Err(Status::invalid_argument("desired_state is required"));
             }
         },
-        spec: map_instance_spec(value.spec.ok_or_else(|| Status::invalid_argument("spec is required"))?)?,
+        spec: map_instance_spec(
+            value
+                .spec
+                .ok_or_else(|| Status::invalid_argument("spec is required"))?,
+        )?,
         assignment: InstanceAssignment {
             node_id: NodeId(
                 value
@@ -264,7 +286,9 @@ fn map_instance_runtime_spec(value: ProtoInstanceRuntimeSpec) -> Result<Instance
 }
 
 fn map_instance_spec(value: ProtoInstanceSpec) -> Result<InstanceSpec, Status> {
-    let resources = value.resources.ok_or_else(|| Status::invalid_argument("resources are required"))?;
+    let resources = value
+        .resources
+        .ok_or_else(|| Status::invalid_argument("resources are required"))?;
     Ok(InstanceSpec {
         cluster_name: value.cluster_name,
         max_players: value.max_players as u16,

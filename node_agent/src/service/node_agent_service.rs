@@ -1,23 +1,42 @@
-use std::sync::{Arc};
+use std::sync::Arc;
 
-use chrono::{Utc};
+use chrono::Utc;
 
+use crate::domain::{LocalGameBuildManager, RemoteImage};
+use crate::ports::ImageClient;
+use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
         InstanceRuntimeSpec, NodeOperation, OperationId, OperationKind, OperationStatus,
-        RuntimeState, SnapshotCaptureRequest, SnapshotRestoreRequest,
-        SnapshotRestoreResult,
+        RuntimeState, SnapshotCaptureRequest, SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, InstanceRuntime, OperationRepository, SnapshotRuntime,
-        SystemInfoProvider,
+        AssetServiceFace, InstanceRuntime, OperationRepository, SnapshotRuntime, SystemInfoProvider,
     },
 };
-use crate::domain::{LocalGameBuildManager, RemoteImage};
-use crate::ports::ImageClient;
-use crate::proto::node_agent::SnapshotArtifact;
+
+// ============================================================
+// BackgroundWorker — 给后台任务 handler 复用的业务接口
+// ============================================================
+
+#[async_trait::async_trait]
+pub trait BackgroundWorker: Send + Sync {
+    /// 执行 prepare_build，更新已有的 operation（由 gRPC handler 创建 Pending）
+    async fn prepare_game_build(
+        &self,
+        request: BuildPreparation,
+        operation_id: &OperationId,
+    ) -> Result<BuildPreparationResult, NodeAgentError>;
+
+    /// 执行 start_instance，更新已有的 operation
+    async fn start_instance(
+        &self,
+        spec: InstanceRuntimeSpec,
+        operation_id: &OperationId,
+    ) -> Result<InstanceRuntimeRecord, NodeAgentError>;
+}
 
 pub struct NodeAgentService<I, P, O, S, A, IMC>
 where
@@ -34,7 +53,7 @@ where
     system_info: Arc<S>,
     asset_service: Arc<A>,
     image_client: Arc<IMC>,
-    local_game_build_manager: LocalGameBuildManager
+    local_game_build_manager: LocalGameBuildManager,
 }
 
 impl<I, P, O, S, A, IMC> NodeAgentService<I, P, O, S, A, IMC>
@@ -44,37 +63,8 @@ where
     O: OperationRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient
+    IMC: ImageClient,
 {
-    async fn create_operation(&self, kind: OperationKind,
-                        instance_id: Option<InstanceId>,
-                        build_id: Option<String>,
-                        message: Option<String>) -> anyhow::Result<NodeOperation> {
-        let operation_id = OperationId::new();
-        let operation = NodeOperation {
-            operation_id,
-            kind,
-            status: OperationStatus::Running,
-            instance_id,
-            build_id,
-            message,
-            started_at: Utc::now(),
-            finished_at: None,
-        };
-        self.operations.save(&operation).await?;
-
-        Ok(operation)
-    }
-
-    async fn failed_operation(&self, mut operation: NodeOperation,
-                              message: Option<String>) -> anyhow::Result<NodeOperation> {
-        operation.status = OperationStatus::Failed;
-        operation.message = message;
-        operation.finished_at = Some(Utc::now());
-        self.operations.save(&operation).await?;
-
-        Ok(operation)
-    }
 }
 
 impl<I, P, O, S, A, IMC> NodeAgentService<I, P, O, S, A, IMC>
@@ -84,7 +74,7 @@ where
     O: OperationRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient
+    IMC: ImageClient,
 {
     pub fn new(
         instance_runtime: Arc<I>,
@@ -101,95 +91,7 @@ where
             system_info,
             asset_service,
             image_client,
-            local_game_build_manager: LocalGameBuildManager::new()
-        }
-    }
-
-    pub async fn prepare_game_build(
-        &self,
-        request: BuildPreparation,
-    ) -> Result<(NodeOperation, BuildPreparationResult), NodeAgentError> {
-        let build_id = request.build.build_id.clone();
-        let mut operation = self.create_operation(
-            OperationKind::PrepareBuild,
-            None,
-            Some(build_id.clone()),
-            None
-        ).await.map_err(|err| NodeAgentError::ImageRepositoryRequestFail { message: err.to_string() })?;
-
-        let remote_img = RemoteImage {
-            id: "id".to_string(),
-            name: "name".to_string(),
-            tag: "tag".to_string()
-        };
-        let image = match self.image_client.pull_image(&remote_img).await {
-            Ok(img) => img,
-            Err(e) => {
-                let _ = self.failed_operation(operation, Some("pull image fail.".to_string())).await;
-                return Err(NodeAgentError::ImageRepositoryRequestFail { message: e.to_string() });
-            }
-        };
-
-        match self.local_game_build_manager.record_game_build_from_image(&request.build, &image) {
-            Ok(_) => {}
-            Err(e) => {
-                let _ = self.failed_operation(operation, Some("record game build from image fail.".to_string())).await;
-                return Err(NodeAgentError::ImageRepositoryRequestFail { message: e.to_string() });
-            }
-        }
-
-        let res = BuildPreparationResult {
-            build_root: "asset_service".to_string(),
-            prepared_at: Utc::now(),
-            build_id,
-        };
-
-        Ok((operation, res))
-    }
-
-    pub async fn start_instance(
-        &self,
-        spec: InstanceRuntimeSpec,
-    ) -> Result<(NodeOperation, InstanceRuntimeRecord), NodeAgentError> {
-        let instance_id = spec.instance_id.clone();
-        let node_id = spec.assignment.node_id.clone();
-        let operation_id = OperationId::new();
-        let mut operation = NodeOperation {
-            operation_id,
-            kind: OperationKind::StartInstance,
-            status: OperationStatus::Running,
-            instance_id: Some(instance_id.clone()),
-            build_id: Some(spec.build.build_id.clone()),
-            message: Some("Starting instance".to_string()),
-            started_at: Utc::now(),
-            finished_at: None,
-        };
-        self.operations.save(&operation).await?;
-
-        let start_result = self.instance_runtime.start_instance(spec).await;
-        match start_result {
-            Ok(result) => {
-                let record = InstanceRuntimeRecord {
-                    instance_id,
-                    node_id,
-                    state: RuntimeState::Running,
-                    endpoint: result.endpoint,
-                    failure: None,
-                    updated_at: Utc::now(),
-                };
-                operation.status = OperationStatus::Succeeded;
-                operation.finished_at = Some(Utc::now());
-                operation.message = Some("Instance started".to_string());
-                self.operations.save(&operation).await?;
-                Ok((operation, record))
-            }
-            Err(error) => {
-                operation.status = OperationStatus::Failed;
-                operation.finished_at = Some(Utc::now());
-                operation.message = Some(error.to_string());
-                self.operations.save(&operation).await?;
-                Err(error)
-            }
+            local_game_build_manager: LocalGameBuildManager::new(),
         }
     }
 
@@ -333,6 +235,142 @@ where
         FailureInfo {
             message: message.into(),
             retryable,
+        }
+    }
+}
+
+// ============================================================
+// BackgroundWorker impl（委托给已有的 pub 方法）
+// ============================================================
+
+#[async_trait::async_trait]
+impl<I, P, O, S, A, IMC> BackgroundWorker for NodeAgentService<I, P, O, S, A, IMC>
+where
+    I: InstanceRuntime + Send + Sync,
+    P: SnapshotRuntime + Send + Sync,
+    O: OperationRepository + Send + Sync,
+    S: SystemInfoProvider + Send + Sync,
+    A: AssetServiceFace + Send + Sync,
+    IMC: ImageClient + Send + Sync,
+{
+    async fn prepare_game_build(
+        &self,
+        request: BuildPreparation,
+        operation_id: &OperationId,
+    ) -> Result<BuildPreparationResult, NodeAgentError> {
+        // 1. 查找已有的 Pending 操作，设为 Running
+        let mut operation = self
+            .operations
+            .get(operation_id)
+            .await?
+            .ok_or_else(|| NodeAgentError::InvalidRequest {
+                message: format!("operation {} not found", operation_id.0),
+            })?;
+        operation.status = OperationStatus::Running;
+        operation.message = Some("Preparing build...".to_string());
+        self.operations
+            .save(&operation)
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: e.to_string(),
+            })?;
+
+        // 2. 拉取镜像
+        let remote_img = RemoteImage {
+            id: "id".to_string(),
+            name: "name".to_string(),
+            tag: "tag".to_string(),
+        };
+        let image = match self.image_client.pull_image(&remote_img).await {
+            Ok(img) => img,
+            Err(e) => {
+                operation.status = OperationStatus::Failed;
+                operation.finished_at = Some(Utc::now());
+                operation.message = Some(format!("pull image fail: {}", e));
+                let _ = self.operations.save(&operation).await;
+                return Err(NodeAgentError::ImageRepositoryRequestFail {
+                    message: e.to_string(),
+                });
+            }
+        };
+
+        // 3. 注册本地构建
+        if let Err(e) = self
+            .local_game_build_manager
+            .record_game_build_from_image(&request.build, &image)
+        {
+            operation.status = OperationStatus::Failed;
+            operation.finished_at = Some(Utc::now());
+            operation.message = Some(format!("record build fail: {}", e));
+            let _ = self.operations.save(&operation).await;
+            return Err(NodeAgentError::ImageRepositoryRequestFail {
+                message: e.to_string(),
+            });
+        }
+
+        // 4. 成功
+        operation.status = OperationStatus::Succeeded;
+        operation.finished_at = Some(Utc::now());
+        operation.message = Some("Build prepared".to_string());
+        let _ = self.operations.save(&operation).await;
+
+        Ok(BuildPreparationResult {
+            build_root: "asset_service".to_string(),
+            prepared_at: Utc::now(),
+            build_id: request.build.build_id,
+        })
+    }
+
+    async fn start_instance(
+        &self,
+        spec: InstanceRuntimeSpec,
+        operation_id: &OperationId,
+    ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
+        let instance_id = spec.instance_id.clone();
+        let node_id = spec.assignment.node_id.clone();
+
+        // 1. 查找已有的 Pending 操作，设为 Running
+        let mut operation = self
+            .operations
+            .get(operation_id)
+            .await?
+            .ok_or_else(|| NodeAgentError::InvalidRequest {
+                message: format!("operation {} not found", operation_id.0),
+            })?;
+        operation.status = OperationStatus::Running;
+        operation.message = Some("Starting instance...".to_string());
+        self.operations
+            .save(&operation)
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: e.to_string(),
+            })?;
+
+        // 2. 执行
+        let start_result = self.instance_runtime.start_instance(spec).await;
+        match start_result {
+            Ok(result) => {
+                let record = InstanceRuntimeRecord {
+                    instance_id,
+                    node_id,
+                    state: RuntimeState::Running,
+                    endpoint: result.endpoint,
+                    failure: None,
+                    updated_at: Utc::now(),
+                };
+                operation.status = OperationStatus::Succeeded;
+                operation.finished_at = Some(Utc::now());
+                operation.message = Some("Instance started".to_string());
+                self.operations.save(&operation).await?;
+                Ok(record)
+            }
+            Err(error) => {
+                operation.status = OperationStatus::Failed;
+                operation.finished_at = Some(Utc::now());
+                operation.message = Some(error.to_string());
+                self.operations.save(&operation).await?;
+                Err(error)
+            }
         }
     }
 }
