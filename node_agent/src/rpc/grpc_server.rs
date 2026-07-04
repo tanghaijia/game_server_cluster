@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use apalis_sqlite::SqlitePool;
+use chrono::Utc;
+use sqlx::encode::IsNull::No;
 use tonic::{Request, Response, Status};
 
 use crate::{
@@ -12,7 +14,9 @@ use crate::{
         SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
-    ports::{AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SystemInfoProvider},
+    ports::{
+        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SystemInfoProvider,
+    },
     proto::node_agent::{
         self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
         CreateSnapshotResponse, FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild,
@@ -23,11 +27,14 @@ use crate::{
         NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
         PrepareGameBuildRequest, PrepareGameBuildResponse,
         RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
-        SnapshotRestoreResult as ProtoSnapshotRestoreResult, SnapshotReference as ProtoSnapshotReference, StartInstanceRequest,
+        SnapshotReference as ProtoSnapshotReference,
+        SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
         StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
         node_agent_service_server::NodeAgentService as NodeAgentRpc,
     },
-    service::{NodeAgentService, enqueue_prepare_build, enqueue_start_instance},
+    service::{
+        NodeAgentService, enqueue_prepare_build, enqueue_restore_snapshot, enqueue_start_instance,
+    },
 };
 
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
@@ -118,9 +125,7 @@ where
             .stop_instance(InstanceId(request.instance_id))
             .await
             .map_err(map_error)?;
-        Ok(Response::new(StopInstanceResponse {
-            operation: None,
-        }))
+        Ok(Response::new(StopInstanceResponse { operation: None }))
     }
 
     async fn create_snapshot(
@@ -146,20 +151,33 @@ where
         request: Request<ProtoRestoreSnapshotRequest>,
     ) -> Result<Response<RestoreSnapshotResponse>, Status> {
         let request = request.into_inner();
-        let result = self
-            .service
-            .restore_snapshot(SnapshotRestoreRequest {
-                instance_id: InstanceId(request.instance_id),
-                snapshot_id: request.snapshot_id,
-                storage_uri: request.storage_uri,
-                manifest_uri: request.manifest_uri,
-                checksum: request.checksum,
-            })
-            .await
-            .map_err(map_error)?;
+
+        // 生成operation
+        let operation = NodeOperation {
+            operation_id: OperationId::new(),
+            kind: OperationKind::RestoreSnapshot,
+            status: OperationStatus::Pending,
+            instance_id: Some(InstanceId(request.instance_id.clone())),
+            build_id: None,
+            message: None,
+            started_at: Utc::now(),
+            finished_at: None,
+        };
+
+        enqueue_restore_snapshot(
+            &self.pool,
+            request.instance_id.as_str(),
+            request.snapshot_id.as_str(),
+            request.storage_uri.as_str(),
+            request.manifest_uri.as_deref(),
+            request.checksum.as_deref(),
+            operation.clone(),
+        )
+        .await;
+
         Ok(Response::new(RestoreSnapshotResponse {
-            operation: None,
-            result: Some(map_snapshot_restore_result(result)),
+            operation: Some(map_operation(operation)),
+            result: None,
         }))
     }
 
@@ -174,9 +192,7 @@ where
             .get(&OperationId(request.operation_id))
             .await
             .map_err(|e| Status::internal(e.to_string()))?
-            .ok_or_else(|| {
-                Status::not_found(format!("operation {} was not found", op_id))
-            })?;
+            .ok_or_else(|| Status::not_found(format!("operation {} was not found", op_id)))?;
         Ok(Response::new(GetOperationResponse {
             operation: Some(map_operation(operation)),
         }))
