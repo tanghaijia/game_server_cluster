@@ -2,7 +2,8 @@ syntax = "proto3";
 
 package assetservice.v1;
 
-import "asset_service.proto";
+import "assetservice/v1/asset_service.proto";
+import "assetservice/v1/game.proto";
 
 service BusinessService {
   // Game 增删改查

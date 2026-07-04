@@ -1,0 +1,111 @@
+<mxfile host="Electron">
+  <diagram name="第 1 页" id="zpg2xNXlexbD_TnlfZnJ">
+    <mxGraphModel dx="1083" dy="896" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="FlLymCmODswfG6y1LcTY-25" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="消费线程" vertex="1">
+          <mxGeometry height="800" width="100" x="370" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-26" parent="FlLymCmODswfG6y1LcTY-25" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="336" width="10" x="50" y="234" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-27" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="Controller" vertex="1">
+          <mxGeometry height="800" width="100" x="60" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-28" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="asset_service" vertex="1">
+          <mxGeometry height="800" width="100" x="510" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-30" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-27" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-45" value="prepare_game_build()">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="245" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-31" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-45" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-27" value="return">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="315" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-32" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-27" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-46" value="start_instance()&lt;div&gt;game_instance_id=a&lt;/div&gt;&lt;div&gt;game_build=b&lt;/div&gt;">
+          <mxGeometry relative="1" x="-0.0031" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="109.81034482758628" y="385" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-33" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-46" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-27" value="return">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="109.81034482758628" y="455" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-44" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="grpc_server" vertex="1">
+          <mxGeometry height="800" width="100" x="220" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-45" parent="FlLymCmODswfG6y1LcTY-44" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="40" width="10" x="50" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-46" parent="FlLymCmODswfG6y1LcTY-44" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="101" width="10" x="50" y="149" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-47" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="apalis" vertex="1">
+          <mxGeometry height="810" width="100" x="900" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-48" parent="FlLymCmODswfG6y1LcTY-47" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="60" width="10" x="50" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-49" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-44" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-48" value="创建StartInstance任务">
+          <mxGeometry relative="1" x="-0.0007" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="880" y="315" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-50" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-48" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-44" value="return 任务id">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="880" y="385" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-51" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-47" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-26" value="调用函数">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="350" y="389" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-52" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-26" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-47" value="return">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="350" y="459" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-53" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="docker" vertex="1">
+          <mxGeometry height="800" width="100" x="770" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-58" parent="FlLymCmODswfG6y1LcTY-53" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="50" width="10" x="47" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-54" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="game_build_manager" vertex="1">
+          <mxGeometry height="800" width="100" x="640" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-55" parent="FlLymCmODswfG6y1LcTY-54" style="html=1;points=[[0,0,0,0,5],[0,1,0,0,-5],[1,0,0,0,5],[1,1,0,0,-5]];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;newEdgeStyle={&quot;curved&quot;:0,&quot;rounded&quot;:0};" value="" vertex="1">
+          <mxGeometry height="50" width="10" x="50" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-56" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-26" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-55" value="game_build_id=b">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="425" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-57" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-55" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-26" value="return image">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="495" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-60" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-58" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;endSize=8;curved=0;rounded=0;exitX=0;exitY=1;exitDx=0;exitDy=-5;" target="FlLymCmODswfG6y1LcTY-26" value="return">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="747" y="555" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="FlLymCmODswfG6y1LcTY-59" edge="1" parent="1" source="FlLymCmODswfG6y1LcTY-26" style="html=1;verticalAlign=bottom;endArrow=block;curved=0;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=5;" target="FlLymCmODswfG6y1LcTY-58" value="从image启动容器">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="747" y="485" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

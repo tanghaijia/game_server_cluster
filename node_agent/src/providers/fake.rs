@@ -1,15 +1,19 @@
-use std::{collections::{HashMap, HashSet}, sync::{Arc, Mutex}};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use chrono::Utc;
 
+use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
-        instance_data_path, BuildCompatibility, BuildPreparation, BuildPreparationResult,
-        Endpoint, Game, GameBuild, Image, InstanceId, InstanceRuntimeRecord,
-        InstanceRuntimeSpec, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
-        RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord,
-        SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
+        BuildCompatibility, BuildPreparation, BuildPreparationResult, Endpoint, Game, GameBuild,
+        Image, InstanceId, InstanceRuntimeRecord, InstanceRuntimeSpec, ModManifest, NodeAgentInfo,
+        NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState, SnapshotCaptureRequest,
+        SnapshotRecord, SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
+        instance_data_path,
     },
     error::NodeAgentError,
     ports::{
@@ -17,7 +21,6 @@ use crate::{
         OperationRepository, SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
     },
 };
-use crate::proto::node_agent::SnapshotArtifact;
 
 #[derive(Default, Clone)]
 pub struct FakeBuildRuntime {
@@ -26,15 +29,21 @@ pub struct FakeBuildRuntime {
 
 #[async_trait]
 impl BuildRuntime for FakeBuildRuntime {
-    async fn prepare_build(&self, request: BuildPreparation) -> Result<BuildPreparationResult, NodeAgentError> {
+    async fn prepare_build(
+        &self,
+        request: BuildPreparation,
+    ) -> Result<BuildPreparationResult, NodeAgentError> {
         let mut prepared = self.prepared.lock().map_err(|_| NodeAgentError::Internal {
             message: "fake build runtime lock poisoned".to_string(),
         })?;
         prepared.insert((request.node_id.0, request.build.build_id.clone()));
         Ok(BuildPreparationResult {
-            build_root: format!("/srv/game-cache/{}/{}", request.build.game.id, request.build.build_id),
+            build_root: format!(
+                "/srv/game-cache/{}/{}",
+                request.build.game.id, request.build.build_id
+            ),
             prepared_at: Utc::now(),
-            build_id: "fake_build".to_string()
+            build_id: "fake_build".to_string(),
         })
     }
 }
@@ -46,7 +55,10 @@ pub struct FakeInstanceRuntime {
 
 #[async_trait]
 impl InstanceRuntime for FakeInstanceRuntime {
-    async fn start_instance(&self, spec: InstanceRuntimeSpec) -> Result<StartInstanceResult, NodeAgentError> {
+    async fn start_instance(
+        &self,
+        spec: InstanceRuntimeSpec,
+    ) -> Result<StartInstanceResult, NodeAgentError> {
         let endpoint = Endpoint {
             host: spec.assignment.node_id.0.clone(),
             game_port: 23000,
@@ -64,7 +76,9 @@ impl InstanceRuntime for FakeInstanceRuntime {
             message: "fake instance runtime lock poisoned".to_string(),
         })?;
         runtimes.insert(spec.instance_id.0, record);
-        Ok(StartInstanceResult { endpoint: Some(endpoint) })
+        Ok(StartInstanceResult {
+            endpoint: Some(endpoint),
+        })
     }
 
     async fn stop_instance(&self, instance_id: &InstanceId) -> Result<(), NodeAgentError> {
@@ -79,7 +93,10 @@ impl InstanceRuntime for FakeInstanceRuntime {
         Ok(())
     }
 
-    async fn inspect_instance(&self, instance_id: &InstanceId) -> Result<Option<InstanceRuntimeRecord>, NodeAgentError> {
+    async fn inspect_instance(
+        &self,
+        instance_id: &InstanceId,
+    ) -> Result<Option<InstanceRuntimeRecord>, NodeAgentError> {
         let runtimes = self.runtimes.lock().map_err(|_| NodeAgentError::Internal {
             message: "fake instance runtime lock poisoned".to_string(),
         })?;
@@ -92,18 +109,27 @@ pub struct FakeSnapshotRuntime;
 
 #[async_trait]
 impl SnapshotRuntime for FakeSnapshotRuntime {
-    async fn create_snapshot(&self, request: SnapshotCaptureRequest) -> Result<SnapshotArtifact, NodeAgentError> {
+    async fn create_snapshot(
+        &self,
+        request: SnapshotCaptureRequest,
+    ) -> Result<SnapshotArtifact, NodeAgentError> {
         Ok(SnapshotArtifact {
             snapshot_id: request.snapshot_id.clone(),
             instance_data_path: instance_data_path(&request.instance_id),
             storage_uri: format!("memory://snapshots/{}.tar.zst", request.snapshot_id),
-            manifest_uri: Some(format!("memory://snapshots/{}.manifest.json", request.snapshot_id)),
+            manifest_uri: Some(format!(
+                "memory://snapshots/{}.manifest.json",
+                request.snapshot_id
+            )),
             checksum: Some(format!("sha256:{}", request.snapshot_id)),
             captured_at: Utc::now().to_string(),
         })
     }
 
-    async fn restore_snapshot(&self, request: SnapshotRestoreRequest) -> Result<SnapshotRestoreResult, NodeAgentError> {
+    async fn restore_snapshot(
+        &self,
+        request: SnapshotRestoreRequest,
+    ) -> Result<SnapshotRestoreResult, NodeAgentError> {
         Ok(SnapshotRestoreResult {
             snapshot_id: request.snapshot_id,
             restore_path: instance_data_path(&request.instance_id),
@@ -120,17 +146,26 @@ pub struct InMemoryOperationRepository {
 #[async_trait]
 impl OperationRepository for InMemoryOperationRepository {
     async fn save(&self, operation: &NodeOperation) -> Result<(), NodeAgentError> {
-        let mut operations = self.operations.lock().map_err(|_| NodeAgentError::Internal {
-            message: "operation repository lock poisoned".to_string(),
-        })?;
+        let mut operations = self
+            .operations
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "operation repository lock poisoned".to_string(),
+            })?;
         operations.insert(operation.operation_id.0.clone(), operation.clone());
         Ok(())
     }
 
-    async fn get(&self, operation_id: &OperationId) -> Result<Option<NodeOperation>, NodeAgentError> {
-        let operations = self.operations.lock().map_err(|_| NodeAgentError::Internal {
-            message: "operation repository lock poisoned".to_string(),
-        })?;
+    async fn get(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<NodeOperation>, NodeAgentError> {
+        let operations = self
+            .operations
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "operation repository lock poisoned".to_string(),
+            })?;
         Ok(operations.get(&operation_id.0).cloned())
     }
 }
@@ -142,13 +177,17 @@ pub struct FakeSystemInfoProvider {
 
 impl Default for FakeSystemInfoProvider {
     fn default() -> Self {
-        Self { node_id: NodeId("node-dev-1".to_string()) }
+        Self {
+            node_id: NodeId("node-dev-1".to_string()),
+        }
     }
 }
 
 impl FakeSystemInfoProvider {
     pub fn new(node_id: impl Into<String>) -> Self {
-        Self { node_id: NodeId(node_id.into()) }
+        Self {
+            node_id: NodeId(node_id.into()),
+        }
     }
 }
 
@@ -228,10 +267,7 @@ impl AssetServiceFace for FakeAssetServiceFace {
         Ok(())
     }
 
-    async fn get_snapshot(
-        &self,
-        snapshot_id: &str,
-    ) -> Result<SnapshotRecord, NodeAgentError> {
+    async fn get_snapshot(&self, snapshot_id: &str) -> Result<SnapshotRecord, NodeAgentError> {
         Ok(SnapshotRecord {
             snapshot_id: snapshot_id.to_string(),
             instance_id: "fake-instance".to_string(),
@@ -246,6 +282,10 @@ impl AssetServiceFace for FakeAssetServiceFace {
             created_at: Utc::now().to_rfc3339(),
             completed_at: Some(Utc::now().to_rfc3339()),
             failure_message: None,
+            bucket: "fake-bucket".to_string(),
+            key: "fake-key".to_string(),
+            host: "127.0.0.1".to_string(),
+            host_port: 8888,
         })
     }
 
@@ -267,6 +307,10 @@ impl AssetServiceFace for FakeAssetServiceFace {
             created_at: Utc::now().to_rfc3339(),
             completed_at: None,
             failure_message: None,
+            bucket: "fake-bucket".to_string(),
+            key: "fake-key".to_string(),
+            host: "127.0.0.1".to_string(),
+            host_port: 8888,
         }))
     }
 
@@ -296,6 +340,10 @@ impl AssetServiceFace for FakeAssetServiceFace {
             created_at: Utc::now().to_rfc3339(),
             completed_at: None,
             failure_message: None,
+            bucket: "fake-bucket".to_string(),
+            key: "fake-key".to_string(),
+            host: "127.0.0.1".to_string(),
+            host_port: 8888,
         }])
     }
 

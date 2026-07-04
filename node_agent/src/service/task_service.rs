@@ -89,6 +89,7 @@ pub struct RestoreSnapshotJob {
     pub storage_uri: String,
     pub manifest_uri: Option<String>,
     pub checksum: Option<String>,
+    pub operation: NodeOperation,
 }
 
 // ============================================================
@@ -127,6 +128,11 @@ async fn fail_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperatio
     op.status = OperationStatus::Failed;
     op.finished_at = Some(Utc::now());
     op.message = Some(err.to_string());
+    let _ = ops.save(&op).await;
+}
+
+async fn running_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperation) {
+    op.status = OperationStatus::Running;
     let _ = ops.save(&op).await;
 }
 
@@ -236,15 +242,8 @@ async fn handle_restore_snapshot(
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
     let instance_id = InstanceId(job.instance_id.clone());
-
-    let op = create_operation(
-        &ctx.operations,
-        OperationKind::RestoreSnapshot,
-        Some(&job.instance_id),
-        None,
-        "restoring snapshot in background",
-    )
-    .await?;
+    let operation = job.operation;
+    running_operation(&ctx.operations, operation.clone()).await;
 
     let request = SnapshotRestoreRequest {
         instance_id,
@@ -254,12 +253,12 @@ async fn handle_restore_snapshot(
         checksum: job.checksum.clone(),
     };
 
-    match ctx.snapshot_runtime.restore_snapshot(request).await {
+    match ctx.node_agent_service.restore_snapshot(request).await {
         Ok(_result) => {
-            succeed_operation(&ctx.operations, op, "snapshot restored").await;
+            succeed_operation(&ctx.operations, operation, "snapshot restored").await;
         }
         Err(e) => {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            fail_operation(&ctx.operations, operation, &e.to_string()).await;
             return Err(e.into());
         }
     }
@@ -467,6 +466,7 @@ pub async fn enqueue_restore_snapshot(
     storage_uri: &str,
     manifest_uri: Option<&str>,
     checksum: Option<&str>,
+    operation: NodeOperation,
 ) {
     let mut storage = SqliteStorage::new(pool);
     let _ = storage
@@ -476,6 +476,7 @@ pub async fn enqueue_restore_snapshot(
             storage_uri: storage_uri.to_string(),
             manifest_uri: manifest_uri.map(|s| s.to_string()),
             checksum: checksum.map(|s| s.to_string()),
+            operation,
         })
         .await;
 }

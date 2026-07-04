@@ -38,3 +38,9 @@ walkdir = "2"
 [build-dependencies]
 protoc-bin-vendored = "3"
 tonic-build = "0.12"
+
+[dev-dependencies]
+tempfile = "3" # 用于安全地创建临时测试目录
+aws-smithy-runtime = { version = "1", features = ["client", "test-util"] } # 核心 Mock 工具
+aws-credential-types = "1"
+http = "1"

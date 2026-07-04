@@ -23,20 +23,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. 创建具体依赖（NodeAgentService 需要具体类型）
     let concrete_instance = Arc::new(FakeInstanceRuntime::default());
-    let concrete_snapshot = Arc::new(FakeSnapshotRuntime);
     let concrete_ops = Arc::new(InMemoryOperationRepository::default());
     let concrete_sysinfo = Arc::new(FakeSystemInfoProvider::default());
     let concrete_asset = Arc::new(FakeAssetServiceFace);
     let concrete_image = Arc::new(FakeImageClient);
+    let s3_config = aws_sdk_s3::Config::builder()
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .behavior_version_latest()
+        .build();
+    let s3_client = Arc::new(aws_sdk_s3::Client::from_conf(s3_config));
+    let concrete_snapshot = Arc::new(FakeSnapshotRuntime);
 
     // 2. 构造 NodeAgentService（具体泛型）
     let node_agent_service = Arc::new(NodeAgentService::new(
-        concrete_instance.clone() as Arc<_>,
-        concrete_snapshot.clone() as Arc<_>,
-        concrete_ops.clone() as Arc<_>,
-        concrete_sysinfo.clone() as Arc<_>,
-        concrete_asset.clone() as Arc<_>,
-        concrete_image.clone() as Arc<_>,
+        concrete_instance.clone(),
+        concrete_sysinfo.clone(),
+        concrete_asset.clone(),
+        concrete_image.clone(),
+        s3_client.clone(),
     ));
 
     // 3. 初始化 apalis SQLite backend

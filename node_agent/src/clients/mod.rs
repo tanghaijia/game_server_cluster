@@ -47,7 +47,9 @@ impl AssetServiceGrpcClient {
 
 // ==================== proto ↔ domain 映射辅助函数 ====================
 
-fn map_game_build(proto: crate::proto::asset_service::GameBuild) -> Result<GameBuild, NodeAgentError> {
+fn map_game_build(
+    proto: crate::proto::asset_service::GameBuild,
+) -> Result<GameBuild, NodeAgentError> {
     let game = proto.game.ok_or_else(|| NodeAgentError::Internal {
         message: "game_build missing game".to_string(),
     })?;
@@ -78,10 +80,16 @@ fn map_snapshot_record(proto: crate::proto::asset_service::SnapshotRecord) -> Sn
         created_at: proto.created_at,
         completed_at: proto.completed_at,
         failure_message: proto.failure_message,
+        bucket: proto.bucket,
+        key: proto.key,
+        host: proto.host,
+        host_port: proto.host_port,
     }
 }
 
-fn map_restore_plan(proto: crate::proto::asset_service::SnapshotRestorePlan) -> SnapshotRestorePlan {
+fn map_restore_plan(
+    proto: crate::proto::asset_service::SnapshotRestorePlan,
+) -> SnapshotRestorePlan {
     SnapshotRestorePlan {
         snapshot_id: proto.snapshot_id,
         build_id: proto.build_id,
@@ -139,7 +147,7 @@ impl AssetServiceFace for AssetServiceGrpcClient {
         channel: &str,
     ) -> Result<GameBuild, NodeAgentError> {
         use crate::proto::asset_service::{
-            version_selector::Selector, Game as ProtoGame, ResolveGameBuildRequest, VersionSelector,
+            Game as ProtoGame, ResolveGameBuildRequest, VersionSelector, version_selector::Selector,
         };
 
         let mut client = self.asset.lock().await;
@@ -159,11 +167,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("resolve_game_build failed: {e}"),
             })?;
 
-        let build = response.into_inner().build.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let build = response
+            .into_inner()
+            .build
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "resolve_game_build returned empty build".to_string(),
-            }
-        })?;
+            })?;
         map_game_build(build)
     }
 
@@ -180,11 +189,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("get_game_build failed: {e}"),
             })?;
 
-        let build = response.into_inner().build.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let build = response
+            .into_inner()
+            .build
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "get_game_build returned empty build".to_string(),
-            }
-        })?;
+            })?;
         map_game_build(build)
     }
 
@@ -212,11 +222,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("create_snapshot failed: {e}"),
             })?;
 
-        let snapshot = response.into_inner().snapshot.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let snapshot = response
+            .into_inner()
+            .snapshot
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "create_snapshot returned empty snapshot".to_string(),
-            }
-        })?;
+            })?;
         Ok(snapshot.snapshot_id)
     }
 
@@ -277,11 +288,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("get_snapshot failed: {e}"),
             })?;
 
-        let snapshot = response.into_inner().snapshot.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let snapshot = response
+            .into_inner()
+            .snapshot
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "get_snapshot returned empty snapshot".to_string(),
-            }
-        })?;
+            })?;
         Ok(map_snapshot_record(snapshot))
     }
 
@@ -364,11 +376,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("get_snapshot_restore_plan failed: {e}"),
             })?;
 
-        let plan = response.into_inner().restore_plan.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let plan = response
+            .into_inner()
+            .restore_plan
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "get_snapshot_restore_plan returned empty plan".to_string(),
-            }
-        })?;
+            })?;
         Ok(map_restore_plan(plan))
     }
 
@@ -387,11 +400,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("get_mod_manifest failed: {e}"),
             })?;
 
-        let manifest = response.into_inner().manifest.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let manifest = response
+            .into_inner()
+            .manifest
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "get_mod_manifest returned empty manifest".to_string(),
-            }
-        })?;
+            })?;
         Ok(map_mod_manifest(manifest))
     }
 
@@ -413,12 +427,13 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("check_build_mod_compatibility failed: {e}"),
             })?;
 
-        let compatibility = response
-            .into_inner()
-            .compatibility
-            .ok_or_else(|| NodeAgentError::Internal {
-                message: "check_build_mod_compatibility returned empty result".to_string(),
-            })?;
+        let compatibility =
+            response
+                .into_inner()
+                .compatibility
+                .ok_or_else(|| NodeAgentError::Internal {
+                    message: "check_build_mod_compatibility returned empty result".to_string(),
+                })?;
         Ok(map_compatibility(compatibility))
     }
 
@@ -429,9 +444,7 @@ impl AssetServiceFace for AssetServiceGrpcClient {
         node_id: &str,
         endpoint: &str,
     ) -> Result<(), NodeAgentError> {
-        use crate::proto::asset_service::{
-            NodeAgent as ProtoNodeAgent, RegisterNodeAgentRequest,
-        };
+        use crate::proto::asset_service::{NodeAgent as ProtoNodeAgent, RegisterNodeAgentRequest};
 
         let mut client = self.business.lock().await;
         client
@@ -463,11 +476,12 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                 message: format!("get_node_agent failed: {e}"),
             })?;
 
-        let agent = response.into_inner().agent.ok_or_else(|| {
-            NodeAgentError::Internal {
+        let agent = response
+            .into_inner()
+            .agent
+            .ok_or_else(|| NodeAgentError::Internal {
                 message: "get_node_agent returned empty agent".to_string(),
-            }
-        })?;
+            })?;
         Ok(map_node_agent(agent))
     }
 
@@ -478,9 +492,7 @@ impl AssetServiceFace for AssetServiceGrpcClient {
         status: &str,
         last_heartbeat_at: i64,
     ) -> Result<(), NodeAgentError> {
-        use crate::proto::asset_service::{
-            NodeAgent as ProtoNodeAgent, UpdateNodeAgentRequest,
-        };
+        use crate::proto::asset_service::{NodeAgent as ProtoNodeAgent, UpdateNodeAgentRequest};
 
         let mut client = self.business.lock().await;
         client

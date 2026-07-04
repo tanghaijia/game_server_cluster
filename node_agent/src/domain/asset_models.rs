@@ -14,6 +14,10 @@ pub struct SnapshotRecord {
     pub created_at: String,
     pub completed_at: Option<String>,
     pub failure_message: Option<String>,
+    pub bucket: String,
+    pub key: String,
+    pub host: String,
+    pub host_port: i32,
 }
 
 /// 模组清单。

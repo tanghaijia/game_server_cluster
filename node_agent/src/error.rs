@@ -16,4 +16,10 @@ pub enum NodeAgentError {
     ImageRepositoryRequestFail { message: String },
     #[error("DB operation fail error: {message}")]
     DBOperationFail { message: String },
+    #[error("Empty Snapshot error: {message}")]
+    EmptySnapShotFail { message: String },
+    #[error("S3 Download error: {message}")]
+    S3DownloadFail { message: String },
+    #[error("S3 Upload error: {message}")]
+    S3UploadFail { message: String },
 }

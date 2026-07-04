@@ -9,7 +9,6 @@ use tokio_util::io::SyncIoBridge;
 use walkdir::WalkDir;
 
 use chrono::Utc;
-use http_body::Frame;
 
 use crate::domain::{Entry, Manifest};
 
@@ -69,7 +68,7 @@ pub async fn upload_dir_as_tar_zst(
     let src_dir = src_dir.as_ref().to_path_buf();
 
     // 1. 创建内存管道，20MB 缓冲区
-    let (pipe_reader, pipe_writer) = tokio::io::duplex(20 * 1024 * 1024);
+    let (mut pipe_reader, pipe_writer) = tokio::io::duplex(20 * 1024 * 1024);
 
     // 2. 将管道的写端包装进异步 Zstd 编码器
     let zstd_encoder = ZstdEncoder::new(pipe_writer);
@@ -125,34 +124,23 @@ pub async fn upload_dir_as_tar_zst(
         });
     });
 
-    // 4. 创建 SHA256 哈希器，在流式读取管道的每个 chunk 中捎带计算
-    let hasher = Arc::new(Mutex::new(Sha256::new()));
-    let hasher_for_stream = hasher.clone();
-
-    // 5. 将 pipe_reader 包装为 Frame 流，同时喂数据给 hasher
-    let body_stream = futures_util::stream::unfold(pipe_reader, move |mut reader| {
-        let h = hasher_for_stream.clone();
-        async move {
-            let mut buf = vec![0u8; 32 * 1024];
-            match reader.read(&mut buf).await {
-                Ok(0) => None,
-                Ok(n) => {
-                    h.lock().unwrap().update(&buf[..n]);
-                    buf.truncate(n);
-                    let bytes = bytes::Bytes::from(buf);
-                    let frame = Frame::data(bytes);
-                    Some((Ok::<_, std::io::Error>(frame), reader))
-                }
-                Err(e) => Some((Err(e), reader)),
+    // 4. 读取管道的全部输出到 buffer，同时计算 SHA256
+    let mut hasher = Sha256::new();
+    let mut compressed_data = Vec::new();
+    let mut chunk = vec![0u8; 32 * 1024];
+    loop {
+        match pipe_reader.read(&mut chunk).await {
+            Ok(0) => break,
+            Ok(n) => {
+                hasher.update(&chunk[..n]);
+                compressed_data.extend_from_slice(&chunk[..n]);
             }
+            Err(e) => return Err(e.into()),
         }
-    });
+    }
 
-    // 6. 转换为 S3 ByteStream 并发起上传
-    let stream_body = http_body_util::StreamBody::new(body_stream);
-    let sdk_body = aws_smithy_types::body::SdkBody::from_body_1_x(stream_body);
-    let body = ByteStream::new(sdk_body);
-
+    // 5. 上传到 S3
+    let body = ByteStream::from(compressed_data);
     s3_client
         .put_object()
         .bucket(bucket)
@@ -161,11 +149,8 @@ pub async fn upload_dir_as_tar_zst(
         .send()
         .await?;
 
-    // 7. 流消费完毕后取出最终哈希值
-    let checksum = format!(
-        "sha256:{}",
-        hex::encode(hasher.lock().unwrap().clone().finalize())
-    );
+    // 6. 取出最终哈希值
+    let checksum = format!("sha256:{}", hex::encode(hasher.finalize()));
     Ok(checksum)
 }
 
@@ -359,4 +344,70 @@ pub async fn download_and_extract_tar_zst(
     }
 
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::{Client, config::BehaviorVersion, config::Region, config::SharedHttpClient};
+    use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_types::body::SdkBody;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_upload_dir_as_tar_zst_success() {
+        // 1. 创建临时目录和文件
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test_file.txt");
+        let mut file = File::create(file_path).unwrap();
+        writeln!(file, "Hello, Rust S3 test!").unwrap();
+
+        // 2. 构造模拟的 S3 200 响应
+        let http_response = http::Response::builder()
+            .status(200)
+            .body(SdkBody::from(r#"{"ETag": "\"example-etag\""}"#))
+            .unwrap();
+
+        // 3. 构造 ReplayEvent，预期请求需匹配实际发出的 PUT 请求
+        let expected_request = http::Request::builder()
+            .method("PUT")
+            .uri("https://my-test-bucket.s3.us-east-1.amazonaws.com/backups/test.tar.zst")
+            .body(SdkBody::empty())
+            .unwrap();
+        let replay_event = ReplayEvent::new(expected_request, http_response);
+        let mock_http_client = StaticReplayClient::new(vec![replay_event]);
+
+        // 4. 使用 mock HTTP 客户端 + 伪造凭证构建 S3 Client
+        let config = aws_sdk_s3::Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .credentials_provider(Credentials::new(
+                "AKIAIOSFODNN7EXAMPLE",
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                None,
+                None,
+                "test",
+            ))
+            .http_client(SharedHttpClient::new(mock_http_client.clone()))
+            .build();
+        let s3_client = Client::from_conf(config);
+
+        // 5. 调用被测函数
+        let bucket = "my-test-bucket";
+        let key = "backups/test.tar.zst";
+
+        let result = upload_dir_as_tar_zst(&s3_client, bucket, key, dir.path()).await;
+
+        // 6. 断言
+        assert!(
+            result.is_ok(),
+            "upload_dir_as_tar_zst failed: {:?}",
+            result.err()
+        );
+
+        // 函数返回 Ok 已经证明请求被正确发送并收到了 200 响应
+    }
 }

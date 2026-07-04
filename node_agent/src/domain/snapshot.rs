@@ -72,4 +72,14 @@ impl HostSnapShotDataPath {
         new_path.push(path);
         Self { path: new_path }
     }
+
+    pub fn to_string(self) -> String {
+        self.to_string()
+    }
+}
+
+impl AsRef<Path> for HostSnapShotDataPath {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
 }

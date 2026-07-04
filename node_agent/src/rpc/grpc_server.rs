@@ -3,7 +3,6 @@ use std::sync::Arc;
 use apalis_sqlite::SqlitePool;
 use tonic::{Request, Response, Status};
 
-use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
@@ -13,10 +12,7 @@ use crate::{
         SnapshotRestoreRequest, SnapshotRestoreResult,
     },
     error::NodeAgentError,
-    ports::{
-        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SnapshotRuntime,
-        SystemInfoProvider,
-    },
+    ports::{AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SystemInfoProvider},
     proto::node_agent::{
         self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
         CreateSnapshotResponse, FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild,
@@ -27,39 +23,34 @@ use crate::{
         NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
         PrepareGameBuildRequest, PrepareGameBuildResponse,
         RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
-        SnapshotArtifact as ProtoSnapshotArtifact, SnapshotReference as ProtoSnapshotReference,
-        SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
+        SnapshotRestoreResult as ProtoSnapshotRestoreResult, SnapshotReference as ProtoSnapshotReference, StartInstanceRequest,
         StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
         node_agent_service_server::NodeAgentService as NodeAgentRpc,
     },
     service::{NodeAgentService, enqueue_prepare_build, enqueue_start_instance},
 };
 
-pub struct GrpcNodeAgentServer<I, P, O, S, A, IMC>
+pub struct GrpcNodeAgentServer<I, S, A, IMC>
 where
     I: InstanceRuntime,
-    P: SnapshotRuntime,
-    O: OperationRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
     IMC: ImageClient,
 {
-    service: Arc<NodeAgentService<I, P, O, S, A, IMC>>,
+    service: Arc<NodeAgentService<I, S, A, IMC>>,
     pool: SqlitePool,
     operations: Arc<dyn OperationRepository>,
 }
 
-impl<I, P, O, S, A, IMC> GrpcNodeAgentServer<I, P, O, S, A, IMC>
+impl<I, S, A, IMC> GrpcNodeAgentServer<I, S, A, IMC>
 where
     I: InstanceRuntime,
-    P: SnapshotRuntime,
-    O: OperationRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
     IMC: ImageClient,
 {
     pub fn new(
-        service: Arc<NodeAgentService<I, P, O, S, A, IMC>>,
+        service: Arc<NodeAgentService<I, S, A, IMC>>,
         pool: SqlitePool,
         operations: Arc<dyn OperationRepository>,
     ) -> Self {
@@ -72,11 +63,9 @@ where
 }
 
 #[tonic::async_trait]
-impl<I, P, O, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<I, P, O, S, A, IMC>
+impl<I, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<I, S, A, IMC>
 where
     I: InstanceRuntime + 'static,
-    P: SnapshotRuntime + 'static,
-    O: OperationRepository + 'static,
     S: SystemInfoProvider + 'static,
     A: AssetServiceFace + 'static,
     IMC: ImageClient + 'static,
@@ -125,13 +114,12 @@ where
         request: Request<StopInstanceRequest>,
     ) -> Result<Response<StopInstanceResponse>, Status> {
         let request = request.into_inner();
-        let operation = self
-            .service
+        self.service
             .stop_instance(InstanceId(request.instance_id))
             .await
             .map_err(map_error)?;
         Ok(Response::new(StopInstanceResponse {
-            operation: Some(map_operation(operation)),
+            operation: None,
         }))
     }
 
@@ -140,8 +128,7 @@ where
         request: Request<CreateSnapshotRequest>,
     ) -> Result<Response<CreateSnapshotResponse>, Status> {
         let request = request.into_inner();
-        let (operation, snapshot) = self
-            .service
+        self.service
             .create_snapshot(SnapshotCaptureRequest {
                 instance_id: InstanceId(request.instance_id),
                 snapshot_id: request.snapshot_id,
@@ -149,8 +136,8 @@ where
             .await
             .map_err(map_error)?;
         Ok(Response::new(CreateSnapshotResponse {
-            operation: Some(map_operation(operation)),
-            snapshot: Some(map_snapshot_artifact(snapshot)),
+            operation: None,
+            snapshot: None,
         }))
     }
 
@@ -159,7 +146,7 @@ where
         request: Request<ProtoRestoreSnapshotRequest>,
     ) -> Result<Response<RestoreSnapshotResponse>, Status> {
         let request = request.into_inner();
-        let (operation, result) = self
+        let result = self
             .service
             .restore_snapshot(SnapshotRestoreRequest {
                 instance_id: InstanceId(request.instance_id),
@@ -171,7 +158,7 @@ where
             .await
             .map_err(map_error)?;
         Ok(Response::new(RestoreSnapshotResponse {
-            operation: Some(map_operation(operation)),
+            operation: None,
             result: Some(map_snapshot_restore_result(result)),
         }))
     }
@@ -181,11 +168,15 @@ where
         request: Request<GetOperationRequest>,
     ) -> Result<Response<GetOperationResponse>, Status> {
         let request = request.into_inner();
+        let op_id = request.operation_id.clone();
         let operation = self
-            .service
-            .get_operation(&OperationId(request.operation_id))
+            .operations
+            .get(&OperationId(request.operation_id))
             .await
-            .map_err(map_error)?;
+            .map_err(|e| Status::internal(e.to_string()))?
+            .ok_or_else(|| {
+                Status::not_found(format!("operation {} was not found", op_id))
+            })?;
         Ok(Response::new(GetOperationResponse {
             operation: Some(map_operation(operation)),
         }))
@@ -230,8 +221,11 @@ fn map_error(error: NodeAgentError) -> Status {
         NodeAgentError::BuildPreparationFailed { message }
         | NodeAgentError::InstanceRuntimeFailed { message }
         | NodeAgentError::Internal { message }
-        | NodeAgentError::ImageRepositoryRequestFail { message } => Status::internal(message),
-        NodeAgentError::DBOperationFail { message } => Status::internal(message),
+        | NodeAgentError::ImageRepositoryRequestFail { message }
+        | NodeAgentError::DBOperationFail { message }
+        | NodeAgentError::EmptySnapShotFail { message }
+        | NodeAgentError::S3DownloadFail { message }
+        | NodeAgentError::S3UploadFail { message } => Status::internal(message),
     }
 }
 
@@ -347,17 +341,6 @@ fn map_build_preparation_result(value: BuildPreparationResult) -> ProtoBuildPrep
     ProtoBuildPreparationResult {
         build_root: value.build_root,
         prepared_at: value.prepared_at.to_rfc3339(),
-    }
-}
-
-fn map_snapshot_artifact(value: SnapshotArtifact) -> ProtoSnapshotArtifact {
-    ProtoSnapshotArtifact {
-        snapshot_id: value.snapshot_id,
-        instance_data_path: value.instance_data_path,
-        storage_uri: value.storage_uri,
-        manifest_uri: value.manifest_uri,
-        checksum: value.checksum,
-        captured_at: value.captured_at,
     }
 }
 

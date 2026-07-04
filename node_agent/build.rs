@@ -9,15 +9,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_client(true)
         .compile_protos(
             &[
-                "proto/node_agent.proto",
-                "proto/asset_service.proto",
-                "proto/business_service.proto",
+                "proto/nodeagent/v1/node_agent.proto",
+                "proto/assetservice/v1/asset_service.proto",
+                "proto/assetservice/v1/business_service.proto",
             ],
             &["proto"],
         )?;
 
-    println!("cargo:rerun-if-changed=proto/node_agent.proto");
-    println!("cargo:rerun-if-changed=proto/asset_service.proto");
-    println!("cargo:rerun-if-changed=proto/business_service.proto");
+    println!("cargo:rerun-if-changed=proto/nodeagent/v1/node_agent.proto");
+    println!("cargo:rerun-if-changed=proto/assetservice/v1/asset_service.proto");
+    println!("cargo:rerun-if-changed=proto/assetservice/v1/business_service.proto");
     Ok(())
 }
