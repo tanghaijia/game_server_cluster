@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. 构造 TaskContext（cast 到 Arc<dyn Trait>）
     let task_ctx = Arc::new(TaskContext::new(
         node_agent_service.clone() as Arc<dyn BackgroundWorker>,
-        concrete_instance as Arc<dyn node_agent::ports::InstanceRuntime>,
+        concrete_instance as Arc<dyn node_agent::ports::GameInstanceRepository>,
         concrete_snapshot as Arc<dyn node_agent::ports::SnapshotRuntime>,
         concrete_ops.clone() as Arc<dyn node_agent::ports::OperationRepository>,
         concrete_asset as Arc<dyn node_agent::ports::AssetServiceFace>,

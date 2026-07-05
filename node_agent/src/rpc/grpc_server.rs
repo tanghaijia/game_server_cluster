@@ -10,8 +10,8 @@ use crate::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
         GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceSpec, NodeId,
         NodeOperation, OperationId, OperationKind, OperationStatus, ResourceRequirements,
-        RuntimeState, SnapshotCaptureRequest, SnapshotReference, SnapshotRestoreRequest,
-        SnapshotRestoreResult, StartInstanceArgument,
+        RuntimeState, SnapshotCaptureRequest, SnapshotReference, SnapshotRestoreResult,
+        StartInstanceArgument,
     },
     error::NodeAgentError,
     ports::{

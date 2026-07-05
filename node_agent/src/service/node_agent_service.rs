@@ -5,7 +5,8 @@ use chrono::Utc;
 use lmrc_docker::DockerClient;
 
 use crate::domain::{
-    ConatinerType, GameContainer, HostSnapShotDataPath, LocalGameBuildManager, RemoteImage,
+    ConatinerType, GameContainer, HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage,
+    RuntimeState,
 };
 use crate::ports::{ContainerClient, GameInstanceRepository};
 use crate::service::download_and_extract_tar_zst;
@@ -36,7 +37,6 @@ pub trait BackgroundWorker: Send + Sync {
     async fn start_instance(
         &self,
         spec: StartInstanceArgument,
-        operation_id: &OperationId,
     ) -> Result<InstanceRuntimeRecord, NodeAgentError>;
 
     async fn restore_snapshot(
@@ -162,9 +162,8 @@ where
     async fn start_instance(
         &self,
         argument: StartInstanceArgument,
-        _operation_id: &OperationId,
     ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
-        let instance_id = argument.instance_id;
+        let instance_id = argument.instance_id.clone();
 
         let mut game_instance = self.game_instance_repos.get(instance_id.0).await?;
         game_instance.status = crate::domain::GameInstanceStatus::Preparing;
@@ -175,10 +174,10 @@ where
             .get(argument.build.build_id)
             .await
             .map_err(|err| NodeAgentError::DBOperationFail {
-                message: "get local game build fail".to_string(),
+                message: format!("get local game build fail: {}", err),
             })?;
 
-        let container = self
+        let _ = self
             .container_client
             .create_container(local_game_build, None, None, None)
             .await?;
@@ -186,7 +185,14 @@ where
         game_instance.status = crate::domain::GameInstanceStatus::Running;
         self.game_instance_repos.save(&game_instance).await?;
 
-        todo!()
+        Ok(InstanceRuntimeRecord {
+            instance_id: argument.instance_id,
+            node_id: NodeId("".to_string()),
+            state: RuntimeState::Running,
+            endpoint: None,
+            failure: None,
+            updated_at: Utc::now(),
+        })
     }
 
     async fn restore_snapshot(
