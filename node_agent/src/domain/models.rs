@@ -1,8 +1,8 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use super::{InstanceId, NodeId, OperationId};
 use crate::domain::game::Game;
 use crate::domain::game_build::GameBuild;
-use super::{InstanceId, NodeId, OperationId};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// 从 asset_service 获取的快照恢复计划。
 #[derive(Debug, Clone)]
@@ -14,7 +14,6 @@ pub struct SnapshotRestorePlan {
     pub checksum: Option<String>,
     pub instance_data_path: String,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResourceRequirements {
@@ -59,7 +58,7 @@ pub enum DesiredRuntimeState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InstanceRuntimeSpec {
+pub struct StartInstanceArgument {
     pub instance_id: InstanceId,
     pub game: Game,
     pub build: GameBuild,

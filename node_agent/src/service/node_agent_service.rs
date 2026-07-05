@@ -2,18 +2,21 @@ use std::sync::Arc;
 
 use aws_sdk_s3::Client;
 use chrono::Utc;
+use lmrc_docker::DockerClient;
 
-use crate::domain::{HostSnapShotDataPath, LocalGameBuildManager, RemoteImage};
-use crate::ports::ImageClient;
+use crate::domain::{
+    ConatinerType, GameContainer, HostSnapShotDataPath, LocalGameBuildManager, RemoteImage,
+};
+use crate::ports::{ContainerClient, GameInstanceRepository};
 use crate::service::download_and_extract_tar_zst;
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
-        InstanceRuntimeSpec, OperationId, RuntimeState, SnapshotCaptureRequest,
-        SnapshotRestoreRequest, SnapshotRestoreResult,
+        OperationId, SnapshotCaptureRequest, SnapshotRestoreRequest, SnapshotRestoreResult,
+        StartInstanceArgument,
     },
     error::NodeAgentError,
-    ports::{AssetServiceFace, InstanceRuntime, SystemInfoProvider},
+    ports::{AssetServiceFace, SystemInfoProvider},
 };
 
 // ============================================================
@@ -32,7 +35,7 @@ pub trait BackgroundWorker: Send + Sync {
     /// 执行 start_instance，更新已有的 operation
     async fn start_instance(
         &self,
-        spec: InstanceRuntimeSpec,
+        spec: StartInstanceArgument,
         operation_id: &OperationId,
     ) -> Result<InstanceRuntimeRecord, NodeAgentError>;
 
@@ -44,38 +47,38 @@ pub trait BackgroundWorker: Send + Sync {
 
 pub struct NodeAgentService<I, S, A, IMC>
 where
-    I: InstanceRuntime,
+    I: GameInstanceRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient,
+    IMC: ContainerClient,
 {
-    instance_runtime: Arc<I>,
+    game_instance_repos: Arc<I>,
     system_info: Arc<S>,
     asset_service: Arc<A>,
-    image_client: Arc<IMC>,
+    container_client: Arc<IMC>,
     local_game_build_manager: LocalGameBuildManager,
     s3_client: Arc<Client>,
 }
 
 impl<I, S, A, IMC> NodeAgentService<I, S, A, IMC>
 where
-    I: InstanceRuntime,
+    I: GameInstanceRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient,
+    IMC: ContainerClient,
 {
     pub fn new(
-        instance_runtime: Arc<I>,
+        game_instance_repos: Arc<I>,
         system_info: Arc<S>,
         asset_service: Arc<A>,
-        image_client: Arc<IMC>,
+        container_client: Arc<IMC>,
         s3_client: Arc<Client>,
     ) -> Self {
         Self {
-            instance_runtime,
+            game_instance_repos,
             system_info,
             asset_service,
-            image_client,
+            container_client: container_client,
             local_game_build_manager: LocalGameBuildManager::new(),
             s3_client,
         }
@@ -96,12 +99,7 @@ where
         &self,
         instance_id: &InstanceId,
     ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
-        self.instance_runtime
-            .inspect_instance(instance_id)
-            .await?
-            .ok_or_else(|| NodeAgentError::InstanceNotFound {
-                instance_id: instance_id.0.clone(),
-            })
+        todo!()
     }
 
     pub async fn heartbeat(&self) -> Result<crate::ports::NodeHeartbeat, NodeAgentError> {
@@ -123,10 +121,10 @@ where
 #[async_trait::async_trait]
 impl<I, S, A, IMC> BackgroundWorker for NodeAgentService<I, S, A, IMC>
 where
-    I: InstanceRuntime + Send + Sync,
+    I: GameInstanceRepository + Send + Sync,
     S: SystemInfoProvider + Send + Sync,
     A: AssetServiceFace + Send + Sync,
-    IMC: ImageClient + Send + Sync,
+    IMC: ContainerClient + Send + Sync,
 {
     async fn prepare_game_build(
         &self,
@@ -140,7 +138,7 @@ where
             tag: "tag".to_string(),
         };
         let image = self
-            .image_client
+            .container_client
             .pull_image(&remote_img)
             .await
             .map_err(|e| NodeAgentError::ImageRepositoryRequestFail {
@@ -163,22 +161,32 @@ where
 
     async fn start_instance(
         &self,
-        spec: InstanceRuntimeSpec,
+        argument: StartInstanceArgument,
         _operation_id: &OperationId,
     ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
-        let instance_id = spec.instance_id.clone();
-        let node_id = spec.assignment.node_id.clone();
+        let instance_id = argument.instance_id;
 
-        let start_result = self.instance_runtime.start_instance(spec).await?;
+        let mut game_instance = self.game_instance_repos.get(instance_id.0).await?;
+        game_instance.status = crate::domain::GameInstanceStatus::Preparing;
+        self.game_instance_repos.save(&game_instance).await?;
 
-        Ok(InstanceRuntimeRecord {
-            instance_id,
-            node_id,
-            state: RuntimeState::Running,
-            endpoint: start_result.endpoint,
-            failure: None,
-            updated_at: Utc::now(),
-        })
+        let local_game_build = self
+            .local_game_build_manager
+            .get(argument.build.build_id)
+            .await
+            .map_err(|err| NodeAgentError::DBOperationFail {
+                message: "get local game build fail".to_string(),
+            })?;
+
+        let container = self
+            .container_client
+            .create_container(local_game_build, None, None, None)
+            .await?;
+
+        game_instance.status = crate::domain::GameInstanceStatus::Running;
+        self.game_instance_repos.save(&game_instance).await?;
+
+        todo!()
     }
 
     async fn restore_snapshot(

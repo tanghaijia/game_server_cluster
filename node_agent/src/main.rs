@@ -9,9 +9,7 @@ use node_agent::{
         FakeSystemInfoProvider, InMemoryOperationRepository,
     },
     rpc::GrpcNodeAgentServer,
-    service::{
-        init_backend, start_all_workers, BackgroundWorker, NodeAgentService, TaskContext,
-    },
+    service::{BackgroundWorker, NodeAgentService, TaskContext, init_backend, start_all_workers},
 };
 use tonic::transport::Server;
 
@@ -53,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         concrete_snapshot as Arc<dyn node_agent::ports::SnapshotRuntime>,
         concrete_ops.clone() as Arc<dyn node_agent::ports::OperationRepository>,
         concrete_asset as Arc<dyn node_agent::ports::AssetServiceFace>,
-        concrete_image as Arc<dyn node_agent::ports::ImageClient>,
+        concrete_image as Arc<dyn node_agent::ports::ContainerClient>,
     ));
 
     // 5. 启动后台 worker

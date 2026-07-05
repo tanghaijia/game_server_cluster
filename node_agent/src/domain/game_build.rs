@@ -1,9 +1,9 @@
-use std::collections::HashSet;
-use std::sync::Mutex;
-use anyhow::anyhow;
-use serde::{Deserialize, Serialize};
 use crate::domain::game::Game;
 use crate::domain::image::Image;
+use anyhow::anyhow;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Mutex;
 
 /**
 * 运行游戏的'运行环境容器'镜像
@@ -16,7 +16,7 @@ pub struct GameBuild {
     pub adapter_version: Option<String>,
 }
 /**
-* 本地的GameBuild
+* 本地的被维护的GameBuild
 **/
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct LocalGameBuild {
@@ -29,27 +29,30 @@ pub struct LocalGameBuild {
 * 节点本地的GameBuild集合
 **/
 pub struct LocalGameBuildSet {
-    pub set: HashSet<LocalGameBuild>
+    pub set: HashSet<LocalGameBuild>,
 }
 
 /**
 * 本地GameBuild管理器
 **/
 pub struct LocalGameBuildManager {
-    set: Mutex<Vec<LocalGameBuild>>
+    set: Mutex<Vec<LocalGameBuild>>,
 }
 
 impl LocalGameBuildManager {
-
     /**
-    * 记录一条game_build记录，代表game_build已在本地保存。如果game_build已存在，则失败。
-    **/
-    pub fn record_game_build_from_image(&self, game_build: &GameBuild, image: &Image) -> anyhow::Result<LocalGameBuild> {
+     * 记录一条game_build记录，代表game_build已在本地保存。如果game_build已存在，则失败。
+     **/
+    pub fn record_game_build_from_image(
+        &self,
+        game_build: &GameBuild,
+        image: &Image,
+    ) -> anyhow::Result<LocalGameBuild> {
         let mut set = self.set.lock().map_err(|e| anyhow!("锁被污染: {e}"))?;
 
         for local_game_build in &*set {
             if local_game_build.build_id == game_build.build_id {
-                return Err(anyhow!("已存在game_build"))
+                return Err(anyhow!("已存在game_build"));
             }
         }
 
@@ -63,8 +66,14 @@ impl LocalGameBuildManager {
         Ok(local_game_build)
     }
 
+    pub async fn get(&self, build_id: String) -> anyhow::Result<LocalGameBuild> {
+        todo!()
+    }
+
     pub fn new() -> Self {
-        Self { set: Mutex::new(Vec::new()) }
+        Self {
+            set: Mutex::new(Vec::new()),
+        }
     }
 }
 

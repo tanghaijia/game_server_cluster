@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::{anyhow, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -73,8 +74,11 @@ impl HostSnapShotDataPath {
         Self { path: new_path }
     }
 
-    pub fn to_string(self) -> String {
-        self.to_string()
+    pub fn to_string(self) -> anyhow::Result<String> {
+        match self.path.into_os_string().into_string() {
+            Ok(string) => Ok(string),
+            Err(_) => bail!("path utf-8 error"),
+        }
     }
 }
 

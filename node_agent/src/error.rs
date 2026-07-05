@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::ports::ContainerError;
+
 #[derive(Debug, Error)]
 pub enum NodeAgentError {
     #[error("invalid request: {message}")]
@@ -22,4 +24,9 @@ pub enum NodeAgentError {
     S3DownloadFail { message: String },
     #[error("S3 Upload error: {message}")]
     S3UploadFail { message: String },
+    #[error("Container error: {source}")]
+    ConatinerFail {
+        #[from]
+        source: ContainerError,
+    },
 }

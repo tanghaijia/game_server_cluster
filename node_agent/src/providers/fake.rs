@@ -10,15 +10,17 @@ use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
         BuildCompatibility, BuildPreparation, BuildPreparationResult, Endpoint, Game, GameBuild,
-        Image, InstanceId, InstanceRuntimeRecord, InstanceRuntimeSpec, ModManifest, NodeAgentInfo,
-        NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState, SnapshotCaptureRequest,
-        SnapshotRecord, SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult,
-        instance_data_path,
+        GameContainer, GameInstance, GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord,
+        LocalGameBuild, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
+        RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord, SnapshotRestorePlan,
+        SnapshotRestoreRequest, SnapshotRestoreResult, StartInstanceArgument, instance_data_path,
+        ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, ImageClient, InstanceRuntime, NodeHeartbeat,
-        OperationRepository, SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, ContainerClient, ContainerError, GameInstanceRepository,
+        InstanceRuntime, NodeHeartbeat, OperationRepository, SnapshotRuntime, StartInstanceResult,
+        SystemInfoProvider,
     },
 };
 
@@ -51,13 +53,14 @@ impl BuildRuntime for FakeBuildRuntime {
 #[derive(Default, Clone)]
 pub struct FakeInstanceRuntime {
     runtimes: Arc<Mutex<HashMap<String, InstanceRuntimeRecord>>>,
+    game_instances: Arc<Mutex<HashMap<String, GameInstance>>>,
 }
 
 #[async_trait]
 impl InstanceRuntime for FakeInstanceRuntime {
     async fn start_instance(
         &self,
-        spec: InstanceRuntimeSpec,
+        spec: StartInstanceArgument,
     ) -> Result<StartInstanceResult, NodeAgentError> {
         let endpoint = Endpoint {
             host: spec.assignment.node_id.0.clone(),
@@ -101,6 +104,34 @@ impl InstanceRuntime for FakeInstanceRuntime {
             message: "fake instance runtime lock poisoned".to_string(),
         })?;
         Ok(runtimes.get(&instance_id.0).cloned())
+    }
+}
+
+#[async_trait]
+impl GameInstanceRepository for FakeInstanceRuntime {
+    async fn save(&self, game_instance: &GameInstance) -> Result<(), NodeAgentError> {
+        let mut instances = self
+            .game_instances
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "fake game instance repository lock poisoned".to_string(),
+            })?;
+        instances.insert(game_instance.id.clone(), game_instance.clone());
+        Ok(())
+    }
+
+    async fn get(&self, game_instance_id: String) -> Result<GameInstance, NodeAgentError> {
+        let instances = self
+            .game_instances
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "fake game instance repository lock poisoned".to_string(),
+            })?;
+        instances.get(&game_instance_id).cloned().ok_or_else(|| {
+            NodeAgentError::InstanceNotFound {
+                instance_id: game_instance_id,
+            }
+        })
     }
 }
 
@@ -428,7 +459,7 @@ impl AssetServiceFace for FakeAssetServiceFace {
 pub struct FakeImageClient;
 
 #[async_trait]
-impl ImageClient for FakeImageClient {
+impl ContainerClient for FakeImageClient {
     async fn pull_image(&self, _image: &RemoteImage) -> anyhow::Result<Image> {
         Ok(Image {
             id: "fake-image-id".to_string(),
@@ -446,5 +477,19 @@ impl ImageClient for FakeImageClient {
 
     async fn last_version(&self, _image: &RemoteImage) -> anyhow::Result<String> {
         Ok("0.1.0".to_string())
+    }
+
+    async fn get_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
+        todo!()
+    }
+
+    async fn create_container(
+        &self,
+        _game_build: LocalGameBuild,
+        _path_mapping: Option<ContainerFilePathMappingHost>,
+        _port_mapping: Option<ContainerPortMapping>,
+        _resource_limitation: Option<ContainerResourceLimitation>,
+    ) -> Result<GameContainer, ContainerError> {
+        todo!()
     }
 }

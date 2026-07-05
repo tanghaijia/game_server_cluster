@@ -8,14 +8,15 @@ use tonic::{Request, Response, Status};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceRuntimeSpec,
-        InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus,
-        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
-        SnapshotRestoreRequest, SnapshotRestoreResult,
+        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceSpec, NodeId,
+        NodeOperation, OperationId, OperationKind, OperationStatus, ResourceRequirements,
+        RuntimeState, SnapshotCaptureRequest, SnapshotReference, SnapshotRestoreRequest,
+        SnapshotRestoreResult, StartInstanceArgument,
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SystemInfoProvider,
+        AssetServiceFace, ContainerClient, GameInstanceRepository, OperationRepository,
+        SystemInfoProvider,
     },
     proto::node_agent::{
         self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
@@ -39,10 +40,10 @@ use crate::{
 
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
 where
-    I: InstanceRuntime,
+    I: GameInstanceRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient,
+    IMC: ContainerClient,
 {
     service: Arc<NodeAgentService<I, S, A, IMC>>,
     pool: SqlitePool,
@@ -51,10 +52,10 @@ where
 
 impl<I, S, A, IMC> GrpcNodeAgentServer<I, S, A, IMC>
 where
-    I: InstanceRuntime,
+    I: GameInstanceRepository,
     S: SystemInfoProvider,
     A: AssetServiceFace,
-    IMC: ImageClient,
+    IMC: ContainerClient,
 {
     pub fn new(
         service: Arc<NodeAgentService<I, S, A, IMC>>,
@@ -72,10 +73,10 @@ where
 #[tonic::async_trait]
 impl<I, S, A, IMC> NodeAgentRpc for GrpcNodeAgentServer<I, S, A, IMC>
 where
-    I: InstanceRuntime + 'static,
+    I: GameInstanceRepository + 'static,
     S: SystemInfoProvider + 'static,
     A: AssetServiceFace + 'static,
-    IMC: ImageClient + 'static,
+    IMC: ContainerClient + 'static,
 {
     async fn prepare_game_build(
         &self,
@@ -242,6 +243,7 @@ fn map_error(error: NodeAgentError) -> Status {
         | NodeAgentError::EmptySnapShotFail { message }
         | NodeAgentError::S3DownloadFail { message }
         | NodeAgentError::S3UploadFail { message } => Status::internal(message),
+        NodeAgentError::ConatinerFail { .. } => Status::internal("container error".to_string()),
     }
 }
 
@@ -259,13 +261,13 @@ fn map_game_build(value: ProtoGameBuild) -> Result<GameBuild, Status> {
 
 fn map_instance_runtime_spec(
     value: ProtoInstanceRuntimeSpec,
-) -> Result<InstanceRuntimeSpec, Status> {
+) -> Result<StartInstanceArgument, Status> {
     let build = map_game_build(
         value
             .build
             .ok_or_else(|| Status::invalid_argument("build is required"))?,
     )?;
-    Ok(InstanceRuntimeSpec {
+    Ok(StartInstanceArgument {
         instance_id: InstanceId(value.instance_id),
         game: build.game.clone(),
         build,

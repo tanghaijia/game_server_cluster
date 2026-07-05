@@ -1,4 +1,4 @@
-mod DockerImageClient;
+mod docker_container_client;
 
 use async_trait::async_trait;
 use tokio::sync::Mutex;

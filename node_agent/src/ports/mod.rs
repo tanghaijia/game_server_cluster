@@ -1,15 +1,17 @@
 mod asset_service_face;
 mod build_runtime;
+mod container_client;
+mod game_instance_repository;
 mod instance_runtime;
 mod operation_repository;
 mod snapshot_runtime;
 mod system_info;
-mod image_client;
 
 pub use asset_service_face::*;
 pub use build_runtime::*;
+pub use container_client::*;
+pub use game_instance_repository::*;
 pub use instance_runtime::*;
 pub use operation_repository::*;
 pub use snapshot_runtime::*;
 pub use system_info::*;
-pub use image_client::*;

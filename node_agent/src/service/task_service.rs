@@ -13,11 +13,13 @@ use crate::domain::BuildPreparation;
 use crate::service::BackgroundWorker;
 use crate::{
     domain::{
-        InstanceId, InstanceRuntimeSpec, LocalGameBuildManager, NodeOperation, OperationId,
-        OperationKind, OperationStatus, SnapshotCaptureRequest, SnapshotRestoreRequest,
+        InstanceId, LocalGameBuildManager, NodeOperation, OperationId, OperationKind,
+        OperationStatus, SnapshotCaptureRequest, SnapshotRestoreRequest, StartInstanceArgument,
     },
     error::NodeAgentError,
-    ports::{AssetServiceFace, ImageClient, InstanceRuntime, OperationRepository, SnapshotRuntime},
+    ports::{
+        AssetServiceFace, ContainerClient, InstanceRuntime, OperationRepository, SnapshotRuntime,
+    },
 };
 // ============================================================
 // TaskContext — 所有 handler 共享的依赖集合
@@ -30,7 +32,7 @@ pub struct TaskContext {
     pub snapshot_runtime: Arc<dyn SnapshotRuntime>,
     pub operations: Arc<dyn OperationRepository>,
     pub asset_service: Arc<dyn AssetServiceFace>,
-    pub image_client: Arc<dyn ImageClient>,
+    pub image_client: Arc<dyn ContainerClient>,
     pub local_game_build_manager: Arc<AsyncMutex<LocalGameBuildManager>>,
 }
 
@@ -41,7 +43,7 @@ impl TaskContext {
         snapshot_runtime: Arc<dyn SnapshotRuntime>,
         operations: Arc<dyn OperationRepository>,
         asset_service: Arc<dyn AssetServiceFace>,
-        image_client: Arc<dyn ImageClient>,
+        image_client: Arc<dyn ContainerClient>,
     ) -> Self {
         Self {
             node_agent_service,
@@ -68,7 +70,7 @@ pub struct PrepareBuildJob {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartInstanceJob {
     pub operation_id: String,
-    pub spec: InstanceRuntimeSpec,
+    pub spec: StartInstanceArgument,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -414,14 +416,14 @@ pub async fn enqueue_prepare_build(
 pub async fn enqueue_start_instance(
     pool: &SqlitePool,
     ops: &Arc<dyn OperationRepository>,
-    spec: InstanceRuntimeSpec,
+    argument: StartInstanceArgument,
 ) -> NodeOperation {
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::StartInstance,
         status: OperationStatus::Pending,
-        instance_id: Some(spec.instance_id.clone()),
-        build_id: Some(spec.build.build_id.clone()),
+        instance_id: Some(argument.instance_id.clone()),
+        build_id: Some(argument.build.build_id.clone()),
         message: Some("instance start queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
@@ -433,7 +435,7 @@ pub async fn enqueue_start_instance(
     let _ = storage
         .push(StartInstanceJob {
             operation_id: job_op_id,
-            spec,
+            spec: argument,
         })
         .await;
 

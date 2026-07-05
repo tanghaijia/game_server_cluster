@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use crate::{
-    domain::{Endpoint, InstanceId, InstanceRuntimeRecord, InstanceRuntimeSpec},
+    domain::{Endpoint, InstanceId, InstanceRuntimeRecord, StartInstanceArgument},
     error::NodeAgentError,
 };
 
@@ -14,7 +14,7 @@ pub struct StartInstanceResult {
 pub trait InstanceRuntime: Send + Sync {
     async fn start_instance(
         &self,
-        spec: InstanceRuntimeSpec,
+        spec: StartInstanceArgument,
     ) -> Result<StartInstanceResult, NodeAgentError>;
 
     async fn stop_instance(&self, instance_id: &InstanceId) -> Result<(), NodeAgentError>;

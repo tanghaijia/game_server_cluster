@@ -1,10 +1,10 @@
-use crate::domain::game::Game;
+use crate::domain::{LocalGameBuild, game::Game};
 
 /**
 * Docker容器
 **/
 pub struct DockerContainer {
-    pub base: ContainerBase
+    pub base: ContainerBase,
 }
 
 impl Container for DockerContainer {
@@ -24,19 +24,27 @@ pub trait Container {
     fn base(&self) -> &ContainerBase;
 }
 
+pub enum ConatinerType {
+    DockerContainer,
+}
+
 /**
 * 游戏容器
 **/
 pub struct GameContainer {
-    pub game: Game,
-    pub container: Box<dyn Container>
+    pub id: String,
+    pub game_build: LocalGameBuild,
+    pub container: ConatinerType,
+    pub container_file_path_mapping: Option<ContainerFilePathMappingHost>,
+    pub container_port_mapping: Option<ContainerPortMapping>,
+    pub resource_limitation: Option<ContainerResourceLimitation>,
 }
 
 /**
 * 宿主机的文件路径
 **/
 pub struct HostFilePath {
-    pub path: String
+    pub path: String,
 }
 
 /**
@@ -44,7 +52,6 @@ pub struct HostFilePath {
 **/
 pub struct ContainerFilePath {
     pub path: String,
-    pub game_container: GameContainer
 }
 
 /**
@@ -59,6 +66,8 @@ pub struct ContainerFilePathMappingHost {
 /**
 * 容器内一个游戏的根路径
 **/
-pub struct MappedGameContainerRootFilePath {
+pub struct MappedGameContainerRootFilePath {}
 
-}
+pub struct ContainerPortMapping {}
+
+pub struct ContainerResourceLimitation {}
