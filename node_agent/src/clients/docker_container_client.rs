@@ -73,6 +73,14 @@ impl ContainerClient for DockerContainerClient {
     ) -> Result<GameContainer, ContainerError> {
         todo!()
     }
+
+    async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        todo!()
+    }
+
+    async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        todo!()
+    }
 }
 
 impl DockerContainerClient {

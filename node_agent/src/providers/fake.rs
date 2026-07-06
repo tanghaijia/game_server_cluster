@@ -492,4 +492,12 @@ impl ContainerClient for FakeImageClient {
     ) -> Result<GameContainer, ContainerError> {
         todo!()
     }
+
+    async fn stop_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
+        todo!()
+    }
+
+    async fn remove_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
+        todo!()
+    }
 }

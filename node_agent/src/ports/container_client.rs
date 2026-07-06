@@ -23,6 +23,10 @@ pub trait ContainerClient: Send + Sync {
         port_mapping: Option<ContainerPortMapping>,
         resource_limitation: Option<ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError>;
+
+    async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError>;
+
+    async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError>;
 }
 
 #[derive(Error, Debug)]

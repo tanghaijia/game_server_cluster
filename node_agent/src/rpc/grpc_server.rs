@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use apalis_sqlite::SqlitePool;
 use chrono::Utc;
-use sqlx::encode::IsNull::No;
 use tonic::{Request, Response, Status};
 
 use crate::{
@@ -35,6 +34,7 @@ use crate::{
     },
     service::{
         NodeAgentService, enqueue_prepare_build, enqueue_restore_snapshot, enqueue_start_instance,
+        enqueue_stop_instance,
     },
 };
 
@@ -122,11 +122,11 @@ where
         request: Request<StopInstanceRequest>,
     ) -> Result<Response<StopInstanceResponse>, Status> {
         let request = request.into_inner();
-        self.service
-            .stop_instance(InstanceId(request.instance_id))
-            .await
-            .map_err(map_error)?;
-        Ok(Response::new(StopInstanceResponse { operation: None }))
+        let operation =
+            enqueue_stop_instance(&self.pool, &self.operations, &request.instance_id).await;
+        Ok(Response::new(StopInstanceResponse {
+            operation: Some(map_operation(operation)),
+        }))
     }
 
     async fn create_snapshot(

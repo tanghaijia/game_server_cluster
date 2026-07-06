@@ -76,6 +76,7 @@ pub struct StartInstanceJob {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopInstanceJob {
+    pub operation_id: String,
     pub instance_id: String,
 }
 
@@ -192,18 +193,23 @@ async fn handle_stop_instance(
     ctx: Data<Arc<TaskContext>>,
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
+    let op_id = OperationId(job.operation_id);
     let instance_id = InstanceId(job.instance_id.clone());
 
-    let op = create_operation(
-        &ctx.operations,
-        OperationKind::StopInstance,
-        Some(&job.instance_id),
-        None,
-        "stopping instance in background",
-    )
-    .await?;
+    let op = ctx
+        .operations
+        .get(&op_id)
+        .await?
+        .expect("can not find operation");
+    running_operation(&ctx.operations, op.clone()).await;
+    match ctx.node_agent_service.stop_instance(instance_id).await {
+        Ok(()) => {}
+        Err(err) => {
+            fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+        }
+    };
 
-    todo!()
+    Ok(())
 }
 
 async fn handle_create_snapshot(
@@ -444,13 +450,33 @@ pub async fn enqueue_start_instance(
     op
 }
 
-pub async fn enqueue_stop_instance(pool: &SqlitePool, instance_id: &str) {
+pub async fn enqueue_stop_instance(
+    pool: &SqlitePool,
+    ops: &Arc<dyn OperationRepository>,
+    instance_id: &str,
+) -> NodeOperation {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind: OperationKind::StopInstance,
+        status: OperationStatus::Pending,
+        instance_id: Some(InstanceId(instance_id.to_string())),
+        build_id: None,
+        message: Some("instance stop queued".to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    let _ = ops.save(&op).await;
+
+    let job_op_id = op.operation_id.0.clone();
     let mut storage = SqliteStorage::new(pool);
     let _ = storage
         .push(StopInstanceJob {
+            operation_id: job_op_id,
             instance_id: instance_id.to_string(),
         })
         .await;
+
+    op
 }
 
 pub async fn enqueue_create_snapshot(pool: &SqlitePool, instance_id: &str, snapshot_id: &str) {

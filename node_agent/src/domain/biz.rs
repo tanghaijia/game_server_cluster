@@ -8,6 +8,7 @@ pub enum GameInstanceStatus {
     Pedding,
     Preparing,
     Running,
+    Stopping,
     Stopped,
     Failed,
 }
@@ -19,7 +20,7 @@ pub enum GameInstanceStatus {
 pub struct GameInstance {
     pub id: String,
     pub status: GameInstanceStatus,
-    pub container_id: String,
+    pub container_id: Option<String>,
     pub game_build_id: String,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,

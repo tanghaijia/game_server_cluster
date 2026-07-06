@@ -43,6 +43,8 @@ pub trait BackgroundWorker: Send + Sync {
         &self,
         request: SnapshotRestoreRequest,
     ) -> Result<SnapshotRestoreResult, NodeAgentError>;
+
+    async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
 }
 
 pub struct NodeAgentService<I, S, A, IMC>
@@ -82,10 +84,6 @@ where
             local_game_build_manager: LocalGameBuildManager::new(),
             s3_client,
         }
-    }
-
-    pub async fn stop_instance(&self, _instance_id: InstanceId) -> Result<(), NodeAgentError> {
-        todo!()
     }
 
     pub async fn create_snapshot(
@@ -232,5 +230,25 @@ where
             restore_path: restore_path_string,
         };
         Ok(result)
+    }
+
+    async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {
+        let instance_id = instance_id.0;
+        let mut local_game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
+        let docker_id = local_game_instance.container_id.clone();
+        if docker_id.is_none() {
+            local_game_instance.status = crate::domain::GameInstanceStatus::Failed;
+            self.game_instance_repos.save(&local_game_instance).await?;
+            return Err(NodeAgentError::ConatinerFail {
+                source: crate::ports::ContainerError::NotFound(0),
+            });
+        } else {
+            let docker_id = docker_id.unwrap();
+            local_game_instance.status = crate::domain::GameInstanceStatus::Stopping;
+            self.game_instance_repos.save(&local_game_instance).await?;
+            self.container_client.stop_container(docker_id).await?;
+        }
+
+        Ok(())
     }
 }
