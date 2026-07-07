@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use aws_sdk_s3::Client;
 use chrono::Utc;
 use lmrc_docker::DockerClient;
 
@@ -8,7 +7,7 @@ use crate::domain::{
     ConatinerType, GameContainer, HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage,
     RuntimeState,
 };
-use crate::ports::{ContainerClient, GameInstanceRepository};
+use crate::ports::{ContainerClient, GameInstanceRepository, ObjectStore};
 use crate::service::download_and_extract_tar_zst;
 use crate::{
     domain::{
@@ -59,7 +58,7 @@ where
     asset_service: Arc<A>,
     container_client: Arc<IMC>,
     local_game_build_manager: LocalGameBuildManager,
-    s3_client: Arc<Client>,
+    object_store: Arc<dyn ObjectStore>,
 }
 
 impl<I, S, A, IMC> NodeAgentService<I, S, A, IMC>
@@ -74,7 +73,7 @@ where
         system_info: Arc<S>,
         asset_service: Arc<A>,
         container_client: Arc<IMC>,
-        s3_client: Arc<Client>,
+        object_store: Arc<dyn ObjectStore>,
     ) -> Self {
         Self {
             game_instance_repos,
@@ -82,7 +81,7 @@ where
             asset_service,
             container_client: container_client,
             local_game_build_manager: LocalGameBuildManager::new(),
-            s3_client,
+            object_store,
         }
     }
 
@@ -214,7 +213,7 @@ where
         let data_path = HostSnapShotDataPath::new(instance_id.clone());
         let restore_path_string = data_path.as_ref().display().to_string();
         let _manifest = download_and_extract_tar_zst(
-            &self.s3_client,
+            &*self.object_store,
             &snapshot_record.bucket,
             &snapshot_record.key,
             data_path,

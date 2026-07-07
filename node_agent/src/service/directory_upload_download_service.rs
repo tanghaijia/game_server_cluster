@@ -1,16 +1,14 @@
 use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
-use aws_sdk_s3::{Client, primitives::ByteStream};
 use sha2::{Digest, Sha256};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::io::SyncIoBridge;
 use walkdir::WalkDir;
 
 use chrono::Utc;
 
 use crate::domain::{Entry, Manifest};
+use crate::ports::ObjectStore;
 
 // ============================================================
 // 平台适配：Unix 获取文件权限模式，Windows 回退默认值
@@ -56,11 +54,11 @@ fn collect_file_entries(src_dir: &Path) -> Result<Vec<Entry>, std::io::Error> {
 // 上传：tar + zstd 流式压缩上传，捎带计算 SHA256
 // ============================================================
 
-/// 将目录以 tar.zst 格式流式上传到 S3，同时计算压缩数据的 SHA256。
+/// 将目录以 tar.zst 格式流式上传到对象存储，同时计算压缩数据的 SHA256。
 ///
 /// 返回值为 hex 编码的 SHA256 摘要，格式为 `"sha256:abcdef..."`。
 pub async fn upload_dir_as_tar_zst(
-    s3_client: &Client,
+    object_store: &dyn ObjectStore,
     bucket: &str,
     key: &str,
     src_dir: impl AsRef<Path>,
@@ -139,15 +137,8 @@ pub async fn upload_dir_as_tar_zst(
         }
     }
 
-    // 5. 上传到 S3
-    let body = ByteStream::from(compressed_data);
-    s3_client
-        .put_object()
-        .bucket(bucket)
-        .key(key)
-        .body(body)
-        .send()
-        .await?;
+    // 5. 上传到对象存储
+    object_store.put_object(bucket, key, compressed_data).await?;
 
     // 6. 取出最终哈希值
     let checksum = format!("sha256:{}", hex::encode(hasher.finalize()));
@@ -159,7 +150,7 @@ pub async fn upload_dir_as_tar_zst(
 // ============================================================
 
 async fn generate_and_upload_manifest(
-    s3_client: &Client,
+    object_store: &dyn ObjectStore,
     bucket: &str,
     manifest_key: &str,
     snapshot_id: &str,
@@ -178,16 +169,8 @@ async fn generate_and_upload_manifest(
         entries: entries.to_vec(),
     };
 
-    let json = serde_json::to_string_pretty(&manifest)?;
-    let body = ByteStream::from(json.into_bytes());
-
-    s3_client
-        .put_object()
-        .bucket(bucket)
-        .key(manifest_key)
-        .body(body)
-        .send()
-        .await?;
+    let json = serde_json::to_vec_pretty(&manifest)?;
+    object_store.put_object(bucket, manifest_key, json).await?;
 
     Ok(())
 }
@@ -199,11 +182,11 @@ async fn generate_and_upload_manifest(
 /// 创建快照归档：目录遍历 → 压缩上传 + 捎带 SHA256 → 生成并上传 manifest.json
 ///
 /// `key_prefix` 例如 `"snapshots/{snapshot_id}"`，
-/// 会生成 `{key_prefix}.tar.zst` 和 `{key_prefix}.manifest.json` 两个 S3 对象。
+/// 会生成 `{key_prefix}.tar.zst` 和 `{key_prefix}.manifest.json` 两个对象。
 ///
 /// 返回 `(checksum, manifest_key)`。
 pub async fn create_snapshot_archive(
-    s3_client: &Client,
+    object_store: &dyn ObjectStore,
     bucket: &str,
     key_prefix: &str,
     snapshot_id: &str,
@@ -217,12 +200,12 @@ pub async fn create_snapshot_archive(
 
     // 2. 压缩上传 + 计算 checksum
     let archive_key = format!("{}.tar.zst", key_prefix);
-    let checksum = upload_dir_as_tar_zst(s3_client, bucket, &archive_key, src_dir).await?;
+    let checksum = upload_dir_as_tar_zst(object_store, bucket, &archive_key, src_dir).await?;
 
     // 3. 生成并上传 manifest
     let manifest_key = format!("{}.manifest.json", key_prefix);
     generate_and_upload_manifest(
-        s3_client,
+        object_store,
         bucket,
         &manifest_key,
         snapshot_id,
@@ -249,29 +232,18 @@ fn manifest_key_from_archive_key(archive_key: &str) -> Result<String, Box<dyn st
         .ok_or_else(|| format!("archive key '{}' does not end with '.tar.zst'", archive_key).into())
 }
 
-/// 从 S3 下载 manifest.json 到内存，反序列化为 `Manifest`。
+/// 从对象存储下载 manifest.json 到内存，反序列化为 `Manifest`。
 async fn download_manifest(
-    s3_client: &Client,
+    object_store: &dyn ObjectStore,
     bucket: &str,
     manifest_key: &str,
 ) -> Result<Manifest, Box<dyn std::error::Error>> {
-    let output = s3_client
-        .get_object()
-        .bucket(bucket)
-        .key(manifest_key)
-        .send()
-        .await?;
-
-    let mut body = output.body;
-    let mut data = Vec::new();
-    while let Some(chunk) = body.try_next().await? {
-        data.extend_from_slice(&chunk);
-    }
+    let data = object_store.get_object(bucket, manifest_key).await?;
     let manifest: Manifest = serde_json::from_slice(&data)?;
     Ok(manifest)
 }
 
-/// 从 S3 下载 tar.zst 归档并解压到目标目录。
+/// 从对象存储下载 tar.zst 归档并解压到目标目录。
 ///
 /// 同时自动从对应的 `.manifest.json` 中获取 checksum 并在解压完成后校验。
 /// 如果 checksum 不匹配，返回错误。
@@ -279,26 +251,19 @@ async fn download_manifest(
 /// `key` 需要以 `.tar.zst` 结尾，manifest 键名由此自动推导。
 /// 返回解析好的 `Manifest` 结构体。
 pub async fn download_and_extract_tar_zst(
-    s3_client: &Client,
+    object_store: &dyn ObjectStore,
     bucket: &str,
     key: &str,
     dest_dir: impl AsRef<Path>,
 ) -> Result<Manifest, Box<dyn std::error::Error>> {
     // 0. 先下载 manifest.json，拿到期望的 checksum
     let manifest_key = manifest_key_from_archive_key(key)?;
-    let manifest = download_manifest(s3_client, bucket, &manifest_key).await?;
+    let manifest = download_manifest(object_store, bucket, &manifest_key).await?;
 
     let dest_dir = dest_dir.as_ref().to_path_buf();
 
-    // 1. 从 S3 获取 tar.zst 对象
-    let output = s3_client
-        .get_object()
-        .bucket(bucket)
-        .key(key)
-        .send()
-        .await?;
-
-    let mut s3_stream = output.body;
+    // 1. 从对象存储获取 tar.zst 数据
+    let data = object_store.get_object(bucket, key).await?;
 
     // 2. 创建内存管道
     let (pipe_reader, mut pipe_writer) = tokio::io::duplex(20 * 1024 * 1024);
@@ -314,15 +279,12 @@ pub async fn download_and_extract_tar_zst(
         archive.unpack(&dest_dir)
     });
 
-    // 5. 创建 SHA256 哈希器，在下载循环中捎带计算
-    let hasher = Arc::new(Mutex::new(Sha256::new()));
-    let hasher_for_verify = hasher.clone();
+    // 5. 创建 SHA256 哈希器
+    let mut hasher = Sha256::new();
 
-    // 6. 从 S3 逐 chunk 读取，喂给管道同时计算哈希
-    while let Some(chunk) = s3_stream.try_next().await? {
-        hasher.lock().unwrap().update(&chunk);
-        pipe_writer.write_all(&chunk).await?;
-    }
+    // 6. 将数据喂给管道，同时计算哈希
+    hasher.update(&data);
+    pipe_writer.write_all(&data).await?;
 
     // 7. 关闭写端，避免死锁
     pipe_writer.shutdown().await?;
@@ -331,10 +293,7 @@ pub async fn download_and_extract_tar_zst(
     extract_handle.await??;
 
     // 9. 校验 checksum
-    let actual = format!(
-        "sha256:{}",
-        hex::encode(hasher_for_verify.lock().unwrap().clone().finalize())
-    );
+    let actual = format!("sha256:{}", hex::encode(hasher.finalize()));
     if actual != manifest.checksum {
         return Err(format!(
             "checksum mismatch for {}: expected {}, got {}",
@@ -349,10 +308,7 @@ pub async fn download_and_extract_tar_zst(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_credential_types::Credentials;
-    use aws_sdk_s3::{Client, config::BehaviorVersion, config::Region, config::SharedHttpClient};
-    use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
-    use aws_smithy_types::body::SdkBody;
+    use crate::providers::InMemoryObjectStore;
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
@@ -365,49 +321,22 @@ mod tests {
         let mut file = File::create(file_path).unwrap();
         writeln!(file, "Hello, Rust S3 test!").unwrap();
 
-        // 2. 构造模拟的 S3 200 响应
-        let http_response = http::Response::builder()
-            .status(200)
-            .body(SdkBody::from(r#"{"ETag": "\"example-etag\""}"#))
-            .unwrap();
-
-        // 3. 构造 ReplayEvent，预期请求需匹配实际发出的 PUT 请求
-        let expected_request = http::Request::builder()
-            .method("PUT")
-            .uri("https://my-test-bucket.s3.us-east-1.amazonaws.com/backups/test.tar.zst")
-            .body(SdkBody::empty())
-            .unwrap();
-        let replay_event = ReplayEvent::new(expected_request, http_response);
-        let mock_http_client = StaticReplayClient::new(vec![replay_event]);
-
-        // 4. 使用 mock HTTP 客户端 + 伪造凭证构建 S3 Client
-        let config = aws_sdk_s3::Config::builder()
-            .behavior_version(BehaviorVersion::latest())
-            .region(Region::new("us-east-1"))
-            .credentials_provider(Credentials::new(
-                "AKIAIOSFODNN7EXAMPLE",
-                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-                None,
-                None,
-                "test",
-            ))
-            .http_client(SharedHttpClient::new(mock_http_client.clone()))
-            .build();
-        let s3_client = Client::from_conf(config);
-
-        // 5. 调用被测函数
+        // 2. 使用 InMemoryObjectStore（零网络、零外部依赖）
+        let object_store = InMemoryObjectStore::new();
         let bucket = "my-test-bucket";
         let key = "backups/test.tar.zst";
 
-        let result = upload_dir_as_tar_zst(&s3_client, bucket, key, dir.path()).await;
+        let result = upload_dir_as_tar_zst(&object_store, bucket, key, dir.path()).await;
 
-        // 6. 断言
+        // 3. 断言上传成功
         assert!(
             result.is_ok(),
             "upload_dir_as_tar_zst failed: {:?}",
             result.err()
         );
 
-        // 函数返回 Ok 已经证明请求被正确发送并收到了 200 响应
+        // 4. 数据确实写入了内存存储
+        let stored = object_store.get_object(bucket, key).await.unwrap();
+        assert!(!stored.is_empty(), "stored data should not be empty");
     }
 }
