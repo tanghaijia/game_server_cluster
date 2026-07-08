@@ -1,4 +1,4 @@
-use crate::domain::game::Game;
+use crate::domain::game::{self, Game};
 use crate::domain::image::Image;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -67,7 +67,15 @@ impl LocalGameBuildManager {
     }
 
     pub async fn get(&self, build_id: String) -> anyhow::Result<LocalGameBuild> {
-        todo!()
+        let set = self.set.lock().map_err(|e| anyhow!("锁被污染: {e}"))?;
+
+        for local_game_build in &*set {
+            if local_game_build.build_id == build_id {
+                return Ok((*local_game_build).clone());
+            }
+        }
+
+        return Err(anyhow!("没找到game_build, build id: {}", build_id));
     }
 
     pub fn new() -> Self {

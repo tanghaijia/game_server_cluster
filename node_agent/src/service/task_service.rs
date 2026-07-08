@@ -10,7 +10,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::domain::BuildPreparation;
+use crate::domain::{BuildPreparation, GameInstance};
 use crate::ports::GameInstanceRepository;
 use crate::service::BackgroundWorker;
 use crate::{
@@ -465,6 +465,7 @@ pub async fn enqueue_prepare_build(
 pub async fn enqueue_start_instance(
     pool: &SqlitePool,
     ops: &Arc<dyn OperationRepository>,
+    game_instance_repository: &Arc<dyn GameInstanceRepository>,
     argument: StartInstanceArgument,
 ) -> NodeOperation {
     let op = NodeOperation {
@@ -478,6 +479,19 @@ pub async fn enqueue_start_instance(
         finished_at: None,
     };
     let _ = ops.save(&op).await;
+
+    let game_instance = GameInstance {
+        id: argument.instance_id.0.clone(),
+        status: crate::domain::GameInstanceStatus::Pedding,
+        container_id: None,
+        game_build_id: argument.build.build_id.clone(),
+        create_time: Utc::now(),
+        update_time: Utc::now(),
+    };
+    if let Err(err) = game_instance_repository.save(&game_instance).await {
+        fail_operation(ops, op.clone(), &err.to_string().as_str()).await;
+        return op;
+    }
 
     let job_op_id = op.operation_id.0.clone();
     let mut storage = SqliteStorage::new(pool);

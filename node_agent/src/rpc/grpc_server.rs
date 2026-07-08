@@ -2,15 +2,16 @@ use std::sync::Arc;
 
 use apalis_sqlite::SqlitePool;
 use chrono::Utc;
+use log::error;
 use tonic::{Request, Response, Status};
 
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceSpec, NodeId,
-        NodeOperation, OperationId, OperationKind, OperationStatus, ResourceRequirements,
-        RuntimeState, SnapshotCaptureRequest, SnapshotReference, SnapshotRestoreResult,
-        StartInstanceArgument,
+        GameBuild, GameInstance, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
+        InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus,
+        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
+        SnapshotRestoreResult, StartInstanceArgument,
     },
     error::NodeAgentError,
     ports::{
@@ -48,6 +49,7 @@ where
     service: Arc<NodeAgentService<I, S, A, IMC>>,
     pool: SqlitePool,
     operations: Arc<dyn OperationRepository>,
+    game_instance_repository: Arc<dyn GameInstanceRepository>,
 }
 
 impl<I, S, A, IMC> GrpcNodeAgentServer<I, S, A, IMC>
@@ -61,11 +63,13 @@ where
         service: Arc<NodeAgentService<I, S, A, IMC>>,
         pool: SqlitePool,
         operations: Arc<dyn OperationRepository>,
+        game_instance_repository: Arc<dyn GameInstanceRepository>,
     ) -> Self {
         Self {
             service,
             pool,
             operations,
+            game_instance_repository,
         }
     }
 }
@@ -105,12 +109,16 @@ where
         let spec = request
             .instance
             .ok_or_else(|| Status::invalid_argument("instance is required"))?;
+        let instance = map_instance_runtime_spec(spec)?;
+
         let operation = enqueue_start_instance(
             &self.pool,
             &self.operations,
-            map_instance_runtime_spec(spec)?,
+            &self.game_instance_repository,
+            instance,
         )
         .await;
+
         Ok(Response::new(StartInstanceResponse {
             operation: Some(map_operation(operation)),
             runtime: None,

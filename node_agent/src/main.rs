@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 4. 构造 TaskContext（cast 到 Arc<dyn Trait>）
         let task_ctx = Arc::new(TaskContext::new(
             node_agent_service.clone() as Arc<dyn BackgroundWorker>,
-            concrete_instance as Arc<dyn node_agent::ports::GameInstanceRepository>,
+            concrete_instance.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
             concrete_snapshot as Arc<dyn node_agent::ports::SnapshotRuntime>,
             concrete_ops.clone() as Arc<dyn node_agent::ports::OperationRepository>,
             concrete_asset as Arc<dyn node_agent::ports::AssetServiceFace>,
@@ -55,11 +55,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
 
         // 6. gRPC server（传入 pool + operations 用于投递后台任务）
-        let grpc = GrpcNodeAgentServer::new(
-            node_agent_service,
-            pool,
-            concrete_ops as Arc<dyn node_agent::ports::OperationRepository>,
-        );
+        let grpc =
+            GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance);
 
         println!("node-agent listening on {}", addr);
         Server::builder()
