@@ -6,6 +6,7 @@ use apalis_core::{
 };
 use apalis_sqlite::{SqlitePool, SqliteStorage};
 use chrono::Utc;
+use log::error;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -157,9 +158,30 @@ async fn handle_prepare_build(
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
     let op_id = OperationId(job.operation_id);
-    ctx.node_agent_service
+    let op = ctx
+        .operations
+        .get(&op_id)
+        .await?
+        .expect("can not find operation");
+    running_operation(&ctx.operations, op.clone()).await;
+    if let Err(err) = ctx
+        .node_agent_service
         .prepare_game_build(job.build_preparation, &op_id)
-        .await?;
+        .await
+    {
+        error!(
+            "prepare game build service fail, operation id: {}.",
+            op_id.0
+        );
+        fail_operation(&ctx.operations, op, &err.to_string()).await;
+    } else {
+        succeed_operation(
+            &ctx.operations,
+            op,
+            format!("prepare game build success, operation id: {}.", op_id.0).as_str(),
+        )
+        .await;
+    }
 
     Ok(())
 }
@@ -177,14 +199,18 @@ async fn handle_start_instance(
         .await?
         .expect("can not find operation");
     running_operation(&ctx.operations, op.clone()).await;
-    ctx.node_agent_service.start_instance(job.spec).await?;
+    if let Err(err) = ctx.node_agent_service.start_instance(job.spec).await {
+        error!("start game instance fail, operation id: {}.", op_id.0);
+        fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+    } else {
+        succeed_operation(
+            &ctx.operations,
+            op,
+            format!("start instance {} success", instance_id).as_str(),
+        )
+        .await;
+    }
 
-    succeed_operation(
-        &ctx.operations,
-        op,
-        format!("start instance {} success", instance_id).as_str(),
-    )
-    .await;
     Ok(())
 }
 
@@ -202,8 +228,23 @@ async fn handle_stop_instance(
         .await?
         .expect("can not find operation");
     running_operation(&ctx.operations, op.clone()).await;
-    match ctx.node_agent_service.stop_instance(instance_id).await {
-        Ok(()) => {}
+    match ctx
+        .node_agent_service
+        .stop_instance(instance_id.clone())
+        .await
+    {
+        Ok(()) => {
+            succeed_operation(
+                &ctx.operations,
+                op,
+                format!(
+                    "stop instance {} success, operation id: {}",
+                    instance_id.0, op_id.0
+                )
+                .as_str(),
+            )
+            .await;
+        }
         Err(err) => {
             fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
         }
