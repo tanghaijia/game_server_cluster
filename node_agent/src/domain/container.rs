@@ -24,6 +24,7 @@ pub trait Container {
     fn base(&self) -> &ContainerBase;
 }
 
+#[derive(Clone)]
 pub enum ConatinerType {
     DockerContainer,
 }
@@ -31,6 +32,7 @@ pub enum ConatinerType {
 /**
 * 游戏容器
 **/
+#[derive(Clone)]
 pub struct GameContainer {
     pub id: String,
     pub game_build: LocalGameBuild,
@@ -43,6 +45,7 @@ pub struct GameContainer {
 /**
 * 宿主机的文件路径
 **/
+#[derive(Clone)]
 pub struct HostFilePath {
     pub path: String,
 }
@@ -50,6 +53,7 @@ pub struct HostFilePath {
 /**
 * 游戏容器的文件路径
 **/
+#[derive(Clone)]
 pub struct ContainerFilePath {
     pub path: String,
 }
@@ -57,6 +61,7 @@ pub struct ContainerFilePath {
 /**
 * 一个宿主机和容器的路径映射
 **/
+#[derive(Clone)]
 pub struct ContainerFilePathMappingHost {
     pub host_path: HostFilePath,
     pub container_file_path: ContainerFilePath,
@@ -68,6 +73,8 @@ pub struct ContainerFilePathMappingHost {
 **/
 pub struct MappedGameContainerRootFilePath {}
 
+#[derive(Clone)]
 pub struct ContainerPortMapping {}
 
+#[derive(Clone)]
 pub struct ContainerResourceLimitation {}

@@ -239,7 +239,7 @@ where
             local_game_instance.status = crate::domain::GameInstanceStatus::Failed;
             self.game_instance_repos.save(&local_game_instance).await?;
             return Err(NodeAgentError::ConatinerFail {
-                source: crate::ports::ContainerError::NotFound(0),
+                source: crate::ports::ContainerError::NotFound(format!("instance id {} 无docker_id", instance_id)),
             });
         } else {
             let docker_id = docker_id.unwrap();

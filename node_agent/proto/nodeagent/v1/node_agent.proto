@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package nodeagent.v1;
+import "nodeagent/v1/instance.proto";
 
 service NodeAgentService {
   rpc PrepareGameBuild(PrepareGameBuildRequest) returns (PrepareGameBuildResponse);
@@ -11,6 +12,15 @@ service NodeAgentService {
   rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
   rpc InspectInstance(InspectInstanceRequest) returns (InspectInstanceResponse);
   rpc GetHeartbeat(GetHeartbeatRequest) returns (GetHeartbeatResponse);
+
+  // 获取所有instance
+  rpc GetInstances(GetInstancesRequest) returns (GetInstancesResponse);
+}
+
+message GetInstancesRequest {}
+
+message GetInstancesResponse {
+    repeated NodeAgentGameInstance instances = 1;
 }
 
 message PrepareGameBuildRequest {

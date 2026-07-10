@@ -5,13 +5,15 @@ use chrono::Utc;
 use log::error;
 use tonic::{Request, Response, Status};
 
+use prost_types::Timestamp;
+
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, GameInstance, InstanceAssignment, InstanceId, InstanceRuntimeRecord,
-        InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus,
-        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
-        SnapshotRestoreResult, StartInstanceArgument,
+        GameBuild, GameInstance, GameInstanceStatus, InstanceAssignment, InstanceId,
+        InstanceRuntimeRecord, InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind,
+        OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
+        SnapshotReference, SnapshotRestoreResult, StartInstanceArgument,
     },
     error::NodeAgentError,
     ports::{
@@ -21,12 +23,12 @@ use crate::{
     proto::node_agent::{
         self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
         CreateSnapshotResponse, FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild,
-        GetHeartbeatRequest, GetHeartbeatResponse, GetOperationRequest, GetOperationResponse,
-        InspectInstanceRequest, InspectInstanceResponse,
+        GetHeartbeatRequest, GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse,
+        GetOperationRequest, GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
         InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
         InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
-        NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
-        PrepareGameBuildRequest, PrepareGameBuildResponse,
+        NodeAgentGameInstance, NodeAgentGameInstanceStatus, NodeHeartbeat as ProtoNodeHeartbeat,
+        NodeOperation as ProtoNodeOperation, PrepareGameBuildRequest, PrepareGameBuildResponse,
         RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
         SnapshotReference as ProtoSnapshotReference,
         SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
@@ -237,6 +239,39 @@ where
             }),
         }))
     }
+
+    async fn get_instances(
+        &self,
+        _request: Request<GetInstancesRequest>,
+    ) -> Result<Response<GetInstancesResponse>, Status> {
+        let instances = self
+            .game_instance_repository
+            .get_all()
+            .await
+            .map_err(map_error)?;
+
+        let instances_list: Vec<NodeAgentGameInstance> = instances
+            .into_iter()
+            .map(|instance| NodeAgentGameInstance {
+                instance_id: instance.id,
+                status: map_node_agent_game_instance_status(instance.status),
+                container_id: instance.container_id,
+                game_build_id: instance.game_build_id,
+                create_time: Some(Timestamp {
+                    seconds: instance.create_time.timestamp(),
+                    nanos: instance.create_time.timestamp_subsec_nanos() as i32,
+                }),
+                update_time: Some(Timestamp {
+                    seconds: instance.update_time.timestamp(),
+                    nanos: instance.update_time.timestamp_subsec_nanos() as i32,
+                }),
+            })
+            .collect();
+
+        Ok(Response::new(GetInstancesResponse {
+            instances: instances_list,
+        }))
+    }
 }
 
 fn map_error(error: NodeAgentError) -> Status {
@@ -409,5 +444,16 @@ fn map_failure(value: FailureInfo) -> ProtoFailureInfo {
     ProtoFailureInfo {
         message: value.message,
         retryable: value.retryable,
+    }
+}
+
+fn map_node_agent_game_instance_status(status: GameInstanceStatus) -> i32 {
+    match status {
+        GameInstanceStatus::Pedding => NodeAgentGameInstanceStatus::Pedding as i32,
+        GameInstanceStatus::Preparing => NodeAgentGameInstanceStatus::Preparing as i32,
+        GameInstanceStatus::Running => NodeAgentGameInstanceStatus::Running as i32,
+        GameInstanceStatus::Stopping => NodeAgentGameInstanceStatus::Stopping as i32,
+        GameInstanceStatus::Stopped => NodeAgentGameInstanceStatus::Stopped as i32,
+        GameInstanceStatus::Failed => NodeAgentGameInstanceStatus::Failed as i32,
     }
 }

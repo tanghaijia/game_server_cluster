@@ -9,12 +9,13 @@ use chrono::Utc;
 use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
-        BuildCompatibility, BuildPreparation, BuildPreparationResult, Endpoint, Game, GameBuild,
-        GameContainer, GameInstance, GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord,
-        LocalGameBuild, ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId,
-        RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord, SnapshotRestorePlan,
-        SnapshotRestoreRequest, SnapshotRestoreResult, StartInstanceArgument, instance_data_path,
-        ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
+        BuildCompatibility, BuildPreparation, BuildPreparationResult, ConatinerType,
+        ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation, Endpoint,
+        Game, GameBuild, GameContainer, GameInstance, GameInstanceStatus, Image, InstanceId,
+        InstanceRuntimeRecord, LocalGameBuild, ModManifest, NodeAgentInfo, NodeId, NodeOperation,
+        OperationId, RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord,
+        SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult, StartInstanceArgument,
+        instance_data_path,
     },
     error::NodeAgentError,
     ports::{
@@ -127,11 +128,22 @@ impl GameInstanceRepository for FakeInstanceRuntime {
             .map_err(|_| NodeAgentError::Internal {
                 message: "fake game instance repository lock poisoned".to_string(),
             })?;
-        instances.get(&game_instance_id).cloned().ok_or_else(|| {
-            NodeAgentError::InstanceNotFound {
+        instances
+            .get(&game_instance_id)
+            .cloned()
+            .ok_or_else(|| NodeAgentError::InstanceNotFound {
                 instance_id: game_instance_id,
-            }
-        })
+            })
+    }
+
+    async fn get_all(&self) -> Result<Vec<GameInstance>, NodeAgentError> {
+        let instances = self
+            .game_instances
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "fake game instance repository lock poisoned".to_string(),
+            })?;
+        Ok(instances.values().cloned().collect())
     }
 }
 
@@ -456,15 +468,17 @@ impl AssetServiceFace for FakeAssetServiceFace {
 }
 
 #[derive(Default, Clone)]
-pub struct FakeImageClient;
+pub struct FakeImageClient {
+    containers: Arc<Mutex<HashMap<String, GameContainer>>>,
+}
 
 #[async_trait]
 impl ContainerClient for FakeImageClient {
-    async fn pull_image(&self, _image: &RemoteImage) -> anyhow::Result<Image> {
+    async fn pull_image(&self, image: &RemoteImage) -> anyhow::Result<Image> {
         Ok(Image {
-            id: "fake-image-id".to_string(),
-            name: "fake-image".to_string(),
-            tag: "lastest".to_string(),
+            id: image.id.to_string(),
+            name: image.name.to_string(),
+            tag: image.tag.to_string(),
             size: Some(1024),
             created_at: Utc::now(),
             status: crate::domain::ImageStatus::Runnable,
@@ -479,25 +493,51 @@ impl ContainerClient for FakeImageClient {
         Ok("0.1.0".to_string())
     }
 
-    async fn get_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+    async fn get_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        let containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        containers.get(&id).cloned().ok_or(ContainerError::Unknown)
     }
 
     async fn create_container(
         &self,
-        _game_build: LocalGameBuild,
-        _path_mapping: Option<ContainerFilePathMappingHost>,
-        _port_mapping: Option<ContainerPortMapping>,
-        _resource_limitation: Option<ContainerResourceLimitation>,
+        game_build: LocalGameBuild,
+        path_mapping: Option<ContainerFilePathMappingHost>,
+        port_mapping: Option<ContainerPortMapping>,
+        resource_limitation: Option<ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError> {
-        todo!()
+        let container = GameContainer {
+            id: format!("fake-container-{}", game_build.build_id),
+            game_build,
+            container: ConatinerType::DockerContainer,
+            container_file_path_mapping: path_mapping,
+            container_port_mapping: port_mapping,
+            resource_limitation,
+        };
+        let mut containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        let id = container.id.clone();
+        containers.insert(id, container.clone());
+        Ok(container)
     }
 
-    async fn stop_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+    async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        let mut containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        containers.remove(&id).ok_or(ContainerError::Unknown)
     }
 
-    async fn remove_container(&self, _id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+    async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        let mut containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        containers.remove(&id).ok_or(ContainerError::Unknown)
     }
 }

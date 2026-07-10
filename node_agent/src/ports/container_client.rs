@@ -32,7 +32,7 @@ pub trait ContainerClient: Send + Sync {
 #[derive(Error, Debug)]
 pub enum ContainerError {
     #[error("容器未找到 (ID: {0})")]
-    NotFound(u64),
+    NotFound(String),
 
     #[error("节点资源不足")]
     InsufficientResources,

@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let concrete_ops = Arc::new(InMemoryOperationRepository::default());
         let concrete_sysinfo = Arc::new(FakeSystemInfoProvider::default());
         let concrete_asset = Arc::new(FakeAssetServiceFace);
-        let concrete_image = Arc::new(FakeImageClient);
+        let concrete_image = Arc::new(FakeImageClient::default());
         let concrete_object_store = Arc::new(InMemoryObjectStore::new());
         let concrete_snapshot = Arc::new(FakeSnapshotRuntime);
 
