@@ -174,12 +174,13 @@ where
                 message: format!("get local game build fail: {}", err),
             })?;
 
-        let _ = self
+        let container = self
             .container_client
             .create_container(local_game_build, None, None, None)
             .await?;
 
         game_instance.status = crate::domain::GameInstanceStatus::Running;
+        game_instance.container_id = Some(container.id);
         self.game_instance_repos.save(&game_instance).await?;
 
         Ok(InstanceRuntimeRecord {
@@ -239,7 +240,10 @@ where
             local_game_instance.status = crate::domain::GameInstanceStatus::Failed;
             self.game_instance_repos.save(&local_game_instance).await?;
             return Err(NodeAgentError::ConatinerFail {
-                source: crate::ports::ContainerError::NotFound(format!("instance id {} 无docker_id", instance_id)),
+                source: crate::ports::ContainerError::NotFound(format!(
+                    "instance id {} 无docker_id",
+                    instance_id
+                )),
             });
         } else {
             let docker_id = docker_id.unwrap();
