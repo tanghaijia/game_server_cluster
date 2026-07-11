@@ -19,93 +19,16 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, ContainerClient, ContainerError, DockerInstanceRepository,
-        GameInstanceRepository, InstanceRuntime, NodeHeartbeat, OperationRepository,
-        SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
+        AssetServiceFace, ContainerClient, ContainerError, DockerInstanceRepository,
+        GameInstanceRepository, NodeHeartbeat, OperationRepository, Snapshot_manager,
+        SystemInfoProvider,
     },
 };
-
-#[derive(Default, Clone)]
-pub struct FakeBuildRuntime {
-    prepared: Arc<Mutex<HashSet<(String, String)>>>,
-}
-
-#[async_trait]
-impl BuildRuntime for FakeBuildRuntime {
-    async fn prepare_build(
-        &self,
-        request: BuildPreparation,
-    ) -> Result<BuildPreparationResult, NodeAgentError> {
-        let mut prepared = self.prepared.lock().map_err(|_| NodeAgentError::Internal {
-            message: "fake build runtime lock poisoned".to_string(),
-        })?;
-        prepared.insert((request.node_id.0, request.build.build_id.clone()));
-        Ok(BuildPreparationResult {
-            build_root: format!(
-                "/srv/game-cache/{}/{}",
-                request.build.game.id, request.build.build_id
-            ),
-            prepared_at: Utc::now(),
-            build_id: "fake_build".to_string(),
-        })
-    }
-}
 
 #[derive(Default, Clone)]
 pub struct FakeInstanceRuntime {
     runtimes: Arc<Mutex<HashMap<String, InstanceRuntimeRecord>>>,
     game_instances: Arc<Mutex<HashMap<String, GameInstance>>>,
-}
-
-#[async_trait]
-impl InstanceRuntime for FakeInstanceRuntime {
-    async fn start_instance(
-        &self,
-        spec: StartInstanceArgument,
-    ) -> Result<StartInstanceResult, NodeAgentError> {
-        let endpoint = Endpoint {
-            host: spec.assignment.node_id.0.clone(),
-            game_port: 23000,
-            query_port: Some(23001),
-        };
-        let record = InstanceRuntimeRecord {
-            instance_id: spec.instance_id.clone(),
-            node_id: spec.assignment.node_id.clone(),
-            state: RuntimeState::Running,
-            endpoint: Some(endpoint.clone()),
-            failure: None,
-            updated_at: Utc::now(),
-        };
-        let mut runtimes = self.runtimes.lock().map_err(|_| NodeAgentError::Internal {
-            message: "fake instance runtime lock poisoned".to_string(),
-        })?;
-        runtimes.insert(spec.instance_id.0, record);
-        Ok(StartInstanceResult {
-            endpoint: Some(endpoint),
-        })
-    }
-
-    async fn stop_instance(&self, instance_id: &InstanceId) -> Result<(), NodeAgentError> {
-        let mut runtimes = self.runtimes.lock().map_err(|_| NodeAgentError::Internal {
-            message: "fake instance runtime lock poisoned".to_string(),
-        })?;
-        if let Some(record) = runtimes.get_mut(&instance_id.0) {
-            record.state = RuntimeState::Stopped;
-            record.endpoint = None;
-            record.updated_at = Utc::now();
-        }
-        Ok(())
-    }
-
-    async fn inspect_instance(
-        &self,
-        instance_id: &InstanceId,
-    ) -> Result<Option<InstanceRuntimeRecord>, NodeAgentError> {
-        let runtimes = self.runtimes.lock().map_err(|_| NodeAgentError::Internal {
-            message: "fake instance runtime lock poisoned".to_string(),
-        })?;
-        Ok(runtimes.get(&instance_id.0).cloned())
-    }
 }
 
 #[async_trait]
@@ -151,7 +74,7 @@ impl GameInstanceRepository for FakeInstanceRuntime {
 pub struct FakeSnapshotRuntime;
 
 #[async_trait]
-impl SnapshotRuntime for FakeSnapshotRuntime {
+impl Snapshot_manager for FakeSnapshotRuntime {
     async fn create_snapshot(
         &self,
         request: SnapshotCaptureRequest,

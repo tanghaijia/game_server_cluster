@@ -19,9 +19,7 @@ use crate::{
         OperationStatus, SnapshotCaptureRequest, SnapshotRestoreRequest, StartInstanceArgument,
     },
     error::NodeAgentError,
-    ports::{
-        AssetServiceFace, ContainerClient, InstanceRuntime, OperationRepository, SnapshotRuntime,
-    },
+    ports::{AssetServiceFace, ContainerClient, OperationRepository, Snapshot_manager},
 };
 // ============================================================
 // TaskContext — 所有 handler 共享的依赖集合
@@ -31,7 +29,6 @@ use crate::{
 pub struct TaskContext {
     pub node_agent_service: Arc<dyn BackgroundWorker>,
     pub game_instance_repos: Arc<dyn GameInstanceRepository>,
-    pub snapshot_runtime: Arc<dyn SnapshotRuntime>,
     pub operations: Arc<dyn OperationRepository>,
     pub asset_service: Arc<dyn AssetServiceFace>,
     pub image_client: Arc<dyn ContainerClient>,
@@ -42,7 +39,6 @@ impl TaskContext {
     pub fn new(
         node_agent_service: Arc<dyn BackgroundWorker>,
         game_instance_repos: Arc<dyn GameInstanceRepository>,
-        snapshot_runtime: Arc<dyn SnapshotRuntime>,
         operations: Arc<dyn OperationRepository>,
         asset_service: Arc<dyn AssetServiceFace>,
         image_client: Arc<dyn ContainerClient>,
@@ -50,7 +46,6 @@ impl TaskContext {
         Self {
             node_agent_service,
             game_instance_repos,
-            snapshot_runtime,
             operations,
             asset_service,
             image_client,
@@ -266,32 +261,6 @@ async fn handle_create_snapshot(
     ctx: Data<Arc<TaskContext>>,
     _worker_ctx: WorkerContext,
 ) -> Result<(), BoxDynError> {
-    let instance_id = InstanceId(job.instance_id.clone());
-
-    let op = create_operation(
-        &ctx.operations,
-        OperationKind::CreateSnapshot,
-        Some(&job.instance_id),
-        None,
-        "creating snapshot in background",
-    )
-    .await?;
-
-    let request = SnapshotCaptureRequest {
-        instance_id,
-        snapshot_id: job.snapshot_id.clone(),
-    };
-
-    match ctx.snapshot_runtime.create_snapshot(request).await {
-        Ok(_snapshot) => {
-            succeed_operation(&ctx.operations, op, "snapshot created").await;
-        }
-        Err(e) => {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
-            return Err(e.into());
-        }
-    }
-
     Ok(())
 }
 
