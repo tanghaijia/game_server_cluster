@@ -1,6 +1,5 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use anyhow::{anyhow, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -62,9 +61,9 @@ pub const HOST_DATA_PATH: &str = "/data/game_instances";
 **/
 pub const HOST_LOCAL_SNAP_SHOTS_DATA_PATH: &str = "/data";
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HostSnapShotDataPath {
-    path: PathBuf,
+    path: String,
 }
 
 impl HostSnapShotDataPath {
@@ -72,19 +71,18 @@ impl HostSnapShotDataPath {
         let host = Path::new(HOST_DATA_PATH);
         let mut new_path = host.to_path_buf();
         new_path.push(path);
-        Self { path: new_path }
+        Self {
+            path: new_path.to_string_lossy().to_string(),
+        }
     }
 
     pub fn to_string(self) -> anyhow::Result<String> {
-        match self.path.into_os_string().into_string() {
-            Ok(string) => Ok(string),
-            Err(_) => bail!("path utf-8 error"),
-        }
+        Ok(self.path)
     }
 }
 
 impl AsRef<Path> for HostSnapShotDataPath {
     fn as_ref(&self) -> &Path {
-        &self.path
+        Path::new(&self.path)
     }
 }

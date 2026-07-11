@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::domain::HostSnapShotDataPath;
 
 /**
  * GameInstanceStatus
  */
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum GameInstanceStatus {
     Pedding,
     Preparing,
@@ -18,7 +19,7 @@ pub enum GameInstanceStatus {
 /**
 * NodeAgent视角上的业务的游戏服务
 **/
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GameInstance {
     pub id: String,
     pub status: GameInstanceStatus,

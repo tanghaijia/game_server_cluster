@@ -1,6 +1,10 @@
 mod docker_container_client;
+mod s3_object_store;
+mod sqlite_repositories;
 
 use async_trait::async_trait;
+pub use s3_object_store::*;
+pub use sqlite_repositories::*;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
