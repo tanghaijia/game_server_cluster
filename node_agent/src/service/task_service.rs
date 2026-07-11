@@ -97,6 +97,14 @@ pub struct RestoreSnapshotJob {
     pub operation: NodeOperation,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CleanInstanceJob {
+    pub operation_id: String,
+    pub instance_id: String,
+    pub bucket: String,
+    pub key: String,
+}
+
 // ============================================================
 // Operation 辅助函数
 // ============================================================
@@ -317,6 +325,37 @@ async fn handle_restore_snapshot(
     Ok(())
 }
 
+async fn handle_clean_instance(
+    job: CleanInstanceJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let op_id = OperationId(job.operation_id);
+    let instance_id = InstanceId(job.instance_id.clone());
+
+    let op = ctx
+        .operations
+        .get(&op_id)
+        .await?
+        .expect("can not find operation");
+    running_operation(&ctx.operations, op.clone()).await;
+    match ctx
+        .node_agent_service
+        .clean_instance(instance_id, job.bucket, job.key)
+        .await
+    {
+        Ok(_) => {
+            succeed_operation(&ctx.operations, op, "clean instance finish").await;
+        }
+        Err(e) => {
+            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            return Err(e.into());
+        }
+    }
+
+    Ok(())
+}
+
 // ============================================================
 // 启动 Worker（每个 job 类型一个独立 worker）
 // ============================================================
@@ -406,6 +445,21 @@ pub fn start_all_workers(
         }));
     }
 
+    // --- CleanInstance Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("clean-instance-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_clean_instance)
+                .run()
+                .await
+                .expect("clean-instance worker crashed");
+        }));
+    }
+
     handles
 }
 
@@ -480,14 +534,12 @@ pub async fn enqueue_start_instance(
     };
     let _ = ops.save(&op).await;
 
-    let game_instance = GameInstance {
-        id: argument.instance_id.0.clone(),
-        status: crate::domain::GameInstanceStatus::Pedding,
-        container_id: None,
-        game_build_id: argument.build.build_id.clone(),
-        create_time: Utc::now(),
-        update_time: Utc::now(),
-    };
+    let game_instance = GameInstance::new(
+        argument.instance_id.0.clone(),
+        crate::domain::GameInstanceStatus::Pedding,
+        None,
+        argument.build.build_id.clone(),
+    );
     if let Err(err) = game_instance_repository.save(&game_instance).await {
         fail_operation(ops, op.clone(), &err.to_string().as_str()).await;
         return op;
@@ -564,4 +616,37 @@ pub async fn enqueue_restore_snapshot(
             operation,
         })
         .await;
+}
+
+pub async fn enqueue_clean_instance(
+    pool: &SqlitePool,
+    ops: &Arc<dyn OperationRepository>,
+    instance_id: &str,
+    bucket: &str,
+    key: &str,
+) -> NodeOperation {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind: OperationKind::CleanInstance,
+        status: OperationStatus::Pending,
+        instance_id: Some(InstanceId(instance_id.to_string())),
+        build_id: None,
+        message: Some("instance clean queued".to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    let _ = ops.save(&op).await;
+
+    let job_op_id = op.operation_id.0.clone();
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(CleanInstanceJob {
+            operation_id: job_op_id,
+            instance_id: instance_id.to_string(),
+            bucket: bucket.to_string(),
+            key: key.to_string(),
+        })
+        .await;
+
+    op
 }

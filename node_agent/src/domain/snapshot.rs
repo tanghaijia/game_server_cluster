@@ -62,6 +62,7 @@ pub const HOST_DATA_PATH: &str = "/data/game_instances";
 **/
 pub const HOST_LOCAL_SNAP_SHOTS_DATA_PATH: &str = "/data";
 
+#[derive(Clone)]
 pub struct HostSnapShotDataPath {
     path: PathBuf,
 }

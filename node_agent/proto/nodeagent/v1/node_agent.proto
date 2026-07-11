@@ -15,12 +15,25 @@ service NodeAgentService {
 
   // 获取所有instance
   rpc GetInstances(GetInstancesRequest) returns (GetInstancesResponse);
+
+  // StopInstance后收尾工作
+  rpc CleanInstance(CleanInstanceRequest) returns (CleanInstanceResponse);
 }
 
 message GetInstancesRequest {}
 
 message GetInstancesResponse {
     repeated NodeAgentGameInstance instances = 1;
+}
+
+message CleanInstanceRequest {
+    string instance_id = 1;
+    string bucket = 2;
+    string key = 3;
+}
+
+message CleanInstanceResponse {
+    NodeOperation operation = 1;
 }
 
 message PrepareGameBuildRequest {
@@ -227,6 +240,7 @@ enum OperationKind {
   OPERATION_KIND_STOP_INSTANCE = 3;
   OPERATION_KIND_CREATE_SNAPSHOT = 4;
   OPERATION_KIND_RESTORE_SNAPSHOT = 5;
+  OPERATION_KIND_CLEAN_INSTANCE = 6;
 }
 
 enum OperationStatus {

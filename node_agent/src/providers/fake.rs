@@ -245,6 +245,18 @@ impl SystemInfoProvider for FakeSystemInfoProvider {
             running_instances: 0,
         })
     }
+
+    async fn get_host_ip(&self) -> Result<std::net::IpAddr, crate::domain::SystemError> {
+        Ok(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)))
+    }
+
+    async fn set_node_id(&self, _node_id: String) {
+        // no-op for fake
+    }
+
+    async fn get_node_id(&self) -> Option<String> {
+        Some(self.node_id.0.clone())
+    }
 }
 
 #[derive(Default, Clone)]
@@ -288,8 +300,26 @@ impl AssetServiceFace for FakeAssetServiceFace {
         _build_id: Option<String>,
         _snapshot_type: i32,
         _source_node: Option<String>,
-    ) -> Result<String, NodeAgentError> {
-        Ok("fake-snapshot-id".to_string())
+    ) -> Result<SnapshotRecord, NodeAgentError> {
+        Ok(SnapshotRecord {
+            snapshot_id: "fake-snapshot-id".to_string(),
+            instance_id: _instance_id.to_string(),
+            build_id: _build_id,
+            snapshot_type: _snapshot_type,
+            instance_data_path: "/data/fake".to_string(),
+            storage_uri: None,
+            manifest_uri: None,
+            checksum: None,
+            status: 0,
+            source_node: _source_node,
+            created_at: Utc::now().to_rfc3339(),
+            completed_at: None,
+            failure_message: None,
+            bucket: "fake-bucket".to_string(),
+            key: "fake-key".to_string(),
+            host: "127.0.0.1".to_string(),
+            host_port: 8888,
+        })
     }
 
     async fn complete_snapshot_record(

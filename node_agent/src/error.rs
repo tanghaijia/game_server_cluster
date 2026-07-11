@@ -29,4 +29,6 @@ pub enum NodeAgentError {
         #[from]
         source: ContainerError,
     },
+    #[error("Path error: {message}")]
+    PathError { message: String },
 }

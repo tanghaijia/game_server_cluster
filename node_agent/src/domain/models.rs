@@ -86,6 +86,7 @@ pub enum OperationKind {
     StopInstance,
     CreateSnapshot,
     RestoreSnapshot,
+    CleanInstance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

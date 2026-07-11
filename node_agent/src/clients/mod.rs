@@ -206,7 +206,7 @@ impl AssetServiceFace for AssetServiceGrpcClient {
         build_id: Option<String>,
         snapshot_type: i32,
         source_node: Option<String>,
-    ) -> Result<String, NodeAgentError> {
+    ) -> Result<SnapshotRecord, NodeAgentError> {
         use crate::proto::asset_service::CreateSnapshotRequest;
 
         let mut client = self.asset.lock().await;
@@ -228,7 +228,7 @@ impl AssetServiceFace for AssetServiceGrpcClient {
             .ok_or_else(|| NodeAgentError::Internal {
                 message: "create_snapshot returned empty snapshot".to_string(),
             })?;
-        Ok(snapshot.snapshot_id)
+        Ok(map_snapshot_record(snapshot))
     }
 
     async fn complete_snapshot_record(

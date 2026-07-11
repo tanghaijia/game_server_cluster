@@ -1,6 +1,11 @@
+use std::net::IpAddr;
+
 use async_trait::async_trait;
 
-use crate::{domain::NodeId, error::NodeAgentError};
+use crate::{
+    domain::{NodeId, SystemError},
+    error::NodeAgentError,
+};
 
 #[derive(Debug, Clone)]
 pub struct NodeHeartbeat {
@@ -14,4 +19,10 @@ pub struct NodeHeartbeat {
 #[async_trait]
 pub trait SystemInfoProvider: Send + Sync {
     async fn heartbeat(&self) -> Result<NodeHeartbeat, NodeAgentError>;
+
+    async fn get_host_ip(&self) -> Result<IpAddr, SystemError>;
+
+    async fn set_node_id(&self, node_id: String);
+
+    async fn get_node_id(&self) -> Option<String>;
 }

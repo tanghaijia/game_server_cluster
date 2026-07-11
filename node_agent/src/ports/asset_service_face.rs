@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 
 use crate::domain::{
-    BuildCompatibility, GameBuild, ModManifest, NodeAgentInfo, SnapshotRecord,
-    SnapshotRestorePlan,
+    BuildCompatibility, GameBuild, ModManifest, NodeAgentInfo, SnapshotRecord, SnapshotRestorePlan,
 };
 use crate::error::NodeAgentError;
 
@@ -31,8 +30,8 @@ pub trait AssetServiceFace: Send + Sync {
         instance_id: &str,
         build_id: Option<String>,
         snapshot_type: i32,
-        source_node: Option<String>,
-    ) -> Result<String, NodeAgentError>;
+        source_node_id: Option<String>,
+    ) -> Result<SnapshotRecord, NodeAgentError>;
 
     /// 完成快照（上传完成后调用）。
     async fn complete_snapshot_record(
@@ -79,10 +78,7 @@ pub trait AssetServiceFace: Send + Sync {
     ) -> Result<SnapshotRestorePlan, NodeAgentError>;
 
     /// 获取模组清单。
-    async fn get_mod_manifest(
-        &self,
-        manifest_id: &str,
-    ) -> Result<ModManifest, NodeAgentError>;
+    async fn get_mod_manifest(&self, manifest_id: &str) -> Result<ModManifest, NodeAgentError>;
 
     /// 检查构建与模组清单的兼容性。
     async fn check_build_mod_compatibility(

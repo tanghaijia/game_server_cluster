@@ -9,6 +9,7 @@ service AssetService {
   rpc ResolveGameBuild(ResolveGameBuildRequest) returns (ResolveGameBuildResponse);
   rpc RegisterGameBuild(RegisterGameBuildRequest) returns (RegisterGameBuildResponse);
   rpc GetGameBuild(GetGameBuildRequest) returns (GetGameBuildResponse);
+
   rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
   rpc CompleteSnapshot(CompleteSnapshotRequest) returns (CompleteSnapshotResponse);
   rpc FailSnapshot(FailSnapshotRequest) returns (FailSnapshotResponse);
@@ -17,6 +18,7 @@ service AssetService {
   rpc SetLatestSnapshot(SetLatestSnapshotRequest) returns (SetLatestSnapshotResponse);
   rpc GetSnapshotRestorePlan(GetSnapshotRestorePlanRequest) returns (GetSnapshotRestorePlanResponse);
   rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+
   rpc RegisterModManifest(RegisterModManifestRequest) returns (RegisterModManifestResponse);
   rpc GetModManifest(GetModManifestRequest) returns (GetModManifestResponse);
   rpc CheckBuildModCompatibility(CheckBuildModCompatibilityRequest) returns (CheckBuildModCompatibilityResponse);

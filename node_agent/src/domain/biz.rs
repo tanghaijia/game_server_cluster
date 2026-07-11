@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 
+use crate::domain::HostSnapShotDataPath;
+
 /**
  * GameInstanceStatus
  */
@@ -22,8 +24,28 @@ pub struct GameInstance {
     pub status: GameInstanceStatus,
     pub container_id: Option<String>,
     pub game_build_id: String,
+    pub host_data_path: HostSnapShotDataPath,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
+}
+
+impl GameInstance {
+    pub fn new(
+        id: String,
+        status: GameInstanceStatus,
+        container_id: Option<String>,
+        game_build_id: String,
+    ) -> Self {
+        Self {
+            id: id.clone(),
+            status,
+            container_id,
+            game_build_id,
+            host_data_path: HostSnapShotDataPath::new(id),
+            create_time: Utc::now(),
+            update_time: Utc::now(),
+        }
+    }
 }
 
 /**

@@ -8,7 +8,8 @@ use crate::domain::{
     RuntimeState,
 };
 use crate::ports::{ContainerClient, GameInstanceRepository, ObjectStore};
-use crate::service::download_and_extract_tar_zst;
+use crate::proto::asset_service::SnapshotType;
+use crate::service::{download_and_extract_tar_zst, upload_dir_as_tar_zst};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
@@ -44,6 +45,13 @@ pub trait BackgroundWorker: Send + Sync {
     ) -> Result<SnapshotRestoreResult, NodeAgentError>;
 
     async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
+
+    async fn clean_instance(
+        &self,
+        instance_id: InstanceId,
+        bucket: String,
+        key: String,
+    ) -> Result<(), NodeAgentError>;
 }
 
 pub struct NodeAgentService<I, S, A, IMC>
@@ -251,6 +259,37 @@ where
             self.game_instance_repos.save(&local_game_instance).await?;
             self.container_client.stop_container(docker_id).await?;
         }
+
+        Ok(())
+    }
+
+    async fn clean_instance(
+        &self,
+        instance_id: InstanceId,
+        bucket: String,
+        key: String,
+    ) -> Result<(), NodeAgentError> {
+        let instance_id = instance_id.0;
+        let mut local_game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
+        let game_build_id = local_game_instance.game_build_id.clone();
+        let node_id = self
+            .system_info
+            .get_node_id()
+            .await
+            .expect("node_id not registed.");
+        upload_dir_as_tar_zst(
+            &*self.object_store,
+            bucket.as_str(),
+            key.as_str(),
+            local_game_instance.host_data_path.as_ref(),
+        )
+        .await
+        .map_err(|err| NodeAgentError::S3UploadFail {
+            message: err.to_string(),
+        })?;
+
+        local_game_instance.status = crate::domain::GameInstanceStatus::Stopped;
+        self.game_instance_repos.save(&local_game_instance).await?;
 
         Ok(())
     }

@@ -55,7 +55,24 @@ fn collect_file_entries(src_dir: &Path) -> Result<Vec<Entry>, std::io::Error> {
 // ============================================================
 
 /// 将目录以 tar.zst 格式流式上传到对象存储，同时计算压缩数据的 SHA256。
+/// 文件路径是去掉 src_dir 前缀后的相对路径存入 manifest。
+/// 举例
 ///
+/// 磁盘上的 src_dir = /data/instances/abc/
+/// ├── level.dat
+/// ├── region/
+/// │   └── r.0.0.mca
+/// └── playerdata/
+///     └── uuid.dat
+///
+/// ↓ 上传后 tar包内的路径结构
+///
+/// ./
+/// ├── level.dat
+/// ├── region/r.0.0.mca
+/// └── playerdata/uuid.dat
+///
+/// 不包含 abc/ 这一层。
 /// 返回值为 hex 编码的 SHA256 摘要，格式为 `"sha256:abcdef..."`。
 pub async fn upload_dir_as_tar_zst(
     object_store: &dyn ObjectStore,
@@ -138,7 +155,9 @@ pub async fn upload_dir_as_tar_zst(
     }
 
     // 5. 上传到对象存储
-    object_store.put_object(bucket, key, compressed_data).await?;
+    object_store
+        .put_object(bucket, key, compressed_data)
+        .await?;
 
     // 6. 取出最终哈希值
     let checksum = format!("sha256:{}", hex::encode(hasher.finalize()));

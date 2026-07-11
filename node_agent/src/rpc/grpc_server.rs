@@ -21,10 +21,11 @@ use crate::{
         SystemInfoProvider,
     },
     proto::node_agent::{
-        self, BuildPreparationResult as ProtoBuildPreparationResult, CreateSnapshotRequest,
-        CreateSnapshotResponse, FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild,
-        GetHeartbeatRequest, GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse,
-        GetOperationRequest, GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
+        self, BuildPreparationResult as ProtoBuildPreparationResult, CleanInstanceRequest,
+        CleanInstanceResponse, CreateSnapshotRequest, CreateSnapshotResponse,
+        FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild, GetHeartbeatRequest,
+        GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
+        GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
         InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
         InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
         NodeAgentGameInstance, NodeAgentGameInstanceStatus, NodeHeartbeat as ProtoNodeHeartbeat,
@@ -36,8 +37,8 @@ use crate::{
         node_agent_service_server::NodeAgentService as NodeAgentRpc,
     },
     service::{
-        NodeAgentService, enqueue_prepare_build, enqueue_restore_snapshot, enqueue_start_instance,
-        enqueue_stop_instance,
+        NodeAgentService, enqueue_clean_instance, enqueue_prepare_build, enqueue_restore_snapshot,
+        enqueue_start_instance, enqueue_stop_instance,
     },
 };
 
@@ -272,6 +273,24 @@ where
             instances: instances_list,
         }))
     }
+
+    async fn clean_instance(
+        &self,
+        request: Request<CleanInstanceRequest>,
+    ) -> Result<Response<CleanInstanceResponse>, Status> {
+        let request = request.into_inner();
+        let operation = enqueue_clean_instance(
+            &self.pool,
+            &self.operations,
+            &request.instance_id,
+            &request.bucket,
+            &request.key,
+        )
+        .await;
+        Ok(Response::new(CleanInstanceResponse {
+            operation: Some(map_operation(operation)),
+        }))
+    }
 }
 
 fn map_error(error: NodeAgentError) -> Status {
@@ -287,6 +306,7 @@ fn map_error(error: NodeAgentError) -> Status {
         | NodeAgentError::S3DownloadFail { message }
         | NodeAgentError::S3UploadFail { message } => Status::internal(message),
         NodeAgentError::ConatinerFail { .. } => Status::internal("container error".to_string()),
+        NodeAgentError::PathError { message } => Status::internal(message),
     }
 }
 
@@ -383,6 +403,7 @@ fn map_operation(value: NodeOperation) -> ProtoNodeOperation {
             OperationKind::StopInstance => node_agent::OperationKind::StopInstance as i32,
             OperationKind::CreateSnapshot => node_agent::OperationKind::CreateSnapshot as i32,
             OperationKind::RestoreSnapshot => node_agent::OperationKind::RestoreSnapshot as i32,
+            OperationKind::CleanInstance => node_agent::OperationKind::CleanInstance as i32,
         },
         status: match value.status {
             OperationStatus::Pending => node_agent::OperationStatus::Pending as i32,
