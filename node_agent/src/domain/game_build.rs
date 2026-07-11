@@ -18,7 +18,7 @@ pub struct GameBuild {
 /**
 * 本地的被维护的GameBuild
 **/
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct LocalGameBuild {
     pub build_id: String,
     pub game: Game,
