@@ -4,11 +4,12 @@ use chrono::Utc;
 use lmrc_docker::DockerClient;
 
 use crate::domain::{
-    ConatinerType, GameContainer, HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage,
-    RuntimeState,
+    ConatinerType, GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager,
+    NodeId, RemoteImage, RuntimeState,
 };
 use crate::ports::{ContainerClient, GameInstanceRepository, ObjectStore};
 use crate::proto::asset_service::SnapshotType;
+use crate::proto::node_agent::NodeAgentGameInstance;
 use crate::service::{download_and_extract_tar_zst, upload_dir_as_tar_zst};
 use crate::{
     domain::{
@@ -103,8 +104,9 @@ where
     pub async fn inspect_instance(
         &self,
         instance_id: &InstanceId,
-    ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
-        todo!()
+    ) -> Result<GameInstance, NodeAgentError> {
+        let instance = self.game_instance_repos.get(instance_id.0.clone()).await?;
+        Ok(instance)
     }
 
     pub async fn heartbeat(&self) -> Result<crate::ports::NodeHeartbeat, NodeAgentError> {

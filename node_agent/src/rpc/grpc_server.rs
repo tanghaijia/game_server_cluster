@@ -215,13 +215,29 @@ where
         request: Request<InspectInstanceRequest>,
     ) -> Result<Response<InspectInstanceResponse>, Status> {
         let request = request.into_inner();
-        let runtime = self
+        let instance = self
             .service
             .inspect_instance(&InstanceId(request.instance_id))
             .await
             .map_err(map_error)?;
+
+        let node_agent_instance = NodeAgentGameInstance {
+            instance_id: instance.id,
+            status: map_node_agent_game_instance_status(instance.status),
+            container_id: instance.container_id,
+            game_build_id: instance.game_build_id,
+            create_time: Some(Timestamp {
+                seconds: instance.create_time.timestamp(),
+                nanos: instance.create_time.timestamp_subsec_nanos() as i32,
+            }),
+            update_time: Some(Timestamp {
+                seconds: instance.update_time.timestamp(),
+                nanos: instance.update_time.timestamp_subsec_nanos() as i32,
+            }),
+        };
+
         Ok(Response::new(InspectInstanceResponse {
-            runtime: Some(map_runtime_record(runtime)),
+            instance: Some(node_agent_instance),
         }))
     }
 

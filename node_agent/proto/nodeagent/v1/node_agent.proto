@@ -10,11 +10,12 @@ service NodeAgentService {
   rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
   rpc RestoreSnapshot(RestoreSnapshotRequest) returns (RestoreSnapshotResponse);
   rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
-  rpc InspectInstance(InspectInstanceRequest) returns (InspectInstanceResponse);
   rpc GetHeartbeat(GetHeartbeatRequest) returns (GetHeartbeatResponse);
 
   // 获取所有instance
   rpc GetInstances(GetInstancesRequest) returns (GetInstancesResponse);
+
+  rpc InspectInstance(InspectInstanceRequest) returns (InspectInstanceResponse);
 
   // StopInstance后收尾工作
   rpc CleanInstance(CleanInstanceRequest) returns (CleanInstanceResponse);
@@ -99,7 +100,7 @@ message InspectInstanceRequest {
 }
 
 message InspectInstanceResponse {
-  InstanceRuntimeRecord runtime = 1;
+  NodeAgentGameInstance instance = 1;
 }
 
 message GetHeartbeatRequest {}
