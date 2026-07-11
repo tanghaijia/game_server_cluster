@@ -1,19 +1,28 @@
+use std::sync::Arc;
+
 use crate::domain::{
-    ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation, GameContainer,
-    Image, ImageRepository, ImageRepositoryCredentials, ImageStatus, LocalGameBuild, RemoteImage,
+    ConatinerType, GameContainer, Image, ImageRepository, ImageRepositoryCredentials, ImageStatus,
+    LocalGameBuild, RemoteImage,
 };
-use crate::ports::{ContainerClient, ContainerError};
+use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository};
 use async_trait::async_trait;
 use chrono::Utc;
 use lmrc_docker::{DockerClient, DockerCredentials};
 
-struct DockerContainerClient {
+pub struct DockerContainerClient {
     image_repository: ImageRepository,
+    docker_instances: Arc<dyn DockerInstanceRepository>,
 }
 
 impl DockerContainerClient {
-    fn new(image_repository: ImageRepository) -> Self {
-        DockerContainerClient { image_repository }
+    pub fn new(
+        image_repository: ImageRepository,
+        docker_instances: Arc<dyn DockerInstanceRepository>,
+    ) -> Self {
+        DockerContainerClient {
+            image_repository,
+            docker_instances,
+        }
     }
 }
 
@@ -22,25 +31,25 @@ impl ContainerClient for DockerContainerClient {
     async fn pull_image(&self, remote_image: &RemoteImage) -> anyhow::Result<Image> {
         let client = DockerClient::new()?;
 
-        // 1. 配置私有仓库的认证信息
-        let registry_credentials = DockerContainerClient::map_credentials(
-            self.image_repository.image_repository_credentials.clone(),
-        );
-
-        // 2. 拉取镜像，传递认证信息
-        //    注意：这里的 "my-private-registry.example.com/my-image:tag"
-        //    是完整的镜像地址
-        let id = DockerContainerClient::map_image_full_name(
+        let id = Self::map_image_full_name(
             &self.image_repository.address,
             remote_image.name.as_str(),
             remote_image.tag.as_str(),
         );
-        client
-            .images()
-            .pull(id.as_str(), Some(registry_credentials))
-            .await?;
 
-        println!("私有镜像拉取成功！: {}", remote_image.name);
+        // 如果本地已存在，跳过远端 pull
+        if client.registry().image_exists_locally(&id).await? {
+            println!("镜像本地已存在，跳过 pull: {}", id);
+        } else {
+            let registry_credentials =
+                Self::map_credentials(self.image_repository.image_repository_credentials.clone());
+            client
+                .images()
+                .pull(id.as_str(), Some(registry_credentials))
+                .await?;
+
+            println!("私有镜像拉取成功！: {}", remote_image.name);
+        }
 
         Ok(Image {
             id: remote_image.id.clone(),
@@ -53,33 +62,150 @@ impl ContainerClient for DockerContainerClient {
     }
 
     async fn check_image(&self, image: &RemoteImage) -> anyhow::Result<bool> {
-        todo!()
+        let client = DockerClient::new()?;
+        let full_name = Self::map_image_full_name(
+            &self.image_repository.address,
+            &image.name,
+            &image.tag,
+        );
+        Ok(client.registry().image_exists_locally(&full_name).await?)
     }
 
     async fn last_version(&self, image: &RemoteImage) -> anyhow::Result<String> {
-        todo!()
+        let client = DockerClient::new()?;
+        let images = client.images().list(true).await?;
+        let repo_prefix = format!("{}/{}", self.image_repository.address, image.name);
+
+        let mut candidates: Vec<_> = images
+            .into_iter()
+            .filter(|img| img.repo_tags.iter().any(|t| t.starts_with(&repo_prefix)))
+            .collect();
+        candidates.sort_by_key(|img| -img.created);
+
+        candidates
+            .first()
+            .and_then(|img| {
+                img.repo_tags
+                    .iter()
+                    .find(|t| t.starts_with(&repo_prefix))
+                    .and_then(|t| t.rsplit(':').next().map(|s| s.to_string()))
+            })
+            .ok_or_else(|| anyhow::anyhow!("no local image found for {}", image.name))
     }
 
     async fn get_container(&self, id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+        self.docker_instances
+            .get(&id)
+            .await
+            .map_err(|e| ContainerError::Unknown)?
+            .ok_or_else(|| ContainerError::NotFound(id))
     }
 
     async fn create_container(
         &self,
         game_build: LocalGameBuild,
-        path_mapping: Option<ContainerFilePathMappingHost>,
-        port_mapping: Option<ContainerPortMapping>,
-        resource_limitation: Option<ContainerResourceLimitation>,
+        path_mapping: Option<crate::domain::ContainerFilePathMappingHost>,
+        port_mapping: Option<crate::domain::ContainerPortMapping>,
+        resource_limitation: Option<crate::domain::ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError> {
-        todo!()
+        let client = DockerClient::new().map_err(to_io_error)?;
+
+        let image_full_name = Self::map_image_full_name(
+            &self.image_repository.address,
+            &game_build.image.name,
+            &game_build.image.tag,
+        );
+
+        // 构建容器
+        let mut builder = client
+            .containers()
+            .create(&image_full_name)
+            .name(format!("game-{}", game_build.build_id))
+            .label("managed-by", "node-agent");
+
+        // 挂载卷
+        if let Some(ref mapping) = path_mapping {
+            builder = builder.volume(
+                &mapping.host_path.path,
+                &mapping.container_file_path.path,
+            );
+        }
+
+        // 端口映射
+        if port_mapping.is_some() {
+            // ContainerPortMapping 当前为空结构体，后续扩展
+        }
+
+        // 资源限制
+        if resource_limitation.is_some() {
+            // ContainerResourceLimitation 当前为空结构体，后续扩展
+        }
+
+        let container_ref = builder.build().await.map_err(to_io_error)?;
+        let container_id = container_ref.id().to_string();
+
+        // 启动容器
+        container_ref.start().await.map_err(to_io_error)?;
+
+        println!("容器创建并启动成功: {}", container_id);
+
+        let container = GameContainer {
+            id: container_id,
+            game_build,
+            container: ConatinerType::DockerContainer,
+            container_file_path_mapping: path_mapping,
+            container_port_mapping: port_mapping,
+            resource_limitation,
+        };
+
+        // 持久化到 repository
+        self.docker_instances
+            .save(&container)
+            .await
+            .map_err(|e| ContainerError::Unknown)?;
+
+        Ok(container)
     }
 
     async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+        // 先从 repo 取出记录
+        let container = self.docker_instances.get(&id).await.map_err(|_| ContainerError::Unknown)?.ok_or_else(|| ContainerError::NotFound(id.clone()))?;
+
+        let client = DockerClient::new().map_err(to_io_error)?;
+        client
+            .containers()
+            .get(&id)
+            .stop(Some(30))
+            .await
+            .map_err(|e| match e {
+                lmrc_docker::DockerError::ContainerNotFound(_) => ContainerError::NotFound(id),
+                _ => ContainerError::Unknown,
+            })?;
+
+        Ok(container)
     }
 
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
-        todo!()
+        let container = self.docker_instances.get(&id).await.map_err(|_| ContainerError::Unknown)?.ok_or_else(|| ContainerError::NotFound(id.clone()))?;
+
+        let client = DockerClient::new().map_err(to_io_error)?;
+        client
+            .containers()
+            .get(&id)
+            .remove(false, false)
+            .await
+            .map_err(|e| match e {
+                lmrc_docker::DockerError::ContainerNotFound(_) => ContainerError::NotFound(id.clone()),
+                _ => ContainerError::Unknown,
+            })?;
+
+        // 清除 repo 记录
+        self.docker_instances
+            .delete(&id)
+            .await
+            .map_err(|_| ContainerError::Unknown)?;
+
+        Ok(container)
     }
 }
 
@@ -100,5 +226,11 @@ impl DockerContainerClient {
 
     fn map_image_full_name(register_address: &str, image_name: &str, tag: &str) -> String {
         format!("{}/{}:{}", register_address, image_name, tag)
+    }
+}
+
+fn to_io_error(e: lmrc_docker::DockerError) -> ContainerError {
+    ContainerError::IOError {
+        source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
     }
 }

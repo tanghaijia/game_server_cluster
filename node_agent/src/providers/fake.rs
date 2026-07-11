@@ -19,9 +19,9 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, BuildRuntime, ContainerClient, ContainerError, GameInstanceRepository,
-        InstanceRuntime, NodeHeartbeat, OperationRepository, SnapshotRuntime, StartInstanceResult,
-        SystemInfoProvider,
+        AssetServiceFace, BuildRuntime, ContainerClient, ContainerError, DockerInstanceRepository,
+        GameInstanceRepository, InstanceRuntime, NodeHeartbeat, OperationRepository,
+        SnapshotRuntime, StartInstanceResult, SystemInfoProvider,
     },
 };
 
@@ -569,5 +569,40 @@ impl ContainerClient for FakeImageClient {
             .lock()
             .map_err(|_| ContainerError::Unknown)?;
         containers.remove(&id).ok_or(ContainerError::Unknown)
+    }
+}
+
+// ============================================================
+// InMemoryDockerInstanceRepository — 用于测试
+// ============================================================
+
+#[derive(Default, Clone)]
+pub struct InMemoryDockerInstanceRepository {
+    store: Arc<std::sync::Mutex<HashMap<String, GameContainer>>>,
+}
+
+#[async_trait]
+impl DockerInstanceRepository for InMemoryDockerInstanceRepository {
+    async fn save(&self, container: &GameContainer) -> Result<(), NodeAgentError> {
+        let mut store = self.store.lock().map_err(|e| NodeAgentError::Internal {
+            message: format!("docker instance repo lock poisoned: {e}"),
+        })?;
+        store.insert(container.id.clone(), container.clone());
+        Ok(())
+    }
+
+    async fn get(&self, container_id: &str) -> Result<Option<GameContainer>, NodeAgentError> {
+        let store = self.store.lock().map_err(|e| NodeAgentError::Internal {
+            message: format!("docker instance repo lock poisoned: {e}"),
+        })?;
+        Ok(store.get(container_id).cloned())
+    }
+
+    async fn delete(&self, container_id: &str) -> Result<(), NodeAgentError> {
+        let mut store = self.store.lock().map_err(|e| NodeAgentError::Internal {
+            message: format!("docker instance repo lock poisoned: {e}"),
+        })?;
+        store.remove(container_id);
+        Ok(())
     }
 }
