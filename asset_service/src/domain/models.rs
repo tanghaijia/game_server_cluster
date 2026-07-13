@@ -51,7 +51,8 @@ pub struct GameBuild {
     /// 构建产物的下载地址（S3 / Docker Registry URI 等）
     pub artifact_uri: Option<String>,
     /// 构建产物的校验和，用于下载后完整性校验
-    pub checksum: Option<String>,
+    pub artifact_image_name: Option<String>,
+    pub artifact_image_tag: Option<String>,
     /// 当前状态
     pub status: BuildStatus,
     /// 是否钉选。钉选的构建不会被自动清理回收

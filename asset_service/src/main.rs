@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use asset_service::{
-    domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild},
+    domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, Game, GameBuild},
     ports::{GameRepository, SystemClock},
     proto::asset_service::{
         asset_service_server::AssetServiceServer, business_service_server::BusinessServiceServer,
@@ -25,15 +25,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let game_repo = Arc::new(InMemoryGameRepository::default());
 
+    let fake_game_repos = Arc::new(InMemoryGameRepository::default());
     let service = Arc::new(AssetService::new(
         Arc::new(InMemoryBuildRepository::default()),
         Arc::new(InMemorySnapshotRepository::default()),
         Arc::new(InMemoryModManifestRepository::default()),
         Arc::new(SystemClock),
-        Arc::new(InMemoryGameRepository::default()),
+        fake_game_repos.clone(),
     ));
 
-    seed_demo_builds(service.clone()).await?;
+    seed_demo_builds(service.clone(), fake_game_repos.clone()).await?;
 
     // 启动 Steam 分支定期同步（每 15 分钟）
     let sync = SteamBranchSync::new(
@@ -74,19 +75,29 @@ async fn seed_demo_builds(
             InMemoryGameRepository,
         >,
     >,
+    game_repository: Arc<InMemoryGameRepository>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
+    let game_id = "dst".to_string();
+    game_repository
+        .save(&Game {
+            id: game_id.clone(),
+            name: "Dont stave together".to_string(),
+            app_id: "343050".to_string(),
+        })
+        .await?;
     service
         .register_game_build(RegisterBuildRequest {
             build: GameBuild {
                 build_id: BuildId("dst-public-demo-build".to_string()),
-                game_id: "dst".to_string(),
+                game_id: game_id,
                 channel: Some("public".to_string()),
                 adapter_id: AdapterId("dst".to_string()),
                 adapter_version: AdapterVersion::new(0, 1, 0),
                 upstream_version: Some("demo-upstream".to_string()),
-                artifact_uri: Some("memory://builds/dst-public-demo-build.tar.zst".to_string()),
-                checksum: Some("sha256:dst-public-demo-build".to_string()),
+                artifact_uri: Some("localhost:5000".to_string()),
+                artifact_image_name: Some("my-nginx".to_string()),
+                artifact_image_tag: Some("v1".to_string()),
                 status: BuildStatus::Available,
                 pinned: true,
                 resolved_at: now,
