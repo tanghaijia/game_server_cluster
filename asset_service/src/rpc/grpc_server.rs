@@ -305,6 +305,8 @@ fn map_error(error: AssetServiceError) -> Status {
         AssetServiceError::BuildNotFound { build_id } => Status::not_found(build_id),
         AssetServiceError::SnapshotNotFound { snapshot_id } => Status::not_found(snapshot_id),
         AssetServiceError::ModManifestNotFound { manifest_id } => Status::not_found(manifest_id),
+        AssetServiceError::NodeNotFound { node_id } => Status::not_found(node_id),
+        AssetServiceError::NodeAgentNotFound { node_id } => Status::not_found(node_id),
         AssetServiceError::Conflict { message } => Status::failed_precondition(message),
         AssetServiceError::Internal { message } => Status::internal(message),
     }
@@ -412,6 +414,10 @@ fn map_snapshot(value: SnapshotRecord) -> ProtoSnapshotRecord {
         created_at: value.created_at.to_rfc3339(),
         completed_at: value.completed_at.map(|v| v.to_rfc3339()),
         failure_message: value.failure_message,
+        bucket: value.bucket,
+        key: value.key,
+        host: value.host,
+        host_port: value.host_port,
     }
 }
 

@@ -6,11 +6,14 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    domain::{BuildId, Game, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord},
+    domain::{
+        BuildId, Game, GameBuild, ModManifest, ModManifestId, Node, NodeAgent, SnapshotId,
+        SnapshotRecord,
+    },
     error::AssetServiceError,
     ports::{
-        BuildRepository, GameRepository, ModManifestRepository, SnapshotRepository,
-        SteamBranch, SteamBranchRepository,
+        BuildRepository, GameRepository, ModManifestRepository, NodeAgentRepository,
+        NodeRepository, SnapshotRepository, SteamBranch, SteamBranchRepository,
     },
 };
 
@@ -251,6 +254,14 @@ impl GameRepository for InMemoryGameRepository {
         })?;
         Ok(store.values().cloned().collect())
     }
+
+    async fn delete(&self, game_id: &str) -> Result<(), AssetServiceError> {
+        let mut store = self.games.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("game repository lock poisoned: {e}"),
+        })?;
+        store.remove(game_id);
+        Ok(())
+    }
 }
 
 /// 空的 SteamService 实现，供 demo/开发阶段使用。
@@ -270,5 +281,81 @@ impl crate::ports::SteamService for FakeSteamService {
         _app_id: &str,
     ) -> Result<Vec<crate::ports::SteamBranch>, String> {
         Ok(Vec::new())
+    }
+}
+
+#[derive(Default)]
+pub struct InMemoryNodeRepository {
+    nodes: Arc<Mutex<HashMap<String, Node>>>,
+}
+
+#[async_trait]
+impl NodeRepository for InMemoryNodeRepository {
+    async fn save(&self, node: &Node) -> Result<(), AssetServiceError> {
+        let mut store = self.nodes.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node repository lock poisoned: {e}"),
+        })?;
+        store.insert(node.id.clone(), node.clone());
+        Ok(())
+    }
+
+    async fn get(&self, node_id: &str) -> Result<Option<Node>, AssetServiceError> {
+        let store = self.nodes.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node repository lock poisoned: {e}"),
+        })?;
+        Ok(store.get(node_id).cloned())
+    }
+
+    async fn list(&self) -> Result<Vec<Node>, AssetServiceError> {
+        let store = self.nodes.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node repository lock poisoned: {e}"),
+        })?;
+        Ok(store.values().cloned().collect())
+    }
+
+    async fn delete(&self, node_id: &str) -> Result<(), AssetServiceError> {
+        let mut store = self.nodes.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node repository lock poisoned: {e}"),
+        })?;
+        store.remove(node_id);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct InMemoryNodeAgentRepository {
+    agents: Arc<Mutex<HashMap<String, NodeAgent>>>,
+}
+
+#[async_trait]
+impl NodeAgentRepository for InMemoryNodeAgentRepository {
+    async fn save(&self, agent: &NodeAgent) -> Result<(), AssetServiceError> {
+        let mut store = self.agents.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node agent repository lock poisoned: {e}"),
+        })?;
+        store.insert(agent.node_id.clone(), agent.clone());
+        Ok(())
+    }
+
+    async fn get(&self, node_id: &str) -> Result<Option<NodeAgent>, AssetServiceError> {
+        let store = self.agents.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node agent repository lock poisoned: {e}"),
+        })?;
+        Ok(store.get(node_id).cloned())
+    }
+
+    async fn list(&self) -> Result<Vec<NodeAgent>, AssetServiceError> {
+        let store = self.agents.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node agent repository lock poisoned: {e}"),
+        })?;
+        Ok(store.values().cloned().collect())
+    }
+
+    async fn delete(&self, node_id: &str) -> Result<(), AssetServiceError> {
+        let mut store = self.agents.lock().map_err(|e| AssetServiceError::Internal {
+            message: format!("node agent repository lock poisoned: {e}"),
+        })?;
+        store.remove(node_id);
+        Ok(())
     }
 }

@@ -125,6 +125,14 @@ pub struct SnapshotRecord {
     pub completed_at: Option<DateTime<Utc>>,
     /// 失败原因（仅 status == Failed 时有值）
     pub failure_message: Option<String>,
+    /// 远程存储的 bucket 名称
+    pub bucket: String,
+    /// 远程存储的对象键
+    pub key: String,
+    /// 远程存储的主机地址
+    pub host: String,
+    /// 远程存储的主机端口
+    pub host_port: i32,
 }
 
 /// Mod 清单中的单个模组条目。

@@ -14,4 +14,7 @@ pub trait GameRepository: Send + Sync {
 
     /// 查询所有游戏。
     async fn list(&self) -> Result<Vec<Game>, AssetServiceError>;
+
+    /// 删除游戏。
+    async fn delete(&self, game_id: &str) -> Result<(), AssetServiceError>;
 }

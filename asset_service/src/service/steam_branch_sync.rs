@@ -5,7 +5,7 @@ use tokio;
 
 use crate::{
     domain::Game,
-    ports::{SteamBranch, SteamBranchRepository, SteamService},
+    ports::{SteamBranchRepository, SteamService},
 };
 
 /// Steam 分支定期同步器。

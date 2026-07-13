@@ -3,13 +3,16 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use asset_service::{
     domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild},
     ports::SystemClock,
-    proto::asset_service::asset_service_server::AssetServiceServer,
+    proto::asset_service::{
+        asset_service_server::AssetServiceServer,
+        business_service_server::BusinessServiceServer,
+    },
     repositories::{
         FakeSteamService, InMemoryBuildRepository, InMemoryGameRepository,
-        InMemoryModManifestRepository, InMemorySnapshotRepository,
-        InMemorySteamBranchRepository,
+        InMemoryModManifestRepository, InMemoryNodeAgentRepository, InMemoryNodeRepository,
+        InMemorySnapshotRepository, InMemorySteamBranchRepository,
     },
-    rpc::GrpcAssetService,
+    rpc::{GrpcAssetService, GrpcBusinessService},
     service::{AssetService, RegisterBuildRequest, SteamBranchSync},
 };
 use chrono::Utc;
@@ -20,6 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = std::env::var("ASSET_SERVICE_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50053".to_string())
         .parse()?;
+
+    let game_repo = Arc::new(InMemoryGameRepository::default());
 
     let service = Arc::new(AssetService::new(
         Arc::new(InMemoryBuildRepository::default()),
@@ -34,18 +39,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sync = SteamBranchSync::new(
         Arc::new(FakeSteamService),
         Arc::new(InMemorySteamBranchRepository::default()),
-        Arc::new(InMemoryGameRepository::default()),
+        game_repo.clone(),
         Duration::from_secs(15 * 60),
     );
     tokio::spawn(async move {
         sync.run().await;
     });
 
+    let business = GrpcBusinessService::new(
+        game_repo,
+        Arc::new(InMemoryNodeRepository::default()),
+        Arc::new(InMemoryNodeAgentRepository::default()),
+    );
+
     let grpc = GrpcAssetService::new(service);
 
     println!("asset-service listening on {}", addr);
     Server::builder()
         .add_service(AssetServiceServer::new(grpc))
+        .add_service(BusinessServiceServer::new(business))
         .serve(addr)
         .await?;
 

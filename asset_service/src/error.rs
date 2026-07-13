@@ -10,6 +10,10 @@ pub enum AssetServiceError {
     SnapshotNotFound { snapshot_id: String },
     #[error("mod manifest {manifest_id} was not found")]
     ModManifestNotFound { manifest_id: String },
+    #[error("node {node_id} was not found")]
+    NodeNotFound { node_id: String },
+    #[error("node agent {node_id} was not found")]
+    NodeAgentNotFound { node_id: String },
     #[error("conflict: {message}")]
     Conflict { message: String },
     #[error("internal error: {message}")]

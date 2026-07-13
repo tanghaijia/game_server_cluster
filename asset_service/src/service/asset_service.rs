@@ -132,6 +132,10 @@ where
             created_at: now,
             completed_at: None,
             failure_message: None,
+            bucket: String::new(),
+            key: String::new(),
+            host: String::new(),
+            host_port: 0,
         };
         self.snapshots.save(&snapshot).await?;
         Ok(snapshot)
