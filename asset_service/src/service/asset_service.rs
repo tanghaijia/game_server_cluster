@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        instance_data_path, BuildCompatibility, BuildId, BuildStatus, GameBuild,
-        ModManifest, ModManifestId, SnapshotId, SnapshotRecord, SnapshotRestorePlan,
-        SnapshotStatus, SnapshotType, VersionSelector,
+        BuildCompatibility, BuildId, BuildStatus, GameBuild, ModManifest, ModManifestId,
+        SnapshotId, SnapshotRecord, SnapshotRestorePlan, SnapshotStatus, SnapshotType,
+        VersionSelector, instance_data_path,
     },
     error::AssetServiceError,
-    ports::{BuildRepository, Clock, ModManifestRepository, SnapshotRepository},
+    ports::{BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository},
 };
 
 #[derive(Debug, Clone)]
@@ -37,32 +37,42 @@ pub struct FailSnapshotRequest {
     pub failure_message: String,
 }
 
-pub struct AssetService<B, S, M, C>
+pub struct AssetService<B, S, M, C, G>
 where
     B: BuildRepository,
     S: SnapshotRepository,
     M: ModManifestRepository,
     C: Clock,
+    G: GameRepository,
 {
     builds: Arc<B>,
     snapshots: Arc<S>,
     manifests: Arc<M>,
     clock: Arc<C>,
+    game_repository: Arc<G>,
 }
 
-impl<B, S, M, C> AssetService<B, S, M, C>
+impl<B, S, M, C, G> AssetService<B, S, M, C, G>
 where
     B: BuildRepository,
     S: SnapshotRepository,
     M: ModManifestRepository,
     C: Clock,
+    G: GameRepository,
 {
-    pub fn new(builds: Arc<B>, snapshots: Arc<S>, manifests: Arc<M>, clock: Arc<C>) -> Self {
+    pub fn new(
+        builds: Arc<B>,
+        snapshots: Arc<S>,
+        manifests: Arc<M>,
+        clock: Arc<C>,
+        game_repository: Arc<G>,
+    ) -> Self {
         Self {
             builds,
             snapshots,
             manifests,
             clock,
+            game_repository,
         }
     }
 
@@ -83,7 +93,10 @@ where
                     .into_iter()
                     .find(|build| {
                         build.channel.as_deref() == Some(channel.as_str())
-                            && matches!(build.status, BuildStatus::Available | BuildStatus::Deprecated)
+                            && matches!(
+                                build.status,
+                                BuildStatus::Available | BuildStatus::Deprecated
+                            )
                     })
                     .ok_or_else(|| AssetServiceError::BuildNotFound {
                         build_id: format!("{game_id}:{channel}"),
@@ -100,10 +113,7 @@ where
         Ok(request.build)
     }
 
-    pub async fn get_game_build(
-        &self,
-        build_id: &str,
-    ) -> Result<GameBuild, AssetServiceError> {
+    pub async fn get_game_build(&self, build_id: &str) -> Result<GameBuild, AssetServiceError> {
         self.builds
             .get(&BuildId(build_id.to_string()))
             .await?
@@ -146,13 +156,13 @@ where
         request: CompleteSnapshotRequest,
     ) -> Result<SnapshotRecord, AssetServiceError> {
         let id = SnapshotId(request.snapshot_id.clone());
-        let mut snapshot = self
-            .snapshots
-            .get(&id)
-            .await?
-            .ok_or(AssetServiceError::SnapshotNotFound {
-                snapshot_id: request.snapshot_id,
-            })?;
+        let mut snapshot =
+            self.snapshots
+                .get(&id)
+                .await?
+                .ok_or(AssetServiceError::SnapshotNotFound {
+                    snapshot_id: request.snapshot_id,
+                })?;
         snapshot.storage_uri = Some(request.storage_uri);
         snapshot.manifest_uri = request.manifest_uri;
         snapshot.checksum = request.checksum;
@@ -171,13 +181,13 @@ where
         request: FailSnapshotRequest,
     ) -> Result<SnapshotRecord, AssetServiceError> {
         let id = SnapshotId(request.snapshot_id.clone());
-        let mut snapshot = self
-            .snapshots
-            .get(&id)
-            .await?
-            .ok_or(AssetServiceError::SnapshotNotFound {
-                snapshot_id: request.snapshot_id,
-            })?;
+        let mut snapshot =
+            self.snapshots
+                .get(&id)
+                .await?
+                .ok_or(AssetServiceError::SnapshotNotFound {
+                    snapshot_id: request.snapshot_id,
+                })?;
         snapshot.status = SnapshotStatus::Failed;
         snapshot.failure_message = Some(request.failure_message);
         snapshot.completed_at = Some(self.clock.now());
@@ -211,9 +221,13 @@ where
             });
         }
 
-        let storage_uri = snapshot.storage_uri.clone().ok_or_else(|| AssetServiceError::Conflict {
-            message: format!("snapshot {} is missing storage_uri", snapshot_id),
-        })?;
+        let storage_uri =
+            snapshot
+                .storage_uri
+                .clone()
+                .ok_or_else(|| AssetServiceError::Conflict {
+                    message: format!("snapshot {} is missing storage_uri", snapshot_id),
+                })?;
 
         Ok(SnapshotRestorePlan {
             snapshot_id: snapshot.snapshot_id,

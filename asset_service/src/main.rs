@@ -2,10 +2,9 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use asset_service::{
     domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, GameBuild},
-    ports::SystemClock,
+    ports::{GameRepository, SystemClock},
     proto::asset_service::{
-        asset_service_server::AssetServiceServer,
-        business_service_server::BusinessServiceServer,
+        asset_service_server::AssetServiceServer, business_service_server::BusinessServiceServer,
     },
     repositories::{
         FakeSteamService, InMemoryBuildRepository, InMemoryGameRepository,
@@ -31,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(InMemorySnapshotRepository::default()),
         Arc::new(InMemoryModManifestRepository::default()),
         Arc::new(SystemClock),
+        Arc::new(InMemoryGameRepository::default()),
     ));
 
     seed_demo_builds(service.clone()).await?;
@@ -64,24 +64,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn seed_demo_builds(service: Arc<AssetService<InMemoryBuildRepository, InMemorySnapshotRepository, InMemoryModManifestRepository, SystemClock>>) -> Result<(), Box<dyn std::error::Error>> {
+async fn seed_demo_builds(
+    service: Arc<
+        AssetService<
+            InMemoryBuildRepository,
+            InMemorySnapshotRepository,
+            InMemoryModManifestRepository,
+            SystemClock,
+            InMemoryGameRepository,
+        >,
+    >,
+) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
-    service.register_game_build(RegisterBuildRequest {
-        build: GameBuild {
-            build_id: BuildId("dst-public-demo-build".to_string()),
-            game_id: "dst".to_string(),
-            channel: Some("public".to_string()),
-            adapter_id: AdapterId("dst".to_string()),
-            adapter_version: AdapterVersion::new(0, 1, 0),
-            upstream_version: Some("demo-upstream".to_string()),
-            artifact_uri: Some("memory://builds/dst-public-demo-build.tar.zst".to_string()),
-            checksum: Some("sha256:dst-public-demo-build".to_string()),
-            status: BuildStatus::Available,
-            pinned: true,
-            resolved_at: now,
-            created_at: now,
-            updated_at: now,
-        },
-    }).await?;
+    service
+        .register_game_build(RegisterBuildRequest {
+            build: GameBuild {
+                build_id: BuildId("dst-public-demo-build".to_string()),
+                game_id: "dst".to_string(),
+                channel: Some("public".to_string()),
+                adapter_id: AdapterId("dst".to_string()),
+                adapter_version: AdapterVersion::new(0, 1, 0),
+                upstream_version: Some("demo-upstream".to_string()),
+                artifact_uri: Some("memory://builds/dst-public-demo-build.tar.zst".to_string()),
+                checksum: Some("sha256:dst-public-demo-build".to_string()),
+                status: BuildStatus::Available,
+                pinned: true,
+                resolved_at: now,
+                created_at: now,
+                updated_at: now,
+            },
+        })
+        .await?;
     Ok(())
 }

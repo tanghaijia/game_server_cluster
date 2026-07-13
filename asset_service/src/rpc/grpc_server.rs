@@ -10,22 +10,20 @@ use crate::{
         SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
-    ports::{BuildRepository, Clock, ModManifestRepository, SnapshotRepository},
+    ports::{BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository},
     proto::asset_service::{
-        self,
-        asset_service_server::AssetService as AssetRpc,
-        BuildCompatibility as ProtoBuildCompatibility, CompleteSnapshotRequest,
+        self, BuildCompatibility as ProtoBuildCompatibility, CompleteSnapshotRequest,
         CompleteSnapshotResponse, CreateSnapshotRequest, CreateSnapshotResponse,
         FailSnapshotRequest, FailSnapshotResponse, GameBuild as ProtoGameBuild,
         GetGameBuildRequest, GetGameBuildResponse, GetLatestSnapshotRequest,
         GetLatestSnapshotResponse, GetModManifestRequest, GetModManifestResponse,
         GetSnapshotRequest, GetSnapshotResponse, GetSnapshotRestorePlanRequest,
         GetSnapshotRestorePlanResponse, ListSnapshotsRequest, ListSnapshotsResponse,
-        ModEntry as ProtoModEntry,
-        ModManifest as ProtoModManifest, RegisterGameBuildRequest, RegisterGameBuildResponse,
-        RegisterModManifestRequest, RegisterModManifestResponse, ResolveGameBuildRequest,
-        ResolveGameBuildResponse, SnapshotRecord as ProtoSnapshotRecord,
+        ModEntry as ProtoModEntry, ModManifest as ProtoModManifest, RegisterGameBuildRequest,
+        RegisterGameBuildResponse, RegisterModManifestRequest, RegisterModManifestResponse,
+        ResolveGameBuildRequest, ResolveGameBuildResponse, SnapshotRecord as ProtoSnapshotRecord,
         SnapshotRestorePlan as ProtoSnapshotRestorePlan,
+        asset_service_server::AssetService as AssetRpc,
     },
     service::{
         AssetService, CompleteSnapshotRequest as CompleteSnapshotCmd,
@@ -34,35 +32,38 @@ use crate::{
     },
 };
 
-pub struct GrpcAssetService<B, S, M, C>
+pub struct GrpcAssetService<B, S, M, C, G>
 where
     B: BuildRepository,
     S: SnapshotRepository,
     M: ModManifestRepository,
     C: Clock,
+    G: GameRepository,
 {
-    service: Arc<AssetService<B, S, M, C>>,
+    service: Arc<AssetService<B, S, M, C, G>>,
 }
 
-impl<B, S, M, C> GrpcAssetService<B, S, M, C>
+impl<B, S, M, C, G> GrpcAssetService<B, S, M, C, G>
 where
     B: BuildRepository,
     S: SnapshotRepository,
     M: ModManifestRepository,
     C: Clock,
+    G: GameRepository,
 {
-    pub fn new(service: Arc<AssetService<B, S, M, C>>) -> Self {
+    pub fn new(service: Arc<AssetService<B, S, M, C, G>>) -> Self {
         Self { service }
     }
 }
 
 #[tonic::async_trait]
-impl<B, S, M, C> AssetRpc for GrpcAssetService<B, S, M, C>
+impl<B, S, M, C, G> AssetRpc for GrpcAssetService<B, S, M, C, G>
 where
     B: BuildRepository + 'static,
     S: SnapshotRepository + 'static,
     M: ModManifestRepository + 'static,
     C: Clock + 'static,
+    G: GameRepository + 'static,
 {
     async fn resolve_game_build(
         &self,
@@ -76,7 +77,10 @@ where
         let build = self
             .service
             .resolve_game_build(
-                &request.game.ok_or_else(|| Status::invalid_argument("game is required"))?.id,
+                &request
+                    .game
+                    .ok_or_else(|| Status::invalid_argument("game is required"))?
+                    .id,
                 map_selector(selector),
             )
             .await
@@ -336,7 +340,9 @@ fn game_id_to_proto(game_id: &str) -> asset_service::Game {
 }
 
 fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
-    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
+    let game = value
+        .game
+        .ok_or_else(|| Status::invalid_argument("game is required"))?;
     let adapter_version: AdapterVersion = value
         .adapter_version
         .as_deref()
@@ -362,7 +368,9 @@ fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
 }
 
 fn map_manifest_from_proto(value: ProtoModManifest) -> Result<ModManifest, Status> {
-    let game = value.game.ok_or_else(|| Status::invalid_argument("game is required"))?;
+    let game = value
+        .game
+        .ok_or_else(|| Status::invalid_argument("game is required"))?;
     Ok(ModManifest {
         manifest_id: ModManifestId(value.manifest_id),
         game_id: game.id,
@@ -459,33 +467,37 @@ fn map_compatibility(value: BuildCompatibility) -> ProtoBuildCompatibility {
 }
 
 fn map_build_status(value: i32) -> Result<BuildStatus, Status> {
-    Ok(match asset_service::BuildStatus::try_from(value)
-        .unwrap_or(asset_service::BuildStatus::Unspecified)
-    {
-        asset_service::BuildStatus::Discovered => BuildStatus::Discovered,
-        asset_service::BuildStatus::Resolving => BuildStatus::Resolving,
-        asset_service::BuildStatus::Available => BuildStatus::Available,
-        asset_service::BuildStatus::Deprecated => BuildStatus::Deprecated,
-        asset_service::BuildStatus::Unavailable => BuildStatus::Unavailable,
-        asset_service::BuildStatus::Deleted => BuildStatus::Deleted,
-        asset_service::BuildStatus::Unspecified => {
-            return Err(Status::invalid_argument("build status is required"))
-        }
-    })
+    Ok(
+        match asset_service::BuildStatus::try_from(value)
+            .unwrap_or(asset_service::BuildStatus::Unspecified)
+        {
+            asset_service::BuildStatus::Discovered => BuildStatus::Discovered,
+            asset_service::BuildStatus::Resolving => BuildStatus::Resolving,
+            asset_service::BuildStatus::Available => BuildStatus::Available,
+            asset_service::BuildStatus::Deprecated => BuildStatus::Deprecated,
+            asset_service::BuildStatus::Unavailable => BuildStatus::Unavailable,
+            asset_service::BuildStatus::Deleted => BuildStatus::Deleted,
+            asset_service::BuildStatus::Unspecified => {
+                return Err(Status::invalid_argument("build status is required"));
+            }
+        },
+    )
 }
 
 fn map_snapshot_type(value: i32) -> Result<SnapshotType, Status> {
-    Ok(match asset_service::SnapshotType::try_from(value)
-        .unwrap_or(asset_service::SnapshotType::Unspecified)
-    {
-        asset_service::SnapshotType::Manual => SnapshotType::Manual,
-        asset_service::SnapshotType::Scheduled => SnapshotType::Scheduled,
-        asset_service::SnapshotType::PreUpgrade => SnapshotType::PreUpgrade,
-        asset_service::SnapshotType::FinalStop => SnapshotType::FinalStop,
-        asset_service::SnapshotType::Unspecified => {
-            return Err(Status::invalid_argument("snapshot_type is required"))
-        }
-    })
+    Ok(
+        match asset_service::SnapshotType::try_from(value)
+            .unwrap_or(asset_service::SnapshotType::Unspecified)
+        {
+            asset_service::SnapshotType::Manual => SnapshotType::Manual,
+            asset_service::SnapshotType::Scheduled => SnapshotType::Scheduled,
+            asset_service::SnapshotType::PreUpgrade => SnapshotType::PreUpgrade,
+            asset_service::SnapshotType::FinalStop => SnapshotType::FinalStop,
+            asset_service::SnapshotType::Unspecified => {
+                return Err(Status::invalid_argument("snapshot_type is required"));
+            }
+        },
+    )
 }
 
 fn map_build_status_to_proto(value: &BuildStatus) -> i32 {
