@@ -138,11 +138,23 @@ where
         request: BuildPreparation,
         _operation_id: &OperationId,
     ) -> Result<BuildPreparationResult, NodeAgentError> {
+        let build_id = request.build_id;
+        let build = self.asset_service.get_game_build(build_id.as_str()).await?;
+
+        if build.artifact_uri.is_none()
+            || build.artifact_image_name.is_none()
+            || build.artifact_image_tag.is_none()
+        {
+            return Err(NodeAgentError::GameBuildError {
+                message: "game build artifact is none".to_string(),
+            });
+        }
+
         // 1. 拉取镜像
         let remote_img = RemoteImage {
             id: "id".to_string(),
-            name: "name".to_string(),
-            tag: "tag".to_string(),
+            name: build.artifact_image_name.clone().unwrap(),
+            tag: build.artifact_image_tag.clone().unwrap(),
         };
         let image = self
             .container_client
@@ -154,7 +166,7 @@ where
 
         // 2. 注册本地构建
         self.local_game_build_manager
-            .record_game_build_from_image(&request.build, &image)
+            .record_game_build_from_image(&build, &image)
             .map_err(|e| NodeAgentError::ImageRepositoryRequestFail {
                 message: e.to_string(),
             })?;
@@ -162,7 +174,7 @@ where
         Ok(BuildPreparationResult {
             build_root: "asset_service".to_string(),
             prepared_at: Utc::now(),
-            build_id: request.build.build_id,
+            build_id: build_id,
         })
     }
 

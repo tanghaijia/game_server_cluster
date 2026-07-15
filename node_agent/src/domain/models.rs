@@ -106,7 +106,7 @@ pub struct FailureInfo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildPreparation {
     pub node_id: NodeId,
-    pub build: GameBuild,
+    pub build_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

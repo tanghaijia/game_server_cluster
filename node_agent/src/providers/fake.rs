@@ -201,6 +201,9 @@ impl AssetServiceFace for FakeAssetServiceFace {
             },
             channel: None,
             adapter_version: Some("0.1.0".to_string()),
+            artifact_uri: Some("test_docker_registry".to_string()),
+            artifact_image_name: Some("test_img".to_string()),
+            artifact_image_tag: Some("test-tag".to_string()),
         })
     }
 
@@ -214,6 +217,9 @@ impl AssetServiceFace for FakeAssetServiceFace {
             },
             channel: None,
             adapter_version: Some("0.1.0".to_string()),
+            artifact_uri: Some("test_docker_registry".to_string()),
+            artifact_image_name: Some("test_img".to_string()),
+            artifact_image_tag: Some("test-tag".to_string()),
         })
     }
 

@@ -31,4 +31,6 @@ pub enum NodeAgentError {
     },
     #[error("Path error: {message}")]
     PathError { message: String },
+    #[error("Game Build error: {message}")]
+    GameBuildError { message: String },
 }

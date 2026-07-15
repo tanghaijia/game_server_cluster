@@ -109,12 +109,31 @@ message GetHeartbeatResponse {
   NodeHeartbeat heartbeat = 1;
 }
 
+enum BuildStatus {
+  BUILD_STATUS_UNSPECIFIED = 0;
+  BUILD_STATUS_DISCOVERED = 1;
+  BUILD_STATUS_RESOLVING = 2;
+  BUILD_STATUS_AVAILABLE = 3;
+  BUILD_STATUS_DEPRECATED = 4;
+  BUILD_STATUS_UNAVAILABLE = 5;
+  BUILD_STATUS_DELETED = 6;
+}
+
 message GameBuild {
   string build_id = 1;
   Game game = 2;
   optional string channel = 3;
   optional string adapter_version = 4;
-  optional string custom_game = 5;
+  optional string upstream_version = 5;
+  optional string artifact_uri = 6;
+  optional string artifact_image_name = 7;
+  optional string artifact_image_tag = 8;
+  BuildStatus status = 9;
+  bool pinned = 10;
+  string resolved_at = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string adapter_id = 14;
 }
 
 message ResourceRequirements {

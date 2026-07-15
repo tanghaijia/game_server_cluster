@@ -466,7 +466,7 @@ pub async fn enqueue_prepare_build(
         kind: OperationKind::PrepareBuild,
         status: OperationStatus::Pending,
         instance_id: None,
-        build_id: Some(prep.build.build_id.clone()),
+        build_id: Some(prep.build_id.clone()),
         message: Some("build preparation queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,

@@ -160,13 +160,14 @@ message GameBuild {
   optional string adapter_version = 4;
   optional string upstream_version = 5;
   optional string artifact_uri = 6;
-  optional string checksum = 7;
-  BuildStatus status = 8;
-  bool pinned = 9;
-  string resolved_at = 10;
-  string created_at = 11;
-  string updated_at = 12;
-  string adapter_id = 13;
+  optional string artifact_image_name = 7;
+  optional string artifact_image_tag = 8;
+  BuildStatus status = 9;
+  bool pinned = 10;
+  string resolved_at = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string adapter_id = 14;
 }
 
 message BuildCompatibility {

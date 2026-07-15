@@ -11,8 +11,8 @@ use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
         GameBuild, GameInstance, GameInstanceStatus, InstanceAssignment, InstanceId,
-        InstanceRuntimeRecord, InstanceSpec, NodeId, NodeOperation, OperationId, OperationKind,
-        OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
+        InstanceRuntimeRecord, InstanceSpec, LocalGameBuild, NodeId, NodeOperation, OperationId,
+        OperationKind, OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
         SnapshotReference, SnapshotRestoreResult, StartInstanceArgument,
     },
     error::NodeAgentError,
@@ -20,21 +20,25 @@ use crate::{
         AssetServiceFace, ContainerClient, GameInstanceRepository, OperationRepository,
         SystemInfoProvider,
     },
-    proto::node_agent::{
-        self, BuildPreparationResult as ProtoBuildPreparationResult, CleanInstanceRequest,
-        CleanInstanceResponse, CreateSnapshotRequest, CreateSnapshotResponse,
-        FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild, GetHeartbeatRequest,
-        GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
-        GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
-        InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
-        InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
-        NodeAgentGameInstance, NodeAgentGameInstanceStatus, NodeHeartbeat as ProtoNodeHeartbeat,
-        NodeOperation as ProtoNodeOperation, PrepareGameBuildRequest, PrepareGameBuildResponse,
-        RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
-        SnapshotReference as ProtoSnapshotReference,
-        SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
-        StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
-        node_agent_service_server::NodeAgentService as NodeAgentRpc,
+    proto::{
+        asset_service::Node,
+        node_agent::{
+            self, BuildPreparationResult as ProtoBuildPreparationResult, CleanInstanceRequest,
+            CleanInstanceResponse, CreateSnapshotRequest, CreateSnapshotResponse,
+            FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild, GetHeartbeatRequest,
+            GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
+            GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
+            InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
+            InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
+            NodeAgentGameInstance, NodeAgentGameInstanceStatus,
+            NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
+            PrepareGameBuildRequest, PrepareGameBuildResponse,
+            RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
+            SnapshotReference as ProtoSnapshotReference,
+            SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
+            StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
+            node_agent_service_server::NodeAgentService as NodeAgentRpc,
+        },
     },
     service::{
         NodeAgentService, enqueue_clean_instance, enqueue_prepare_build, enqueue_restore_snapshot,
@@ -95,7 +99,7 @@ where
             .ok_or_else(|| Status::invalid_argument("build is required"))?;
         let prep = BuildPreparation {
             node_id: NodeId(request.node_id),
-            build: map_game_build(build)?,
+            build_id: build.build_id,
         };
         let operation = enqueue_prepare_build(&self.pool, &self.operations, prep).await;
         Ok(Response::new(PrepareGameBuildResponse {
@@ -323,6 +327,7 @@ fn map_error(error: NodeAgentError) -> Status {
         | NodeAgentError::S3UploadFail { message } => Status::internal(message),
         NodeAgentError::ConatinerFail { .. } => Status::internal("container error".to_string()),
         NodeAgentError::PathError { message } => Status::internal(message),
+        NodeAgentError::GameBuildError { message } => Status::internal(message),
     }
 }
 
@@ -335,6 +340,9 @@ fn map_game_build(value: ProtoGameBuild) -> Result<GameBuild, Status> {
         game: map_game(game)?,
         channel: value.channel,
         adapter_version: value.adapter_version,
+        artifact_uri: value.artifact_uri,
+        artifact_image_name: value.artifact_image_name,
+        artifact_image_tag: value.artifact_image_tag,
     })
 }
 

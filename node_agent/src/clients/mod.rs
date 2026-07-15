@@ -69,6 +69,9 @@ fn map_game_build(
         },
         channel: proto.channel,
         adapter_version: proto.adapter_version,
+        artifact_uri: proto.artifact_uri,
+        artifact_image_name: proto.artifact_image_name,
+        artifact_image_tag: proto.artifact_image_tag,
     })
 }
 
