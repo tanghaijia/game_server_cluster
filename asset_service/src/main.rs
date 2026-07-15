@@ -95,7 +95,7 @@ async fn seed_demo_builds(
                 adapter_id: AdapterId("dst".to_string()),
                 adapter_version: AdapterVersion::new(0, 1, 0),
                 upstream_version: Some("demo-upstream".to_string()),
-                artifact_uri: Some("localhost:5000".to_string()),
+                artifact_uri: Some("ccr.ccs.tencentyun.com/cluster_game_server".to_string()),
                 artifact_image_name: Some("dst-adapter".to_string()),
                 artifact_image_tag: Some("0.2.2".to_string()),
                 status: BuildStatus::Available,
