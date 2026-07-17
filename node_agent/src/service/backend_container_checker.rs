@@ -87,9 +87,8 @@ impl BackendContainerChecker {
         if let Some(token) = &self.token {
             token.cancel();
         }
-        if let Some(handle) = self.handle.take() {
-            handle.await.ok();
-        }
+        // 不 await handle: 后台任务可能卡在 DB 查询中
+        // cancel token 后任务会在下次 select! 循环退出
         self.token = None;
         self.handle = None;
     }

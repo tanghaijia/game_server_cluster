@@ -162,14 +162,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         conatiner_checker.start_check().await;
 
         println!("node-agent (production) listening on {}", addr);
-        Server::builder()
-            .add_service(NodeAgentServiceServer::new(grpc))
-            .serve_with_shutdown(addr, async {
-                tokio::signal::ctrl_c().await.ok();
-            })
-            .await?;
 
         // 10. graceful shutdown
+        let signal = async {
+            tokio::signal::ctrl_c().await.ok();
+            log::info!("received SIGINT, starting graceful shutdown...");
+            log::info!("press Ctrl+C again to force exit");
+
+            #[cfg(unix)]
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    log::warn!("force exit on second SIGINT");
+                    std::process::exit(1);
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
+            }
+
+            #[cfg(windows)]
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        };
+
+        Server::builder()
+            .add_service(NodeAgentServiceServer::new(grpc))
+            .serve_with_shutdown(addr, signal)
+            .await?;
+
+        // 11. stop background checker
         conatiner_checker.stop_check().await;
         log::info!("node-agent (production) shutdown complete");
     }
