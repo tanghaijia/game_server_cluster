@@ -11,12 +11,11 @@ use crate::{
     domain::{
         BuildCompatibility, BuildPreparation, BuildPreparationResult, ConatinerType,
         ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
-        ContainerStatus, Endpoint,
-        Game, GameBuild, GameContainer, GameInstance, GameInstanceStatus, Image, InstanceId,
-        InstanceRuntimeRecord, LocalGameBuild, ModManifest, NodeAgentInfo, NodeId, NodeOperation,
-        OperationId, RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord,
-        SnapshotRestorePlan, SnapshotRestoreRequest, SnapshotRestoreResult, StartInstanceArgument,
-        instance_data_path,
+        ContainerStatus, Endpoint, Game, GameBuild, GameContainer, GameInstance,
+        GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord, LocalGameBuild, ModManifest,
+        NodeAgentInfo, NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState,
+        SnapshotCaptureRequest, SnapshotRecord, SnapshotRestorePlan, SnapshotRestoreRequest,
+        SnapshotRestoreResult, StartInstanceArgument, instance_data_path,
     },
     error::NodeAgentError,
     ports::{
@@ -463,6 +462,7 @@ impl ContainerClient for FakeImageClient {
 
     async fn create_container(
         &self,
+        _container_name: String,
         game_build: LocalGameBuild,
         path_mapping: Option<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,

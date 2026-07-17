@@ -18,6 +18,7 @@ pub trait ContainerClient: Send + Sync {
 
     async fn create_container(
         &self,
+        container_name: String,
         game_build: LocalGameBuild,
         path_mapping: Option<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,

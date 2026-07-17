@@ -198,7 +198,7 @@ where
 
         let container = self
             .container_client
-            .create_container(local_game_build, None, None, None)
+            .create_container(game_instance.id.clone(), local_game_build, None, None, None)
             .await?;
 
         game_instance.status = crate::domain::GameInstanceStatus::Running;

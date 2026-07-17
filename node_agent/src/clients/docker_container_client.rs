@@ -100,6 +100,7 @@ impl ContainerClient for DockerContainerClient {
 
     async fn create_container(
         &self,
+        container_name: String,
         game_build: LocalGameBuild,
         path_mapping: Option<crate::domain::ContainerFilePathMappingHost>,
         port_mapping: Option<crate::domain::ContainerPortMapping>,
@@ -117,7 +118,7 @@ impl ContainerClient for DockerContainerClient {
         let mut builder = client
             .containers()
             .create(&image_full_name)
-            .name(format!("game-{}", game_build.build_id))
+            .name(format!("game-{}-{}", game_build.build_id, container_name))
             .label("managed-by", "node-agent");
 
         // 挂载卷
