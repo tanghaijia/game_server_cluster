@@ -14,7 +14,10 @@ use node_agent::{
         InMemoryObjectStore, InMemoryOperationRepository,
     },
     rpc::GrpcNodeAgentServer,
-    service::{BackgroundWorker, NodeAgentService, TaskContext, init_backend, start_all_workers},
+    service::{
+        BackendContainerChecker, BackgroundWorker, NodeAgentService, TaskContext, init_backend,
+        start_all_workers,
+    },
 };
 use tonic::transport::Server;
 
@@ -141,19 +144,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             sqlite_game_instances.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
             sqlite_ops.clone() as Arc<dyn node_agent::ports::OperationRepository>,
             asset_client as Arc<dyn node_agent::ports::AssetServiceFace>,
-            docker_client as Arc<dyn node_agent::ports::ContainerClient>,
+            docker_client.clone() as Arc<dyn node_agent::ports::ContainerClient>,
         ));
 
         // 8. 后台 worker + gRPC server
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
-        let grpc =
-            GrpcNodeAgentServer::new(node_agent_service, pool, sqlite_ops, sqlite_game_instances);
+        let grpc = GrpcNodeAgentServer::new(
+            node_agent_service,
+            pool,
+            sqlite_ops,
+            sqlite_game_instances.clone(),
+        );
+
+        // 9. container checker
+        let mut conatiner_checker =
+            BackendContainerChecker::new(docker_client, sqlite_game_instances);
+        conatiner_checker.start_check().await;
 
         println!("node-agent (production) listening on {}", addr);
         Server::builder()
             .add_service(NodeAgentServiceServer::new(grpc))
-            .serve(addr)
+            .serve_with_shutdown(addr, async {
+                tokio::signal::ctrl_c().await.ok();
+            })
             .await?;
+
+        // 10. graceful shutdown
+        conatiner_checker.stop_check().await;
+        log::info!("node-agent (production) shutdown complete");
     }
 
     Ok(())

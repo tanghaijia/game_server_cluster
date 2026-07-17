@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use crate::domain::{ContainerStatus, GameInstanceStatus};
 use crate::ports::{ContainerClient, GameInstanceRepository};
 
-pub(crate) struct BackendContainerChecker {
+pub struct BackendContainerChecker {
     container_client: Arc<dyn ContainerClient>,
     game_instance_repos: Arc<dyn GameInstanceRepository>,
     token: Option<CancellationToken>,
