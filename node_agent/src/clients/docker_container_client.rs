@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::domain::{
-    ConatinerType, GameContainer, Image, ImageRepository, ImageRepositoryCredentials, ImageStatus,
-    LocalGameBuild, RemoteImage,
+    ConatinerType, ContainerStatus, GameContainer, Image, ImageRepository,
+    ImageRepositoryCredentials, ImageStatus, LocalGameBuild, RemoteImage,
 };
 use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository};
 use async_trait::async_trait;
@@ -63,11 +63,8 @@ impl ContainerClient for DockerContainerClient {
 
     async fn check_image(&self, image: &RemoteImage) -> anyhow::Result<bool> {
         let client = DockerClient::new()?;
-        let full_name = Self::map_image_full_name(
-            &self.image_repository.address,
-            &image.name,
-            &image.tag,
-        );
+        let full_name =
+            Self::map_image_full_name(&self.image_repository.address, &image.name, &image.tag);
         Ok(client.registry().image_exists_locally(&full_name).await?)
     }
 
@@ -125,10 +122,7 @@ impl ContainerClient for DockerContainerClient {
 
         // 挂载卷
         if let Some(ref mapping) = path_mapping {
-            builder = builder.volume(
-                &mapping.host_path.path,
-                &mapping.container_file_path.path,
-            );
+            builder = builder.volume(&mapping.host_path.path, &mapping.container_file_path.path);
         }
 
         // 端口映射
@@ -156,6 +150,7 @@ impl ContainerClient for DockerContainerClient {
             container_file_path_mapping: path_mapping,
             container_port_mapping: port_mapping,
             resource_limitation,
+            status: ContainerStatus::Created,
         };
 
         // 持久化到 repository
@@ -169,7 +164,12 @@ impl ContainerClient for DockerContainerClient {
 
     async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError> {
         // 先从 repo 取出记录
-        let container = self.docker_instances.get(&id).await.map_err(|_| ContainerError::Unknown)?.ok_or_else(|| ContainerError::NotFound(id.clone()))?;
+        let container = self
+            .docker_instances
+            .get(&id)
+            .await
+            .map_err(|_| ContainerError::Unknown)?
+            .ok_or_else(|| ContainerError::NotFound(id.clone()))?;
 
         let client = DockerClient::new().map_err(to_io_error)?;
         client
@@ -186,7 +186,12 @@ impl ContainerClient for DockerContainerClient {
     }
 
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
-        let container = self.docker_instances.get(&id).await.map_err(|_| ContainerError::Unknown)?.ok_or_else(|| ContainerError::NotFound(id.clone()))?;
+        let container = self
+            .docker_instances
+            .get(&id)
+            .await
+            .map_err(|_| ContainerError::Unknown)?
+            .ok_or_else(|| ContainerError::NotFound(id.clone()))?;
 
         let client = DockerClient::new().map_err(to_io_error)?;
         client
@@ -195,7 +200,9 @@ impl ContainerClient for DockerContainerClient {
             .remove(false, false)
             .await
             .map_err(|e| match e {
-                lmrc_docker::DockerError::ContainerNotFound(_) => ContainerError::NotFound(id.clone()),
+                lmrc_docker::DockerError::ContainerNotFound(_) => {
+                    ContainerError::NotFound(id.clone())
+                }
                 _ => ContainerError::Unknown,
             })?;
 
@@ -206,6 +213,54 @@ impl ContainerClient for DockerContainerClient {
             .map_err(|_| ContainerError::Unknown)?;
 
         Ok(container)
+    }
+
+    /**
+     * 更新container的状态，使用lmrc获取真实的容器状态并更新到repos中
+     */
+    async fn update_container_status(&self) -> Result<i32, ContainerError> {
+        let client = DockerClient::new().map_err(to_io_error)?;
+        let summaries = client.containers().list(true).await.map_err(to_io_error)?;
+        let mut updated_count = 0i32;
+
+        for summary in &summaries {
+            let container_id = match &summary.id {
+                Some(id) => id,
+                None => continue,
+            };
+
+            let docker_state = match &summary.state {
+                Some(state) => state,
+                None => continue,
+            };
+
+            // ContainerSummaryStateEnum → ContainerStatus
+            let mapped_status = match format!("{:?}", docker_state).as_str() {
+                "CREATED" => ContainerStatus::Created,
+                "RUNNING" => ContainerStatus::Running,
+                "PAUSED" => ContainerStatus::Paused,
+                "RESTARTING" => ContainerStatus::Eestarting,
+                "EXITED" => ContainerStatus::Exited,
+                "DEAD" => ContainerStatus::Dead,
+                "REMOVING" => ContainerStatus::Removing,
+                _ => continue,
+            };
+
+            // 更新本地 repo 中的记录
+            match self.docker_instances.get(container_id).await {
+                Ok(Some(mut game_container)) => {
+                    game_container.status = mapped_status;
+                    if self.docker_instances.save(&game_container).await.is_ok() {
+                        updated_count += 1;
+                    }
+                }
+                _ => {
+                    // 容器存在于 Docker 但不在本地 repo 中（孤立容器），跳过
+                }
+            }
+        }
+
+        Ok(updated_count)
     }
 }
 

@@ -10,7 +10,8 @@ use crate::proto::node_agent::SnapshotArtifact;
 use crate::{
     domain::{
         BuildCompatibility, BuildPreparation, BuildPreparationResult, ConatinerType,
-        ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation, Endpoint,
+        ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
+        ContainerStatus, Endpoint,
         Game, GameBuild, GameContainer, GameInstance, GameInstanceStatus, Image, InstanceId,
         InstanceRuntimeRecord, LocalGameBuild, ModManifest, NodeAgentInfo, NodeId, NodeOperation,
         OperationId, RemoteImage, RuntimeState, SnapshotCaptureRequest, SnapshotRecord,
@@ -474,6 +475,7 @@ impl ContainerClient for FakeImageClient {
             container_file_path_mapping: path_mapping,
             container_port_mapping: port_mapping,
             resource_limitation,
+            status: ContainerStatus::Created,
         };
         let mut containers = self
             .containers
@@ -498,6 +500,14 @@ impl ContainerClient for FakeImageClient {
             .lock()
             .map_err(|_| ContainerError::Unknown)?;
         containers.remove(&id).ok_or(ContainerError::Unknown)
+    }
+
+    async fn update_container_status(&self) -> Result<i32, ContainerError> {
+        let containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        Ok(containers.len() as i32)
     }
 }
 

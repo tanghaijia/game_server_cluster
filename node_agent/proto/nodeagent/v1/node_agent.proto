@@ -19,6 +19,8 @@ service NodeAgentService {
 
   // StopInstance后收尾工作
   rpc CleanInstance(CleanInstanceRequest) returns (CleanInstanceResponse);
+
+  rpc InspectInstanceStream (InspectInstanceRequest) returns (stream InspectInstanceResponse);
 }
 
 message GetInstancesRequest {}

@@ -1,8 +1,11 @@
+use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use apalis_sqlite::SqlitePool;
 use chrono::Utc;
 use log::error;
+use tokio_stream::{Stream, wrappers::ReceiverStream};
 use tonic::{Request, Response, Status};
 
 use prost_types::Timestamp;
@@ -89,6 +92,9 @@ where
     A: AssetServiceFace + 'static,
     IMC: ContainerClient + 'static,
 {
+    type InspectInstanceStreamStream =
+        Pin<Box<dyn Stream<Item = Result<InspectInstanceResponse, Status>> + Send>>;
+
     async fn prepare_game_build(
         &self,
         request: Request<PrepareGameBuildRequest>,
@@ -225,23 +231,8 @@ where
             .await
             .map_err(map_error)?;
 
-        let node_agent_instance = NodeAgentGameInstance {
-            instance_id: instance.id,
-            status: map_node_agent_game_instance_status(instance.status),
-            container_id: instance.container_id,
-            game_build_id: instance.game_build_id,
-            create_time: Some(Timestamp {
-                seconds: instance.create_time.timestamp(),
-                nanos: instance.create_time.timestamp_subsec_nanos() as i32,
-            }),
-            update_time: Some(Timestamp {
-                seconds: instance.update_time.timestamp(),
-                nanos: instance.update_time.timestamp_subsec_nanos() as i32,
-            }),
-        };
-
         Ok(Response::new(InspectInstanceResponse {
-            instance: Some(node_agent_instance),
+            instance: Some(map_game_instance_to_proto(instance)),
         }))
     }
 
@@ -273,20 +264,7 @@ where
 
         let instances_list: Vec<NodeAgentGameInstance> = instances
             .into_iter()
-            .map(|instance| NodeAgentGameInstance {
-                instance_id: instance.id,
-                status: map_node_agent_game_instance_status(instance.status),
-                container_id: instance.container_id,
-                game_build_id: instance.game_build_id,
-                create_time: Some(Timestamp {
-                    seconds: instance.create_time.timestamp(),
-                    nanos: instance.create_time.timestamp_subsec_nanos() as i32,
-                }),
-                update_time: Some(Timestamp {
-                    seconds: instance.update_time.timestamp(),
-                    nanos: instance.update_time.timestamp_subsec_nanos() as i32,
-                }),
-            })
+            .map(map_game_instance_to_proto)
             .collect();
 
         Ok(Response::new(GetInstancesResponse {
@@ -310,6 +288,67 @@ where
         Ok(Response::new(CleanInstanceResponse {
             operation: Some(map_operation(operation)),
         }))
+    }
+
+    async fn inspect_instance_stream(
+        &self,
+        request: Request<InspectInstanceRequest>,
+    ) -> Result<Response<Self::InspectInstanceStreamStream>, Status> {
+        let request = request.into_inner();
+        let instance_id = request.instance_id;
+
+        // Validate instance exists on first fetch
+        self.service
+            .inspect_instance(&InstanceId(instance_id.clone()))
+            .await
+            .map_err(map_error)?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let repo = self.game_instance_repository.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            // None = first tick (always send), then only send on status change
+            let mut previous_status: Option<GameInstanceStatus> = None;
+
+            loop {
+                interval.tick().await;
+
+                match repo.get(instance_id.clone()).await {
+                    Ok(instance) => {
+                        if previous_status.as_ref() != Some(&instance.status) {
+                            previous_status = Some(instance.status.clone());
+                            let instance_proto = map_game_instance_to_proto(instance);
+
+                            if tx
+                                .send(Ok(InspectInstanceResponse {
+                                    instance: Some(instance_proto),
+                                }))
+                                .await
+                                .is_err()
+                            {
+                                // Client disconnected
+                                break;
+                            }
+                        }
+
+                        // Stop polling when terminal state reached
+                        if matches!(
+                            previous_status.as_ref().unwrap(),
+                            GameInstanceStatus::Stopped | GameInstanceStatus::Failed
+                        ) {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(map_error(e))).await;
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
 }
 
@@ -500,5 +539,22 @@ fn map_node_agent_game_instance_status(status: GameInstanceStatus) -> i32 {
         GameInstanceStatus::Stopping => NodeAgentGameInstanceStatus::Stopping as i32,
         GameInstanceStatus::Stopped => NodeAgentGameInstanceStatus::Stopped as i32,
         GameInstanceStatus::Failed => NodeAgentGameInstanceStatus::Failed as i32,
+    }
+}
+
+fn map_game_instance_to_proto(instance: GameInstance) -> NodeAgentGameInstance {
+    NodeAgentGameInstance {
+        instance_id: instance.id,
+        status: map_node_agent_game_instance_status(instance.status),
+        container_id: instance.container_id,
+        game_build_id: instance.game_build_id,
+        create_time: Some(Timestamp {
+            seconds: instance.create_time.timestamp(),
+            nanos: instance.create_time.timestamp_subsec_nanos() as i32,
+        }),
+        update_time: Some(Timestamp {
+            seconds: instance.update_time.timestamp(),
+            nanos: instance.update_time.timestamp_subsec_nanos() as i32,
+        }),
     }
 }

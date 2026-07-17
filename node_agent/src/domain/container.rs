@@ -31,6 +31,17 @@ pub enum ConatinerType {
     DockerContainer,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub enum ContainerStatus {
+    Created,
+    Running,
+    Paused,
+    Eestarting,
+    Exited,
+    Dead,
+    Removing,
+}
+
 /**
 * 游戏容器
 **/
@@ -42,6 +53,7 @@ pub struct GameContainer {
     pub container_file_path_mapping: Option<ContainerFilePathMappingHost>,
     pub container_port_mapping: Option<ContainerPortMapping>,
     pub resource_limitation: Option<ContainerResourceLimitation>,
+    pub status: ContainerStatus,
 }
 
 /**
