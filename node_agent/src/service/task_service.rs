@@ -440,7 +440,7 @@ pub async fn init_backend() -> Result<SqlitePool, sqlx::Error> {
     let db_url = if cfg!(debug_assertions) {
         "file:dev_mem_db?mode=memory&cache=shared"
     } else {
-        "sqlite://jobs.db?mode=rwc&busy_timeout=5000"
+        "sqlite://jobs.db?mode=rwc"
     };
 
     let pool = SqlitePool::connect(db_url).await?;
