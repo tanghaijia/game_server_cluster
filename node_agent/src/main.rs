@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 image_repository_credentials: ImageRepositoryCredentials {
                     username: std::env::var("REGISTRY_USERNAME").ok(),
                     password: std::env::var("REGISTRY_PASSWORD").ok(),
-                    serveraddress: None,
+                    serveraddress: std::env::var("REGISTRY_SERVER_ADDRESS").ok(),
                     identitytoken: None,
                     auth: None,
                     email: None,

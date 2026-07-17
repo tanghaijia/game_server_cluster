@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package nodeagent.v1;
+import "google/protobuf/timestamp.proto";
+
+enum NodeAgentGameInstanceStatus {
+    PEDDING = 0;
+    PREPARING = 1;
+    RUNNING = 2;
+    STOPPING = 3;
+    STOPPED = 4;
+    FAILED = 5;
+}
+
+message NodeAgentGameInstance {
+    string instance_id = 1;
+    NodeAgentGameInstanceStatus status = 2;
+    optional string container_id = 3;
+    string game_build_id = 4;
+    google.protobuf.Timestamp create_time = 5;
+    google.protobuf.Timestamp update_time = 6;
+}

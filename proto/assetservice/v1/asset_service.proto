@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package assetservice.v1;
+
+import "assetservice/v1/snapshot.proto";
+import "assetservice/v1/game.proto";
+
+service AssetService {
+  rpc ResolveGameBuild(ResolveGameBuildRequest) returns (ResolveGameBuildResponse);
+  rpc RegisterGameBuild(RegisterGameBuildRequest) returns (RegisterGameBuildResponse);
+  rpc GetGameBuild(GetGameBuildRequest) returns (GetGameBuildResponse);
+
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+  rpc CompleteSnapshot(CompleteSnapshotRequest) returns (CompleteSnapshotResponse);
+  rpc FailSnapshot(FailSnapshotRequest) returns (FailSnapshotResponse);
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
+  rpc GetLatestSnapshot(GetLatestSnapshotRequest) returns (GetLatestSnapshotResponse);
+  rpc SetLatestSnapshot(SetLatestSnapshotRequest) returns (SetLatestSnapshotResponse);
+  rpc GetSnapshotRestorePlan(GetSnapshotRestorePlanRequest) returns (GetSnapshotRestorePlanResponse);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+
+  rpc RegisterModManifest(RegisterModManifestRequest) returns (RegisterModManifestResponse);
+  rpc GetModManifest(GetModManifestRequest) returns (GetModManifestResponse);
+  rpc CheckBuildModCompatibility(CheckBuildModCompatibilityRequest) returns (CheckBuildModCompatibilityResponse);
+}
+
+message ResolveGameBuildRequest {
+  Game game = 1;
+  VersionSelector selector = 2;
+}
+
+message ResolveGameBuildResponse {
+  GameBuild build = 1;
+}
+
+message RegisterGameBuildRequest {
+  GameBuild build = 1;
+}
+
+message RegisterGameBuildResponse {
+  GameBuild build = 1;
+}
+
+message GetGameBuildRequest {
+  string build_id = 1;
+}
+
+message GetGameBuildResponse {
+  GameBuild build = 1;
+}
+
+message CreateSnapshotRequest {
+  string instance_id = 1;
+  optional string build_id = 2;
+  SnapshotType snapshot_type = 3;
+  optional string source_node = 4;
+}
+
+message CreateSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message CompleteSnapshotRequest {
+  string snapshot_id = 1;
+  string storage_uri = 2;
+  optional string manifest_uri = 3;
+  optional string checksum = 4;
+}
+
+message CompleteSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message FailSnapshotRequest {
+  string snapshot_id = 1;
+  string failure_message = 2;
+}
+
+message FailSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message GetSnapshotRequest {
+  string snapshot_id = 1;
+}
+
+message GetSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message GetLatestSnapshotRequest {
+  string instance_id = 1;
+}
+
+message GetLatestSnapshotResponse {
+  optional SnapshotRecord snapshot = 1;
+}
+
+message SetLatestSnapshotRequest {
+  string instance_id = 1;
+  string snapshot_id = 2;
+}
+
+message SetLatestSnapshotResponse {
+  SnapshotRecord snapshot = 1;
+}
+
+message GetSnapshotRestorePlanRequest {
+  string snapshot_id = 1;
+}
+
+message GetSnapshotRestorePlanResponse {
+  SnapshotRestorePlan restore_plan = 1;
+}
+
+message ListSnapshotsRequest {
+  string instance_id = 1;
+}
+
+message ListSnapshotsResponse {
+  repeated SnapshotRecord snapshots = 1;
+}
+
+message RegisterModManifestRequest {
+  ModManifest manifest = 1;
+}
+
+message RegisterModManifestResponse {
+  ModManifest manifest = 1;
+}
+
+message GetModManifestRequest {
+  string manifest_id = 1;
+}
+
+message GetModManifestResponse {
+  ModManifest manifest = 1;
+}
+
+message CheckBuildModCompatibilityRequest {
+  string build_id = 1;
+  string manifest_id = 2;
+}
+
+message CheckBuildModCompatibilityResponse {
+  BuildCompatibility compatibility = 1;
+}
+
+message VersionSelector {
+  oneof selector {
+    string channel = 1;
+    string build_id = 2;
+  }
+}
+
+message GameBuild {
+  string build_id = 1;
+  Game game = 2;
+  optional string channel = 3;
+  optional string adapter_version = 4;
+  optional string upstream_version = 5;
+  optional string artifact_uri = 6;
+  optional string artifact_image_name = 7;
+  optional string artifact_image_tag = 8;
+  BuildStatus status = 9;
+  bool pinned = 10;
+  string resolved_at = 11;
+  string created_at = 12;
+  string updated_at = 13;
+  string adapter_id = 14;
+}
+
+message BuildCompatibility {
+  bool compatible = 1;
+  optional string reason = 2;
+}
+
+enum BuildStatus {
+  BUILD_STATUS_UNSPECIFIED = 0;
+  BUILD_STATUS_DISCOVERED = 1;
+  BUILD_STATUS_RESOLVING = 2;
+  BUILD_STATUS_AVAILABLE = 3;
+  BUILD_STATUS_DEPRECATED = 4;
+  BUILD_STATUS_UNAVAILABLE = 5;
+  BUILD_STATUS_DELETED = 6;
+}

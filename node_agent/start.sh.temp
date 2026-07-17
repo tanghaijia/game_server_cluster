@@ -31,6 +31,7 @@ export REGISTRY_PORT="${REGISTRY_PORT:-5000}"
 # 镜像仓库认证（可选）
 # export REGISTRY_USERNAME="user"
 # export REGISTRY_PASSWORD="pass"
+# export REGISTRY_SERVER_ADDRESS="https://"
 
 # AWS S3 配置（S3ObjectStore 使用标准 AWS 凭据链）
 # export AWS_REGION="us-east-1"
