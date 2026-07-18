@@ -10,7 +10,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex as AsyncMutex;
 
-use crate::domain::{BuildPreparation, GameInstance};
+use crate::domain::{BuildPreparation, GameInstance, GameInstanceStatus};
 use crate::ports::GameInstanceRepository;
 use crate::service::BackgroundWorker;
 use crate::{
@@ -205,6 +205,18 @@ async fn handle_start_instance(
     if let Err(err) = ctx.node_agent_service.start_instance(job.spec).await {
         error!("start game instance fail, operation id: {}.", op_id.0);
         fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+
+        // 将 GameInstance 状态标记为 Failed
+        let Ok(mut game_instance) = ctx.game_instance_repos.get(instance_id.clone()).await else {
+            return Ok(());
+        };
+        game_instance.status = GameInstanceStatus::Failed;
+        if let Err(save_err) = ctx.game_instance_repos.save(&game_instance).await {
+            error!(
+                "failed to update instance {} status to Failed after start failure: {}",
+                instance_id, save_err
+            );
+        }
     } else {
         succeed_operation(
             &ctx.operations,
