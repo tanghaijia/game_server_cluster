@@ -497,8 +497,7 @@ func (x *CleanInstanceResponse) GetOperation() *NodeOperation {
 
 type PrepareGameBuildRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Build         *GameBuild             `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
+	BuildId       string                 `protobuf:"bytes,1,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -533,18 +532,11 @@ func (*PrepareGameBuildRequest) Descriptor() ([]byte, []int) {
 	return file_nodeagent_v1_node_agent_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *PrepareGameBuildRequest) GetNodeId() string {
+func (x *PrepareGameBuildRequest) GetBuildId() string {
 	if x != nil {
-		return x.NodeId
+		return x.BuildId
 	}
 	return ""
-}
-
-func (x *PrepareGameBuildRequest) GetBuild() *GameBuild {
-	if x != nil {
-		return x.Build
-	}
-	return nil
 }
 
 type PrepareGameBuildResponse struct {
@@ -2401,10 +2393,9 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\tR\x03key\"R\n" +
 	"\x15CleanInstanceResponse\x129\n" +
-	"\toperation\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeOperationR\toperation\"a\n" +
-	"\x17PrepareGameBuildRequest\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12-\n" +
-	"\x05build\x18\x02 \x01(\v2\x17.nodeagent.v1.GameBuildR\x05build\"\x93\x01\n" +
+	"\toperation\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeOperationR\toperation\"4\n" +
+	"\x17PrepareGameBuildRequest\x12\x19\n" +
+	"\bbuild_id\x18\x01 \x01(\tR\abuildId\"\x93\x01\n" +
 	"\x18PrepareGameBuildResponse\x129\n" +
 	"\toperation\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeOperationR\toperation\x12<\n" +
 	"\x06result\x18\x02 \x01(\v2$.nodeagent.v1.BuildPreparationResultR\x06result\"U\n" +
@@ -2697,61 +2688,60 @@ var file_nodeagent_v1_node_agent_proto_goTypes = []any{
 var file_nodeagent_v1_node_agent_proto_depIdxs = []int32{
 	40, // 0: nodeagent.v1.GetInstancesResponse.instances:type_name -> nodeagent.v1.NodeAgentGameInstance
 	37, // 1: nodeagent.v1.CleanInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	25, // 2: nodeagent.v1.PrepareGameBuildRequest.build:type_name -> nodeagent.v1.GameBuild
-	37, // 3: nodeagent.v1.PrepareGameBuildResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	32, // 4: nodeagent.v1.PrepareGameBuildResponse.result:type_name -> nodeagent.v1.BuildPreparationResult
-	31, // 5: nodeagent.v1.StartInstanceRequest.instance:type_name -> nodeagent.v1.InstanceRuntimeSpec
-	37, // 6: nodeagent.v1.StartInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	36, // 7: nodeagent.v1.StartInstanceResponse.runtime:type_name -> nodeagent.v1.InstanceRuntimeRecord
-	37, // 8: nodeagent.v1.StopInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	37, // 9: nodeagent.v1.CreateSnapshotResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	33, // 10: nodeagent.v1.CreateSnapshotResponse.snapshot:type_name -> nodeagent.v1.SnapshotArtifact
-	37, // 11: nodeagent.v1.RestoreSnapshotResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	34, // 12: nodeagent.v1.RestoreSnapshotResponse.result:type_name -> nodeagent.v1.SnapshotRestoreResult
-	37, // 13: nodeagent.v1.GetOperationResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	40, // 14: nodeagent.v1.InspectInstanceResponse.instance:type_name -> nodeagent.v1.NodeAgentGameInstance
-	38, // 15: nodeagent.v1.GetHeartbeatResponse.heartbeat:type_name -> nodeagent.v1.NodeHeartbeat
-	39, // 16: nodeagent.v1.GameBuild.game:type_name -> nodeagent.v1.Game
-	0,  // 17: nodeagent.v1.GameBuild.status:type_name -> nodeagent.v1.BuildStatus
-	26, // 18: nodeagent.v1.InstanceSpec.resources:type_name -> nodeagent.v1.ResourceRequirements
-	39, // 19: nodeagent.v1.InstanceRuntimeSpec.game:type_name -> nodeagent.v1.Game
-	25, // 20: nodeagent.v1.InstanceRuntimeSpec.build:type_name -> nodeagent.v1.GameBuild
-	1,  // 21: nodeagent.v1.InstanceRuntimeSpec.desired_state:type_name -> nodeagent.v1.DesiredRuntimeState
-	27, // 22: nodeagent.v1.InstanceRuntimeSpec.spec:type_name -> nodeagent.v1.InstanceSpec
-	29, // 23: nodeagent.v1.InstanceRuntimeSpec.assignment:type_name -> nodeagent.v1.InstanceAssignment
-	28, // 24: nodeagent.v1.InstanceRuntimeSpec.latest_snapshot:type_name -> nodeagent.v1.SnapshotReference
-	2,  // 25: nodeagent.v1.InstanceRuntimeRecord.state:type_name -> nodeagent.v1.RuntimeState
-	30, // 26: nodeagent.v1.InstanceRuntimeRecord.endpoint:type_name -> nodeagent.v1.Endpoint
-	35, // 27: nodeagent.v1.InstanceRuntimeRecord.failure:type_name -> nodeagent.v1.FailureInfo
-	3,  // 28: nodeagent.v1.NodeOperation.kind:type_name -> nodeagent.v1.OperationKind
-	4,  // 29: nodeagent.v1.NodeOperation.status:type_name -> nodeagent.v1.OperationStatus
-	9,  // 30: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
-	11, // 31: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
-	13, // 32: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
-	15, // 33: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
-	17, // 34: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
-	19, // 35: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
-	23, // 36: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
-	5,  // 37: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
-	21, // 38: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
-	7,  // 39: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
-	21, // 40: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
-	10, // 41: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
-	12, // 42: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
-	14, // 43: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
-	16, // 44: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
-	18, // 45: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
-	20, // 46: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
-	24, // 47: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
-	6,  // 48: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
-	22, // 49: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
-	8,  // 50: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
-	22, // 51: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
-	41, // [41:52] is the sub-list for method output_type
-	30, // [30:41] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	37, // 2: nodeagent.v1.PrepareGameBuildResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	32, // 3: nodeagent.v1.PrepareGameBuildResponse.result:type_name -> nodeagent.v1.BuildPreparationResult
+	31, // 4: nodeagent.v1.StartInstanceRequest.instance:type_name -> nodeagent.v1.InstanceRuntimeSpec
+	37, // 5: nodeagent.v1.StartInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	36, // 6: nodeagent.v1.StartInstanceResponse.runtime:type_name -> nodeagent.v1.InstanceRuntimeRecord
+	37, // 7: nodeagent.v1.StopInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	37, // 8: nodeagent.v1.CreateSnapshotResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	33, // 9: nodeagent.v1.CreateSnapshotResponse.snapshot:type_name -> nodeagent.v1.SnapshotArtifact
+	37, // 10: nodeagent.v1.RestoreSnapshotResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	34, // 11: nodeagent.v1.RestoreSnapshotResponse.result:type_name -> nodeagent.v1.SnapshotRestoreResult
+	37, // 12: nodeagent.v1.GetOperationResponse.operation:type_name -> nodeagent.v1.NodeOperation
+	40, // 13: nodeagent.v1.InspectInstanceResponse.instance:type_name -> nodeagent.v1.NodeAgentGameInstance
+	38, // 14: nodeagent.v1.GetHeartbeatResponse.heartbeat:type_name -> nodeagent.v1.NodeHeartbeat
+	39, // 15: nodeagent.v1.GameBuild.game:type_name -> nodeagent.v1.Game
+	0,  // 16: nodeagent.v1.GameBuild.status:type_name -> nodeagent.v1.BuildStatus
+	26, // 17: nodeagent.v1.InstanceSpec.resources:type_name -> nodeagent.v1.ResourceRequirements
+	39, // 18: nodeagent.v1.InstanceRuntimeSpec.game:type_name -> nodeagent.v1.Game
+	25, // 19: nodeagent.v1.InstanceRuntimeSpec.build:type_name -> nodeagent.v1.GameBuild
+	1,  // 20: nodeagent.v1.InstanceRuntimeSpec.desired_state:type_name -> nodeagent.v1.DesiredRuntimeState
+	27, // 21: nodeagent.v1.InstanceRuntimeSpec.spec:type_name -> nodeagent.v1.InstanceSpec
+	29, // 22: nodeagent.v1.InstanceRuntimeSpec.assignment:type_name -> nodeagent.v1.InstanceAssignment
+	28, // 23: nodeagent.v1.InstanceRuntimeSpec.latest_snapshot:type_name -> nodeagent.v1.SnapshotReference
+	2,  // 24: nodeagent.v1.InstanceRuntimeRecord.state:type_name -> nodeagent.v1.RuntimeState
+	30, // 25: nodeagent.v1.InstanceRuntimeRecord.endpoint:type_name -> nodeagent.v1.Endpoint
+	35, // 26: nodeagent.v1.InstanceRuntimeRecord.failure:type_name -> nodeagent.v1.FailureInfo
+	3,  // 27: nodeagent.v1.NodeOperation.kind:type_name -> nodeagent.v1.OperationKind
+	4,  // 28: nodeagent.v1.NodeOperation.status:type_name -> nodeagent.v1.OperationStatus
+	9,  // 29: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
+	11, // 30: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
+	13, // 31: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
+	15, // 32: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
+	17, // 33: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
+	19, // 34: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
+	23, // 35: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
+	5,  // 36: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
+	21, // 37: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
+	7,  // 38: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
+	21, // 39: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
+	10, // 40: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
+	12, // 41: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
+	14, // 42: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
+	16, // 43: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
+	18, // 44: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
+	20, // 45: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
+	24, // 46: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
+	6,  // 47: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
+	22, // 48: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
+	8,  // 49: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
+	22, // 50: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
+	40, // [40:51] is the sub-list for method output_type
+	29, // [29:40] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_nodeagent_v1_node_agent_proto_init() }

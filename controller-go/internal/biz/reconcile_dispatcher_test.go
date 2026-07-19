@@ -27,6 +27,12 @@ func (m *mockInstanceRepo) UpdateStatus(ctx context.Context, inst *entity.GameIn
 // Ensure mockInstanceRepo implements repository.GameInstanceRepository
 var _ repository.GameInstanceRepository = (*mockInstanceRepo)(nil)
 
+type mockScheduler struct{}
+
+func (m *mockScheduler) Schedule(gameInstance *entity.GameInstance) (string, error) {
+	return "node-agent-1", nil
+}
+
 /**
 * 测试ReconcileDispatcher的Dispatch和Process功能
 **/
@@ -37,7 +43,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		},
 	}
 
-	rd := NewReconcileDispatcher(repo)
+	rd := NewReconcileDispatcher(repo, &mockScheduler{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

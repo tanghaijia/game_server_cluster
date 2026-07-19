@@ -7,7 +7,8 @@ import (
 )
 
 type NodeAgentUseCase struct {
-	repo repository.NodeAgentRepository
+	repo     repository.NodeAgentRepository
+	nodeRepo repository.NodeRepository
 }
 
 func NewNodeAgentUseCase(repo repository.NodeAgentRepository) *NodeAgentUseCase {
@@ -23,4 +24,9 @@ func (uc *NodeAgentUseCase) CreateNodeAgent(ctx context.Context, name string) (*
 		return nil, err
 	}
 	return agent, nil
+}
+
+func (uc *NodeAgentUseCase) GetNode(ctx context.Context, nodeagent *entity.NodeAgent) (*entity.Node, error) {
+	node, err := uc.nodeRepo.GetByID(nodeagent.NodeId)
+	return node, err
 }

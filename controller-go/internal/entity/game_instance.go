@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 type InstanceStatus int
@@ -22,9 +23,12 @@ const (
 type GameInstance struct {
 	ID              string
 	Game            *Game
-	NodeAgent       *NodeAgent
+	NodeAgentID     *string
 	Status          InstanceStatus
-	LastPendingTime int64
+	LastPendingTime time.Time
+	CreateTime      time.Time
+	UpdateTime      time.Time
+	GameBuildId     string
 }
 
 /**

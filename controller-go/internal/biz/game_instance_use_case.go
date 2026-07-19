@@ -28,7 +28,6 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, game *ent
 	instance := &entity.GameInstance{
 		ID:              "game-instance-1",
 		Game:            game,
-		NodeAgent:       nil,
 		Status:          entity.StatusStopped,
 		LastPendingTime: 0,
 	}
