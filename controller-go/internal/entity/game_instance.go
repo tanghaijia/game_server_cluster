@@ -20,15 +20,43 @@ const (
 	Failed
 )
 
+func (s InstanceStatus) String() string {
+	switch s {
+	case StatusPending:
+		return "pending"
+	case StatusScheduling:
+		return "scheduling"
+	case StatusPreparingBuild:
+		return "preparing_build"
+	case StatusRestoringSnapshot:
+		return "restoring_snapshot"
+	case StatusRunning:
+		return "running"
+	case StatusStopping:
+		return "stopping"
+	case StatusStopped:
+		return "stopped"
+	case Failed:
+		return "failed"
+	default:
+		return "unknown"
+	}
+}
+
 type GameInstance struct {
-	ID              string
-	Game            *Game
-	NodeAgentID     *string
-	Status          InstanceStatus
-	LastPendingTime time.Time
-	CreateTime      time.Time
-	UpdateTime      time.Time
-	GameBuildId     string
+	ID              string          `gorm:"column:id;primaryKey"`
+	GameID          string          `gorm:"column:game_id"`
+	Game            *Game           `gorm:"foreignKey:GameID"`
+	NodeAgentID     *string         `gorm:"column:node_agent_id"`
+	Status          InstanceStatus  `gorm:"column:status"`
+	LastPendingTime time.Time       `gorm:"column:last_pending_time"`
+	CreateTime      time.Time       `gorm:"column:create_time"`
+	UpdateTime      time.Time       `gorm:"column:update_time"`
+	GameBuildId     string          `gorm:"column:game_build_id"`
+}
+
+func (GameInstance) TableName() string {
+	return "game_instances"
 }
 
 /**

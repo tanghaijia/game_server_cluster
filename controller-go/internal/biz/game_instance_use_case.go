@@ -5,6 +5,7 @@ import (
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 	"errors"
+	"time"
 )
 
 // GameInstanceUseCase 业务逻辑执行器
@@ -29,7 +30,9 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, game *ent
 		ID:              "game-instance-1",
 		Game:            game,
 		Status:          entity.StatusStopped,
-		LastPendingTime: 0,
+		LastPendingTime: time.Time{},
+		CreateTime:      time.Now(),
+		UpdateTime:      time.Now(),
 	}
 	err := uc.instanceRepo.Save(ctx, instance)
 	if err != nil {

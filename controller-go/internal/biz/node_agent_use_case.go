@@ -11,13 +11,14 @@ type NodeAgentUseCase struct {
 	nodeRepo repository.NodeRepository
 }
 
-func NewNodeAgentUseCase(repo repository.NodeAgentRepository) *NodeAgentUseCase {
-	return &NodeAgentUseCase{repo: repo}
+func NewNodeAgentUseCase(repo repository.NodeAgentRepository, nodeRepo repository.NodeRepository) *NodeAgentUseCase {
+	return &NodeAgentUseCase{repo: repo, nodeRepo: nodeRepo}
 }
 
 func (uc *NodeAgentUseCase) CreateNodeAgent(ctx context.Context, name string) (*entity.NodeAgent, error) {
 	agent := &entity.NodeAgent{
-		Node: nil,
+		ID:   name,
+		Port: 9090,
 	}
 	err := uc.repo.Save(ctx, agent)
 	if err != nil {

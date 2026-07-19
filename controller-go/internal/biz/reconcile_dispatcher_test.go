@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"controller-go/internal/client/nodeagent"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 	"testing"
@@ -27,6 +28,24 @@ func (m *mockInstanceRepo) UpdateStatus(ctx context.Context, inst *entity.GameIn
 // Ensure mockInstanceRepo implements repository.GameInstanceRepository
 var _ repository.GameInstanceRepository = (*mockInstanceRepo)(nil)
 
+type mockNodeAgentRepo struct{}
+
+func (m *mockNodeAgentRepo) Save(ctx context.Context, agent *entity.NodeAgent) error { return nil }
+func (m *mockNodeAgentRepo) GetByID(ctx context.Context, id string) (*entity.NodeAgent, error) {
+	return &entity.NodeAgent{ID: id, NodeId: "1", Port: 9090}, nil
+}
+
+var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
+
+type mockNodeRepo struct{}
+
+func (m *mockNodeRepo) Save(node *entity.Node) error { return nil }
+func (m *mockNodeRepo) GetByID(id string) (*entity.Node, error) {
+	return &entity.Node{Id: 1, Ip: "127.0.0.1"}, nil
+}
+
+var _ repository.NodeRepository = (*mockNodeRepo)(nil)
+
 type mockScheduler struct{}
 
 func (m *mockScheduler) Schedule(gameInstance *entity.GameInstance) (string, error) {
@@ -43,7 +62,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		},
 	}
 
-	rd := NewReconcileDispatcher(repo, &mockScheduler{})
+	rd := NewReconcileDispatcher(repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, nodeagent.NewClientRegistry())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

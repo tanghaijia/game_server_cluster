@@ -23,12 +23,18 @@ type ReconcileDispatcher struct {
 
 func NewReconcileDispatcher(
 	instanceRepo repository.GameInstanceRepository,
+	nodeAgnetRepo repository.NodeAgentRepository,
+	nodeRepo repository.NodeRepository,
 	scheduler Scheduler,
+	nodeAgentClients *nodeagent.ClientRegistry,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
-		queue:        make(chan *entity.GameInstance, 100),
-		instanceRepo: instanceRepo,
-		scheduler:    scheduler,
+		queue:            make(chan *entity.GameInstance, 100),
+		instanceRepo:     instanceRepo,
+		nodeAgnetRepo:    nodeAgnetRepo,
+		nodeRepo:         nodeRepo,
+		scheduler:        scheduler,
+		nodeAgentClients: nodeAgentClients,
 	}
 }
 
@@ -90,7 +96,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
 			d.FailedInstance(ctx, instance)
 		}
-		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("{}:{}", node.Ip, nodeAgent.Port))
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
 		if err != nil {
 			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
 			d.FailedInstance(ctx, instance)

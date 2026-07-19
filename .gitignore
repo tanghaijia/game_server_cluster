@@ -7,3 +7,8 @@ game_node/Cargo.lock
 */Cargo.lock
 .gitnexus
 .claude
+*.exe
+null
+debug.json
+*.bkp
+*.dtmp
