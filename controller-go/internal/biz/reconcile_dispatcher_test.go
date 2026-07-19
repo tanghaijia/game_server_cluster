@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 	"testing"
 )
 
@@ -22,6 +23,9 @@ func (m *mockInstanceRepo) GetByID(ctx context.Context, id string) (*entity.Game
 func (m *mockInstanceRepo) UpdateStatus(ctx context.Context, inst *entity.GameInstance) error {
 	return m.saveFunc(ctx, inst)
 }
+
+// Ensure mockInstanceRepo implements repository.GameInstanceRepository
+var _ repository.GameInstanceRepository = (*mockInstanceRepo)(nil)
 
 /**
 * 测试ReconcileDispatcher的Dispatch和Process功能

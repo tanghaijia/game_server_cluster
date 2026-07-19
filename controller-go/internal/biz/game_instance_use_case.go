@@ -3,22 +3,17 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 	"errors"
 )
 
-type GameInstanceRepository interface {
-	Save(ctx context.Context, instance *entity.GameInstance) error
-	GetByID(ctx context.Context, id string) (*entity.GameInstance, error)
-	UpdateStatus(ctx context.Context, instance *entity.GameInstance) error
-}
-
 // GameInstanceUseCase 业务逻辑执行器
 type GameInstanceUseCase struct {
-	instanceRepo        GameInstanceRepository
+	instanceRepo        repository.GameInstanceRepository
 	ReconcileDispatcher *ReconcileDispatcher
 }
 
-func NewGameInstanceUseCase(instanceRepo GameInstanceRepository, reconcileDispatcher *ReconcileDispatcher) *GameInstanceUseCase {
+func NewGameInstanceUseCase(instanceRepo repository.GameInstanceRepository, reconcileDispatcher *ReconcileDispatcher) *GameInstanceUseCase {
 	return &GameInstanceUseCase{instanceRepo: instanceRepo, ReconcileDispatcher: reconcileDispatcher}
 }
 

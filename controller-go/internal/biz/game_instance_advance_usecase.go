@@ -4,17 +4,18 @@ import (
 	"context"
 	"controller-go/internal/entity"
 	assetservicev1 "controller-go/internal/client/assetservice"
+	"controller-go/internal/repository"
 	"errors"
 	"fmt"
 )
 
 type GameInstanceAdvanceUseCase struct {
 	scheduler        Scheduler
-	gameInstanceRepo GameInstanceRepository
+	gameInstanceRepo repository.GameInstanceRepository
 	assetClient      *assetservicev1.AssetServiceFaceClient
 }
 
-func NewGameInstanceAdvanceUseCase(scheduler Scheduler, gameInstanceRepo GameInstanceRepository, assetClient *assetservicev1.AssetServiceFaceClient) *GameInstanceAdvanceUseCase {
+func NewGameInstanceAdvanceUseCase(scheduler Scheduler, gameInstanceRepo repository.GameInstanceRepository, assetClient *assetservicev1.AssetServiceFaceClient) *GameInstanceAdvanceUseCase {
 	return &GameInstanceAdvanceUseCase{
 		scheduler:        scheduler,
 		gameInstanceRepo: gameInstanceRepo,

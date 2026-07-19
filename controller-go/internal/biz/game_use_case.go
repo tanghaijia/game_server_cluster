@@ -3,19 +3,14 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 )
 
-// GameRepository 定义数据层必须实现的接口（解耦的关键）
-type GameRepository interface {
-	Save(ctx context.Context, instance *entity.Game) error
-	GetByID(ctx context.Context, id string) (*entity.Game, error)
-}
-
 type GameUseCase struct {
-	gamerepo GameRepository // 组合接口，不关心底层是 MySQL 还是 PG
+	gamerepo repository.GameRepository // 组合接口，不关心底层是 MySQL 还是 PG
 }
 
-func NewGameUseCase(gamerepo GameRepository) *GameUseCase {
+func NewGameUseCase(gamerepo repository.GameRepository) *GameUseCase {
 	return &GameUseCase{gamerepo: gamerepo}
 }
 

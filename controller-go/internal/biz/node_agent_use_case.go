@@ -3,18 +3,14 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 )
 
-type NodeAgentRepository interface {
-	Save(ctx context.Context, agent *entity.NodeAgent) error
-	GetByID(ctx context.Context, id string) (*entity.NodeAgent, error)
-}
-
 type NodeAgentUseCase struct {
-	repo NodeAgentRepository
+	repo repository.NodeAgentRepository
 }
 
-func NewNodeAgentUseCase(repo NodeAgentRepository) *NodeAgentUseCase {
+func NewNodeAgentUseCase(repo repository.NodeAgentRepository) *NodeAgentUseCase {
 	return &NodeAgentUseCase{repo: repo}
 }
 

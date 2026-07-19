@@ -3,16 +3,17 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 	"errors"
 	"fmt"
 )
 
 type ReconcileDispatcher struct {
 	queue        chan *entity.GameInstance
-	instanceRepo GameInstanceRepository
+	instanceRepo repository.GameInstanceRepository
 }
 
-func NewReconcileDispatcher(instanceRepo GameInstanceRepository) *ReconcileDispatcher {
+func NewReconcileDispatcher(instanceRepo repository.GameInstanceRepository) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
 		queue:        make(chan *entity.GameInstance, 100),
 		instanceRepo: instanceRepo,

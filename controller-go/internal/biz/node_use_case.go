@@ -2,18 +2,14 @@ package biz
 
 import (
 	"controller-go/internal/entity"
+	"controller-go/internal/repository"
 )
 
-type NodeRepository interface {
-	Save(node *entity.Node) error
-	GetByID(id string) (*entity.Node, error)
-}
-
 type NodeUseCase struct {
-	repo NodeRepository
+	repo repository.NodeRepository
 }
 
-func NewNodeUseCase(repo NodeRepository) *NodeUseCase {
+func NewNodeUseCase(repo repository.NodeRepository) *NodeUseCase {
 	return &NodeUseCase{repo: repo}
 }
 
