@@ -100,13 +100,8 @@ where
         request: Request<PrepareGameBuildRequest>,
     ) -> Result<Response<PrepareGameBuildResponse>, Status> {
         let request = request.into_inner();
-        let build = request
-            .build
-            .ok_or_else(|| Status::invalid_argument("build is required"))?;
-        let prep = BuildPreparation {
-            node_id: NodeId(request.node_id),
-            build_id: build.build_id,
-        };
+        let build = request.build_id;
+        let prep = BuildPreparation { build_id: build };
         let operation = enqueue_prepare_build(&self.pool, &self.operations, prep).await;
         Ok(Response::new(PrepareGameBuildResponse {
             operation: Some(map_operation(operation)),
