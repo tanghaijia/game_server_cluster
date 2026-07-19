@@ -58,24 +58,7 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 func (d *ReconcileDispatcher) NextDispatch(ctx context.Context) error {
 	instance := <-d.queue
 
-	status, err := instance.Advance(ctx) // 这里调用Advance方法来推进状态
-	if err != nil {
-		fmt.Printf("Error advancing instance %s: %v\n", instance.ID, err)
-		return err
-	} else {
-		fmt.Printf("Instance %s advanced to status %d\n", instance.ID, status)
-	}
-
-	if status != entity.StatusRunning && status != entity.StatusStopped {
-		// 处理其他状态
-		d.queue <- instance // 将实例重新放回队列中以继续处理
-	}
-
-	err = d.instanceRepo.UpdateStatus(ctx, instance) // 假设这里需要上下文
-	if err != nil {
-		fmt.Printf("Error updating instance %s status: %v\n", instance.ID, err)
-		return err
-	}
+	d.Dispatch(ctx, instance)
 
 	return nil
 }
