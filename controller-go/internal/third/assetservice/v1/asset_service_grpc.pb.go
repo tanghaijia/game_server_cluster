@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: asset_service.proto
+// source: assetservice/v1/asset_service.proto
 
 package assetservicev1
 
@@ -611,5 +611,5 @@ var AssetService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "asset_service.proto",
+	Metadata: "assetservice/v1/asset_service.proto",
 }

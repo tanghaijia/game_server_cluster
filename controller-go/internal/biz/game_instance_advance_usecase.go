@@ -3,7 +3,7 @@ package biz
 import (
 	"context"
 	"controller-go/internal/entity"
-	assetservicev1 "controller-go/internal/third/assetservice"
+	assetservicev1 "controller-go/internal/client/assetservice"
 	"errors"
 	"fmt"
 )

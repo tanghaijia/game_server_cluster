@@ -1,5 +1,7 @@
 version: v2
 # 1. 明确指定输入源：外部的其他目录
+#    注意：directory 要指到 proto/ 层级而非 v1/ 层级
+#    这样才能正确解析 import "assetservice/v1/game.proto" 这类路径
 inputs:
   - directory: "../asset_service/proto"
   - directory: "../node_agent/proto"
@@ -17,7 +19,9 @@ plugins:
   # 生成 Go 基础结构体
   - local: protoc-gen-go
     out: .  # 项目根目录
+    opt: module=controller-go
 
   # 生成 gRPC 服务代码
   - local: protoc-gen-go-grpc
     out: .  # 项目根目录
+    opt: module=controller-go

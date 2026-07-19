@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: business_service.proto
+// source: assetservice/v1/business_service.proto
 
 package assetservicev1
 
@@ -30,7 +30,7 @@ type CreateGameRequest struct {
 
 func (x *CreateGameRequest) Reset() {
 	*x = CreateGameRequest{}
-	mi := &file_business_service_proto_msgTypes[0]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +42,7 @@ func (x *CreateGameRequest) String() string {
 func (*CreateGameRequest) ProtoMessage() {}
 
 func (x *CreateGameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[0]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +55,7 @@ func (x *CreateGameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGameRequest.ProtoReflect.Descriptor instead.
 func (*CreateGameRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{0}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CreateGameRequest) GetGame() *Game {
@@ -74,7 +74,7 @@ type CreateGameResponse struct {
 
 func (x *CreateGameResponse) Reset() {
 	*x = CreateGameResponse{}
-	mi := &file_business_service_proto_msgTypes[1]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -86,7 +86,7 @@ func (x *CreateGameResponse) String() string {
 func (*CreateGameResponse) ProtoMessage() {}
 
 func (x *CreateGameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[1]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -99,7 +99,7 @@ func (x *CreateGameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGameResponse.ProtoReflect.Descriptor instead.
 func (*CreateGameResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{1}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateGameResponse) GetGame() *Game {
@@ -118,7 +118,7 @@ type GetGameRequest struct {
 
 func (x *GetGameRequest) Reset() {
 	*x = GetGameRequest{}
-	mi := &file_business_service_proto_msgTypes[2]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -130,7 +130,7 @@ func (x *GetGameRequest) String() string {
 func (*GetGameRequest) ProtoMessage() {}
 
 func (x *GetGameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[2]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -143,7 +143,7 @@ func (x *GetGameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGameRequest.ProtoReflect.Descriptor instead.
 func (*GetGameRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{2}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetGameRequest) GetId() string {
@@ -162,7 +162,7 @@ type GetGameResponse struct {
 
 func (x *GetGameResponse) Reset() {
 	*x = GetGameResponse{}
-	mi := &file_business_service_proto_msgTypes[3]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -174,7 +174,7 @@ func (x *GetGameResponse) String() string {
 func (*GetGameResponse) ProtoMessage() {}
 
 func (x *GetGameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[3]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -187,7 +187,7 @@ func (x *GetGameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGameResponse.ProtoReflect.Descriptor instead.
 func (*GetGameResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{3}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetGameResponse) GetGame() *Game {
@@ -206,7 +206,7 @@ type UpdateGameRequest struct {
 
 func (x *UpdateGameRequest) Reset() {
 	*x = UpdateGameRequest{}
-	mi := &file_business_service_proto_msgTypes[4]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -218,7 +218,7 @@ func (x *UpdateGameRequest) String() string {
 func (*UpdateGameRequest) ProtoMessage() {}
 
 func (x *UpdateGameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[4]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -231,7 +231,7 @@ func (x *UpdateGameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateGameRequest.ProtoReflect.Descriptor instead.
 func (*UpdateGameRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{4}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UpdateGameRequest) GetGame() *Game {
@@ -250,7 +250,7 @@ type UpdateGameResponse struct {
 
 func (x *UpdateGameResponse) Reset() {
 	*x = UpdateGameResponse{}
-	mi := &file_business_service_proto_msgTypes[5]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -262,7 +262,7 @@ func (x *UpdateGameResponse) String() string {
 func (*UpdateGameResponse) ProtoMessage() {}
 
 func (x *UpdateGameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[5]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -275,7 +275,7 @@ func (x *UpdateGameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateGameResponse.ProtoReflect.Descriptor instead.
 func (*UpdateGameResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{5}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *UpdateGameResponse) GetGame() *Game {
@@ -294,7 +294,7 @@ type DeleteGameRequest struct {
 
 func (x *DeleteGameRequest) Reset() {
 	*x = DeleteGameRequest{}
-	mi := &file_business_service_proto_msgTypes[6]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -306,7 +306,7 @@ func (x *DeleteGameRequest) String() string {
 func (*DeleteGameRequest) ProtoMessage() {}
 
 func (x *DeleteGameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[6]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -319,7 +319,7 @@ func (x *DeleteGameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGameRequest.ProtoReflect.Descriptor instead.
 func (*DeleteGameRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{6}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DeleteGameRequest) GetId() string {
@@ -337,7 +337,7 @@ type DeleteGameResponse struct {
 
 func (x *DeleteGameResponse) Reset() {
 	*x = DeleteGameResponse{}
-	mi := &file_business_service_proto_msgTypes[7]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +349,7 @@ func (x *DeleteGameResponse) String() string {
 func (*DeleteGameResponse) ProtoMessage() {}
 
 func (x *DeleteGameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[7]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +362,7 @@ func (x *DeleteGameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGameResponse.ProtoReflect.Descriptor instead.
 func (*DeleteGameResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{7}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{7}
 }
 
 type ListGamesRequest struct {
@@ -373,7 +373,7 @@ type ListGamesRequest struct {
 
 func (x *ListGamesRequest) Reset() {
 	*x = ListGamesRequest{}
-	mi := &file_business_service_proto_msgTypes[8]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +385,7 @@ func (x *ListGamesRequest) String() string {
 func (*ListGamesRequest) ProtoMessage() {}
 
 func (x *ListGamesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[8]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +398,7 @@ func (x *ListGamesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGamesRequest.ProtoReflect.Descriptor instead.
 func (*ListGamesRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{8}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{8}
 }
 
 type ListGamesResponse struct {
@@ -410,7 +410,7 @@ type ListGamesResponse struct {
 
 func (x *ListGamesResponse) Reset() {
 	*x = ListGamesResponse{}
-	mi := &file_business_service_proto_msgTypes[9]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +422,7 @@ func (x *ListGamesResponse) String() string {
 func (*ListGamesResponse) ProtoMessage() {}
 
 func (x *ListGamesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[9]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +435,7 @@ func (x *ListGamesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGamesResponse.ProtoReflect.Descriptor instead.
 func (*ListGamesResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{9}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListGamesResponse) GetGames() []*Game {
@@ -462,7 +462,7 @@ type Node struct {
 
 func (x *Node) Reset() {
 	*x = Node{}
-	mi := &file_business_service_proto_msgTypes[10]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -474,7 +474,7 @@ func (x *Node) String() string {
 func (*Node) ProtoMessage() {}
 
 func (x *Node) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[10]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -487,7 +487,7 @@ func (x *Node) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Node.ProtoReflect.Descriptor instead.
 func (*Node) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{10}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Node) GetId() string {
@@ -562,7 +562,7 @@ type CreateNodeRequest struct {
 
 func (x *CreateNodeRequest) Reset() {
 	*x = CreateNodeRequest{}
-	mi := &file_business_service_proto_msgTypes[11]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -574,7 +574,7 @@ func (x *CreateNodeRequest) String() string {
 func (*CreateNodeRequest) ProtoMessage() {}
 
 func (x *CreateNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[11]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +587,7 @@ func (x *CreateNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNodeRequest.ProtoReflect.Descriptor instead.
 func (*CreateNodeRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{11}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateNodeRequest) GetNode() *Node {
@@ -606,7 +606,7 @@ type CreateNodeResponse struct {
 
 func (x *CreateNodeResponse) Reset() {
 	*x = CreateNodeResponse{}
-	mi := &file_business_service_proto_msgTypes[12]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +618,7 @@ func (x *CreateNodeResponse) String() string {
 func (*CreateNodeResponse) ProtoMessage() {}
 
 func (x *CreateNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[12]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +631,7 @@ func (x *CreateNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNodeResponse.ProtoReflect.Descriptor instead.
 func (*CreateNodeResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{12}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateNodeResponse) GetNode() *Node {
@@ -650,7 +650,7 @@ type GetNodeRequest struct {
 
 func (x *GetNodeRequest) Reset() {
 	*x = GetNodeRequest{}
-	mi := &file_business_service_proto_msgTypes[13]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -662,7 +662,7 @@ func (x *GetNodeRequest) String() string {
 func (*GetNodeRequest) ProtoMessage() {}
 
 func (x *GetNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[13]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -675,7 +675,7 @@ func (x *GetNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNodeRequest.ProtoReflect.Descriptor instead.
 func (*GetNodeRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{13}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetNodeRequest) GetId() string {
@@ -694,7 +694,7 @@ type GetNodeResponse struct {
 
 func (x *GetNodeResponse) Reset() {
 	*x = GetNodeResponse{}
-	mi := &file_business_service_proto_msgTypes[14]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -706,7 +706,7 @@ func (x *GetNodeResponse) String() string {
 func (*GetNodeResponse) ProtoMessage() {}
 
 func (x *GetNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[14]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -719,7 +719,7 @@ func (x *GetNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNodeResponse.ProtoReflect.Descriptor instead.
 func (*GetNodeResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{14}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetNodeResponse) GetNode() *Node {
@@ -738,7 +738,7 @@ type UpdateNodeRequest struct {
 
 func (x *UpdateNodeRequest) Reset() {
 	*x = UpdateNodeRequest{}
-	mi := &file_business_service_proto_msgTypes[15]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +750,7 @@ func (x *UpdateNodeRequest) String() string {
 func (*UpdateNodeRequest) ProtoMessage() {}
 
 func (x *UpdateNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[15]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +763,7 @@ func (x *UpdateNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNodeRequest.ProtoReflect.Descriptor instead.
 func (*UpdateNodeRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{15}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UpdateNodeRequest) GetNode() *Node {
@@ -782,7 +782,7 @@ type UpdateNodeResponse struct {
 
 func (x *UpdateNodeResponse) Reset() {
 	*x = UpdateNodeResponse{}
-	mi := &file_business_service_proto_msgTypes[16]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -794,7 +794,7 @@ func (x *UpdateNodeResponse) String() string {
 func (*UpdateNodeResponse) ProtoMessage() {}
 
 func (x *UpdateNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[16]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -807,7 +807,7 @@ func (x *UpdateNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNodeResponse.ProtoReflect.Descriptor instead.
 func (*UpdateNodeResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{16}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpdateNodeResponse) GetNode() *Node {
@@ -826,7 +826,7 @@ type DeleteNodeRequest struct {
 
 func (x *DeleteNodeRequest) Reset() {
 	*x = DeleteNodeRequest{}
-	mi := &file_business_service_proto_msgTypes[17]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -838,7 +838,7 @@ func (x *DeleteNodeRequest) String() string {
 func (*DeleteNodeRequest) ProtoMessage() {}
 
 func (x *DeleteNodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[17]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -851,7 +851,7 @@ func (x *DeleteNodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNodeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNodeRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{17}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteNodeRequest) GetId() string {
@@ -869,7 +869,7 @@ type DeleteNodeResponse struct {
 
 func (x *DeleteNodeResponse) Reset() {
 	*x = DeleteNodeResponse{}
-	mi := &file_business_service_proto_msgTypes[18]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +881,7 @@ func (x *DeleteNodeResponse) String() string {
 func (*DeleteNodeResponse) ProtoMessage() {}
 
 func (x *DeleteNodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[18]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +894,7 @@ func (x *DeleteNodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNodeResponse.ProtoReflect.Descriptor instead.
 func (*DeleteNodeResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{18}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{18}
 }
 
 type ListNodesRequest struct {
@@ -905,7 +905,7 @@ type ListNodesRequest struct {
 
 func (x *ListNodesRequest) Reset() {
 	*x = ListNodesRequest{}
-	mi := &file_business_service_proto_msgTypes[19]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -917,7 +917,7 @@ func (x *ListNodesRequest) String() string {
 func (*ListNodesRequest) ProtoMessage() {}
 
 func (x *ListNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[19]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -930,7 +930,7 @@ func (x *ListNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodesRequest.ProtoReflect.Descriptor instead.
 func (*ListNodesRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{19}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{19}
 }
 
 type ListNodesResponse struct {
@@ -942,7 +942,7 @@ type ListNodesResponse struct {
 
 func (x *ListNodesResponse) Reset() {
 	*x = ListNodesResponse{}
-	mi := &file_business_service_proto_msgTypes[20]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +954,7 @@ func (x *ListNodesResponse) String() string {
 func (*ListNodesResponse) ProtoMessage() {}
 
 func (x *ListNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[20]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +967,7 @@ func (x *ListNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodesResponse.ProtoReflect.Descriptor instead.
 func (*ListNodesResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{20}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListNodesResponse) GetNodes() []*Node {
@@ -989,7 +989,7 @@ type NodeAgent struct {
 
 func (x *NodeAgent) Reset() {
 	*x = NodeAgent{}
-	mi := &file_business_service_proto_msgTypes[21]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1001,7 +1001,7 @@ func (x *NodeAgent) String() string {
 func (*NodeAgent) ProtoMessage() {}
 
 func (x *NodeAgent) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[21]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1014,7 +1014,7 @@ func (x *NodeAgent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeAgent.ProtoReflect.Descriptor instead.
 func (*NodeAgent) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{21}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *NodeAgent) GetNodeId() string {
@@ -1054,7 +1054,7 @@ type RegisterNodeAgentRequest struct {
 
 func (x *RegisterNodeAgentRequest) Reset() {
 	*x = RegisterNodeAgentRequest{}
-	mi := &file_business_service_proto_msgTypes[22]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1066,7 +1066,7 @@ func (x *RegisterNodeAgentRequest) String() string {
 func (*RegisterNodeAgentRequest) ProtoMessage() {}
 
 func (x *RegisterNodeAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[22]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1079,7 +1079,7 @@ func (x *RegisterNodeAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterNodeAgentRequest.ProtoReflect.Descriptor instead.
 func (*RegisterNodeAgentRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{22}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RegisterNodeAgentRequest) GetAgent() *NodeAgent {
@@ -1098,7 +1098,7 @@ type RegisterNodeAgentResponse struct {
 
 func (x *RegisterNodeAgentResponse) Reset() {
 	*x = RegisterNodeAgentResponse{}
-	mi := &file_business_service_proto_msgTypes[23]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1110,7 +1110,7 @@ func (x *RegisterNodeAgentResponse) String() string {
 func (*RegisterNodeAgentResponse) ProtoMessage() {}
 
 func (x *RegisterNodeAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[23]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1123,7 +1123,7 @@ func (x *RegisterNodeAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterNodeAgentResponse.ProtoReflect.Descriptor instead.
 func (*RegisterNodeAgentResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{23}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RegisterNodeAgentResponse) GetAgent() *NodeAgent {
@@ -1142,7 +1142,7 @@ type GetNodeAgentRequest struct {
 
 func (x *GetNodeAgentRequest) Reset() {
 	*x = GetNodeAgentRequest{}
-	mi := &file_business_service_proto_msgTypes[24]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1154,7 @@ func (x *GetNodeAgentRequest) String() string {
 func (*GetNodeAgentRequest) ProtoMessage() {}
 
 func (x *GetNodeAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[24]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1167,7 @@ func (x *GetNodeAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNodeAgentRequest.ProtoReflect.Descriptor instead.
 func (*GetNodeAgentRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{24}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetNodeAgentRequest) GetNodeId() string {
@@ -1186,7 +1186,7 @@ type GetNodeAgentResponse struct {
 
 func (x *GetNodeAgentResponse) Reset() {
 	*x = GetNodeAgentResponse{}
-	mi := &file_business_service_proto_msgTypes[25]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1198,7 +1198,7 @@ func (x *GetNodeAgentResponse) String() string {
 func (*GetNodeAgentResponse) ProtoMessage() {}
 
 func (x *GetNodeAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[25]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1211,7 +1211,7 @@ func (x *GetNodeAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNodeAgentResponse.ProtoReflect.Descriptor instead.
 func (*GetNodeAgentResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{25}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetNodeAgentResponse) GetAgent() *NodeAgent {
@@ -1230,7 +1230,7 @@ type UpdateNodeAgentRequest struct {
 
 func (x *UpdateNodeAgentRequest) Reset() {
 	*x = UpdateNodeAgentRequest{}
-	mi := &file_business_service_proto_msgTypes[26]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1242,7 +1242,7 @@ func (x *UpdateNodeAgentRequest) String() string {
 func (*UpdateNodeAgentRequest) ProtoMessage() {}
 
 func (x *UpdateNodeAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[26]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1255,7 +1255,7 @@ func (x *UpdateNodeAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNodeAgentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateNodeAgentRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{26}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *UpdateNodeAgentRequest) GetAgent() *NodeAgent {
@@ -1274,7 +1274,7 @@ type UpdateNodeAgentResponse struct {
 
 func (x *UpdateNodeAgentResponse) Reset() {
 	*x = UpdateNodeAgentResponse{}
-	mi := &file_business_service_proto_msgTypes[27]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1286,7 @@ func (x *UpdateNodeAgentResponse) String() string {
 func (*UpdateNodeAgentResponse) ProtoMessage() {}
 
 func (x *UpdateNodeAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[27]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1299,7 @@ func (x *UpdateNodeAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNodeAgentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateNodeAgentResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{27}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateNodeAgentResponse) GetAgent() *NodeAgent {
@@ -1318,7 +1318,7 @@ type UnregisterNodeAgentRequest struct {
 
 func (x *UnregisterNodeAgentRequest) Reset() {
 	*x = UnregisterNodeAgentRequest{}
-	mi := &file_business_service_proto_msgTypes[28]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1330,7 +1330,7 @@ func (x *UnregisterNodeAgentRequest) String() string {
 func (*UnregisterNodeAgentRequest) ProtoMessage() {}
 
 func (x *UnregisterNodeAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[28]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1343,7 +1343,7 @@ func (x *UnregisterNodeAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnregisterNodeAgentRequest.ProtoReflect.Descriptor instead.
 func (*UnregisterNodeAgentRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{28}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UnregisterNodeAgentRequest) GetNodeId() string {
@@ -1361,7 +1361,7 @@ type UnregisterNodeAgentResponse struct {
 
 func (x *UnregisterNodeAgentResponse) Reset() {
 	*x = UnregisterNodeAgentResponse{}
-	mi := &file_business_service_proto_msgTypes[29]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1373,7 @@ func (x *UnregisterNodeAgentResponse) String() string {
 func (*UnregisterNodeAgentResponse) ProtoMessage() {}
 
 func (x *UnregisterNodeAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[29]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1386,7 @@ func (x *UnregisterNodeAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnregisterNodeAgentResponse.ProtoReflect.Descriptor instead.
 func (*UnregisterNodeAgentResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{29}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{29}
 }
 
 type ListNodeAgentsRequest struct {
@@ -1397,7 +1397,7 @@ type ListNodeAgentsRequest struct {
 
 func (x *ListNodeAgentsRequest) Reset() {
 	*x = ListNodeAgentsRequest{}
-	mi := &file_business_service_proto_msgTypes[30]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1409,7 +1409,7 @@ func (x *ListNodeAgentsRequest) String() string {
 func (*ListNodeAgentsRequest) ProtoMessage() {}
 
 func (x *ListNodeAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[30]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1422,7 +1422,7 @@ func (x *ListNodeAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListNodeAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{30}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{30}
 }
 
 type ListNodeAgentsResponse struct {
@@ -1434,7 +1434,7 @@ type ListNodeAgentsResponse struct {
 
 func (x *ListNodeAgentsResponse) Reset() {
 	*x = ListNodeAgentsResponse{}
-	mi := &file_business_service_proto_msgTypes[31]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1446,7 +1446,7 @@ func (x *ListNodeAgentsResponse) String() string {
 func (*ListNodeAgentsResponse) ProtoMessage() {}
 
 func (x *ListNodeAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_business_service_proto_msgTypes[31]
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,7 +1459,7 @@ func (x *ListNodeAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListNodeAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_business_service_proto_rawDescGZIP(), []int{31}
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListNodeAgentsResponse) GetAgents() []*NodeAgent {
@@ -1469,11 +1469,11 @@ func (x *ListNodeAgentsResponse) GetAgents() []*NodeAgent {
 	return nil
 }
 
-var File_business_service_proto protoreflect.FileDescriptor
+var File_assetservice_v1_business_service_proto protoreflect.FileDescriptor
 
-const file_business_service_proto_rawDesc = "" +
+const file_assetservice_v1_business_service_proto_rawDesc = "" +
 	"\n" +
-	"\x16business_service.proto\x12\x0fassetservice.v1\x1a\x13asset_service.proto\">\n" +
+	"&assetservice/v1/business_service.proto\x12\x0fassetservice.v1\x1a#assetservice/v1/asset_service.proto\x1a\x1aassetservice/v1/game.proto\">\n" +
 	"\x11CreateGameRequest\x12)\n" +
 	"\x04game\x18\x01 \x01(\v2\x15.assetservice.v1.GameR\x04game\"?\n" +
 	"\x12CreateGameResponse\x12)\n" +
@@ -1566,23 +1566,23 @@ const file_business_service_proto_rawDesc = "" +
 	"\fGetNodeAgent\x12$.assetservice.v1.GetNodeAgentRequest\x1a%.assetservice.v1.GetNodeAgentResponse\x12d\n" +
 	"\x0fUpdateNodeAgent\x12'.assetservice.v1.UpdateNodeAgentRequest\x1a(.assetservice.v1.UpdateNodeAgentResponse\x12p\n" +
 	"\x13UnregisterNodeAgent\x12+.assetservice.v1.UnregisterNodeAgentRequest\x1a,.assetservice.v1.UnregisterNodeAgentResponse\x12a\n" +
-	"\x0eListNodeAgents\x12&.assetservice.v1.ListNodeAgentsRequest\x1a'.assetservice.v1.ListNodeAgentsResponseB\xb5\x01\n" +
-	"\x13com.assetservice.v1B\x14BusinessServiceProtoP\x01Z+controller-go/internal/third;assetservicev1\xa2\x02\x03AXX\xaa\x02\x0fAssetservice.V1\xca\x02\x0fAssetservice\\V1\xe2\x02\x1bAssetservice\\V1\\GPBMetadata\xea\x02\x10Assetservice::V1b\x06proto3"
+	"\x0eListNodeAgents\x12&.assetservice.v1.ListNodeAgentsRequest\x1a'.assetservice.v1.ListNodeAgentsResponseB\xc5\x01\n" +
+	"\x13com.assetservice.v1B\x14BusinessServiceProtoP\x01Z;controller-go/internal/third/assetservice/v1;assetservicev1\xa2\x02\x03AXX\xaa\x02\x0fAssetservice.V1\xca\x02\x0fAssetservice\\V1\xe2\x02\x1bAssetservice\\V1\\GPBMetadata\xea\x02\x10Assetservice::V1b\x06proto3"
 
 var (
-	file_business_service_proto_rawDescOnce sync.Once
-	file_business_service_proto_rawDescData []byte
+	file_assetservice_v1_business_service_proto_rawDescOnce sync.Once
+	file_assetservice_v1_business_service_proto_rawDescData []byte
 )
 
-func file_business_service_proto_rawDescGZIP() []byte {
-	file_business_service_proto_rawDescOnce.Do(func() {
-		file_business_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_business_service_proto_rawDesc), len(file_business_service_proto_rawDesc)))
+func file_assetservice_v1_business_service_proto_rawDescGZIP() []byte {
+	file_assetservice_v1_business_service_proto_rawDescOnce.Do(func() {
+		file_assetservice_v1_business_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_assetservice_v1_business_service_proto_rawDesc), len(file_assetservice_v1_business_service_proto_rawDesc)))
 	})
-	return file_business_service_proto_rawDescData
+	return file_assetservice_v1_business_service_proto_rawDescData
 }
 
-var file_business_service_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
-var file_business_service_proto_goTypes = []any{
+var file_assetservice_v1_business_service_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_assetservice_v1_business_service_proto_goTypes = []any{
 	(*CreateGameRequest)(nil),           // 0: assetservice.v1.CreateGameRequest
 	(*CreateGameResponse)(nil),          // 1: assetservice.v1.CreateGameResponse
 	(*GetGameRequest)(nil),              // 2: assetservice.v1.GetGameRequest
@@ -1617,7 +1617,7 @@ var file_business_service_proto_goTypes = []any{
 	(*ListNodeAgentsResponse)(nil),      // 31: assetservice.v1.ListNodeAgentsResponse
 	(*Game)(nil),                        // 32: assetservice.v1.Game
 }
-var file_business_service_proto_depIdxs = []int32{
+var file_assetservice_v1_business_service_proto_depIdxs = []int32{
 	32, // 0: assetservice.v1.CreateGameRequest.game:type_name -> assetservice.v1.Game
 	32, // 1: assetservice.v1.CreateGameResponse.game:type_name -> assetservice.v1.Game
 	32, // 2: assetservice.v1.GetGameResponse.game:type_name -> assetservice.v1.Game
@@ -1673,27 +1673,28 @@ var file_business_service_proto_depIdxs = []int32{
 	0,  // [0:18] is the sub-list for field type_name
 }
 
-func init() { file_business_service_proto_init() }
-func file_business_service_proto_init() {
-	if File_business_service_proto != nil {
+func init() { file_assetservice_v1_business_service_proto_init() }
+func file_assetservice_v1_business_service_proto_init() {
+	if File_assetservice_v1_business_service_proto != nil {
 		return
 	}
-	file_asset_service_proto_init()
+	file_assetservice_v1_asset_service_proto_init()
+	file_assetservice_v1_game_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_business_service_proto_rawDesc), len(file_business_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_assetservice_v1_business_service_proto_rawDesc), len(file_assetservice_v1_business_service_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_business_service_proto_goTypes,
-		DependencyIndexes: file_business_service_proto_depIdxs,
-		MessageInfos:      file_business_service_proto_msgTypes,
+		GoTypes:           file_assetservice_v1_business_service_proto_goTypes,
+		DependencyIndexes: file_assetservice_v1_business_service_proto_depIdxs,
+		MessageInfos:      file_assetservice_v1_business_service_proto_msgTypes,
 	}.Build()
-	File_business_service_proto = out.File
-	file_business_service_proto_goTypes = nil
-	file_business_service_proto_depIdxs = nil
+	File_assetservice_v1_business_service_proto = out.File
+	file_assetservice_v1_business_service_proto_goTypes = nil
+	file_assetservice_v1_business_service_proto_depIdxs = nil
 }

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: node_agent.proto
+// source: nodeagent/v1/node_agent.proto
 
 package nodeagentv1
 
@@ -19,14 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	NodeAgentService_PrepareGameBuild_FullMethodName = "/nodeagent.v1.NodeAgentService/PrepareGameBuild"
-	NodeAgentService_StartInstance_FullMethodName    = "/nodeagent.v1.NodeAgentService/StartInstance"
-	NodeAgentService_StopInstance_FullMethodName     = "/nodeagent.v1.NodeAgentService/StopInstance"
-	NodeAgentService_CreateSnapshot_FullMethodName   = "/nodeagent.v1.NodeAgentService/CreateSnapshot"
-	NodeAgentService_RestoreSnapshot_FullMethodName  = "/nodeagent.v1.NodeAgentService/RestoreSnapshot"
-	NodeAgentService_GetOperation_FullMethodName     = "/nodeagent.v1.NodeAgentService/GetOperation"
-	NodeAgentService_InspectInstance_FullMethodName  = "/nodeagent.v1.NodeAgentService/InspectInstance"
-	NodeAgentService_GetHeartbeat_FullMethodName     = "/nodeagent.v1.NodeAgentService/GetHeartbeat"
+	NodeAgentService_PrepareGameBuild_FullMethodName      = "/nodeagent.v1.NodeAgentService/PrepareGameBuild"
+	NodeAgentService_StartInstance_FullMethodName         = "/nodeagent.v1.NodeAgentService/StartInstance"
+	NodeAgentService_StopInstance_FullMethodName          = "/nodeagent.v1.NodeAgentService/StopInstance"
+	NodeAgentService_CreateSnapshot_FullMethodName        = "/nodeagent.v1.NodeAgentService/CreateSnapshot"
+	NodeAgentService_RestoreSnapshot_FullMethodName       = "/nodeagent.v1.NodeAgentService/RestoreSnapshot"
+	NodeAgentService_GetOperation_FullMethodName          = "/nodeagent.v1.NodeAgentService/GetOperation"
+	NodeAgentService_GetHeartbeat_FullMethodName          = "/nodeagent.v1.NodeAgentService/GetHeartbeat"
+	NodeAgentService_GetInstances_FullMethodName          = "/nodeagent.v1.NodeAgentService/GetInstances"
+	NodeAgentService_InspectInstance_FullMethodName       = "/nodeagent.v1.NodeAgentService/InspectInstance"
+	NodeAgentService_CleanInstance_FullMethodName         = "/nodeagent.v1.NodeAgentService/CleanInstance"
+	NodeAgentService_InspectInstanceStream_FullMethodName = "/nodeagent.v1.NodeAgentService/InspectInstanceStream"
 )
 
 // NodeAgentServiceClient is the client API for NodeAgentService service.
@@ -39,8 +42,13 @@ type NodeAgentServiceClient interface {
 	CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*CreateSnapshotResponse, error)
 	RestoreSnapshot(ctx context.Context, in *RestoreSnapshotRequest, opts ...grpc.CallOption) (*RestoreSnapshotResponse, error)
 	GetOperation(ctx context.Context, in *GetOperationRequest, opts ...grpc.CallOption) (*GetOperationResponse, error)
-	InspectInstance(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (*InspectInstanceResponse, error)
 	GetHeartbeat(ctx context.Context, in *GetHeartbeatRequest, opts ...grpc.CallOption) (*GetHeartbeatResponse, error)
+	// 获取所有instance
+	GetInstances(ctx context.Context, in *GetInstancesRequest, opts ...grpc.CallOption) (*GetInstancesResponse, error)
+	InspectInstance(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (*InspectInstanceResponse, error)
+	// StopInstance后收尾工作
+	CleanInstance(ctx context.Context, in *CleanInstanceRequest, opts ...grpc.CallOption) (*CleanInstanceResponse, error)
+	InspectInstanceStream(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InspectInstanceResponse], error)
 }
 
 type nodeAgentServiceClient struct {
@@ -111,6 +119,26 @@ func (c *nodeAgentServiceClient) GetOperation(ctx context.Context, in *GetOperat
 	return out, nil
 }
 
+func (c *nodeAgentServiceClient) GetHeartbeat(ctx context.Context, in *GetHeartbeatRequest, opts ...grpc.CallOption) (*GetHeartbeatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetHeartbeatResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_GetHeartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeAgentServiceClient) GetInstances(ctx context.Context, in *GetInstancesRequest, opts ...grpc.CallOption) (*GetInstancesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetInstancesResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_GetInstances_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *nodeAgentServiceClient) InspectInstance(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (*InspectInstanceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InspectInstanceResponse)
@@ -121,15 +149,34 @@ func (c *nodeAgentServiceClient) InspectInstance(ctx context.Context, in *Inspec
 	return out, nil
 }
 
-func (c *nodeAgentServiceClient) GetHeartbeat(ctx context.Context, in *GetHeartbeatRequest, opts ...grpc.CallOption) (*GetHeartbeatResponse, error) {
+func (c *nodeAgentServiceClient) CleanInstance(ctx context.Context, in *CleanInstanceRequest, opts ...grpc.CallOption) (*CleanInstanceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetHeartbeatResponse)
-	err := c.cc.Invoke(ctx, NodeAgentService_GetHeartbeat_FullMethodName, in, out, cOpts...)
+	out := new(CleanInstanceResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_CleanInstance_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
+
+func (c *nodeAgentServiceClient) InspectInstanceStream(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InspectInstanceResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &NodeAgentService_ServiceDesc.Streams[0], NodeAgentService_InspectInstanceStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[InspectInstanceRequest, InspectInstanceResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NodeAgentService_InspectInstanceStreamClient = grpc.ServerStreamingClient[InspectInstanceResponse]
 
 // NodeAgentServiceServer is the server API for NodeAgentService service.
 // All implementations must embed UnimplementedNodeAgentServiceServer
@@ -141,8 +188,13 @@ type NodeAgentServiceServer interface {
 	CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error)
 	RestoreSnapshot(context.Context, *RestoreSnapshotRequest) (*RestoreSnapshotResponse, error)
 	GetOperation(context.Context, *GetOperationRequest) (*GetOperationResponse, error)
-	InspectInstance(context.Context, *InspectInstanceRequest) (*InspectInstanceResponse, error)
 	GetHeartbeat(context.Context, *GetHeartbeatRequest) (*GetHeartbeatResponse, error)
+	// 获取所有instance
+	GetInstances(context.Context, *GetInstancesRequest) (*GetInstancesResponse, error)
+	InspectInstance(context.Context, *InspectInstanceRequest) (*InspectInstanceResponse, error)
+	// StopInstance后收尾工作
+	CleanInstance(context.Context, *CleanInstanceRequest) (*CleanInstanceResponse, error)
+	InspectInstanceStream(*InspectInstanceRequest, grpc.ServerStreamingServer[InspectInstanceResponse]) error
 	mustEmbedUnimplementedNodeAgentServiceServer()
 }
 
@@ -171,11 +223,20 @@ func (UnimplementedNodeAgentServiceServer) RestoreSnapshot(context.Context, *Res
 func (UnimplementedNodeAgentServiceServer) GetOperation(context.Context, *GetOperationRequest) (*GetOperationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOperation not implemented")
 }
+func (UnimplementedNodeAgentServiceServer) GetHeartbeat(context.Context, *GetHeartbeatRequest) (*GetHeartbeatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetHeartbeat not implemented")
+}
+func (UnimplementedNodeAgentServiceServer) GetInstances(context.Context, *GetInstancesRequest) (*GetInstancesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetInstances not implemented")
+}
 func (UnimplementedNodeAgentServiceServer) InspectInstance(context.Context, *InspectInstanceRequest) (*InspectInstanceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InspectInstance not implemented")
 }
-func (UnimplementedNodeAgentServiceServer) GetHeartbeat(context.Context, *GetHeartbeatRequest) (*GetHeartbeatResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetHeartbeat not implemented")
+func (UnimplementedNodeAgentServiceServer) CleanInstance(context.Context, *CleanInstanceRequest) (*CleanInstanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CleanInstance not implemented")
+}
+func (UnimplementedNodeAgentServiceServer) InspectInstanceStream(*InspectInstanceRequest, grpc.ServerStreamingServer[InspectInstanceResponse]) error {
+	return status.Error(codes.Unimplemented, "method InspectInstanceStream not implemented")
 }
 func (UnimplementedNodeAgentServiceServer) mustEmbedUnimplementedNodeAgentServiceServer() {}
 func (UnimplementedNodeAgentServiceServer) testEmbeddedByValue()                          {}
@@ -306,6 +367,42 @@ func _NodeAgentService_GetOperation_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NodeAgentService_GetHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetHeartbeatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeAgentServiceServer).GetHeartbeat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeAgentService_GetHeartbeat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeAgentServiceServer).GetHeartbeat(ctx, req.(*GetHeartbeatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NodeAgentService_GetInstances_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetInstancesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeAgentServiceServer).GetInstances(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeAgentService_GetInstances_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeAgentServiceServer).GetInstances(ctx, req.(*GetInstancesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _NodeAgentService_InspectInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InspectInstanceRequest)
 	if err := dec(in); err != nil {
@@ -324,23 +421,34 @@ func _NodeAgentService_InspectInstance_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _NodeAgentService_GetHeartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetHeartbeatRequest)
+func _NodeAgentService_CleanInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CleanInstanceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(NodeAgentServiceServer).GetHeartbeat(ctx, in)
+		return srv.(NodeAgentServiceServer).CleanInstance(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: NodeAgentService_GetHeartbeat_FullMethodName,
+		FullMethod: NodeAgentService_CleanInstance_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NodeAgentServiceServer).GetHeartbeat(ctx, req.(*GetHeartbeatRequest))
+		return srv.(NodeAgentServiceServer).CleanInstance(ctx, req.(*CleanInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _NodeAgentService_InspectInstanceStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(InspectInstanceRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(NodeAgentServiceServer).InspectInstanceStream(m, &grpc.GenericServerStream[InspectInstanceRequest, InspectInstanceResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type NodeAgentService_InspectInstanceStreamServer = grpc.ServerStreamingServer[InspectInstanceResponse]
 
 // NodeAgentService_ServiceDesc is the grpc.ServiceDesc for NodeAgentService service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -374,14 +482,28 @@ var NodeAgentService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _NodeAgentService_GetOperation_Handler,
 		},
 		{
+			MethodName: "GetHeartbeat",
+			Handler:    _NodeAgentService_GetHeartbeat_Handler,
+		},
+		{
+			MethodName: "GetInstances",
+			Handler:    _NodeAgentService_GetInstances_Handler,
+		},
+		{
 			MethodName: "InspectInstance",
 			Handler:    _NodeAgentService_InspectInstance_Handler,
 		},
 		{
-			MethodName: "GetHeartbeat",
-			Handler:    _NodeAgentService_GetHeartbeat_Handler,
+			MethodName: "CleanInstance",
+			Handler:    _NodeAgentService_CleanInstance_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "node_agent.proto",
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "InspectInstanceStream",
+			Handler:       _NodeAgentService_InspectInstanceStream_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "nodeagent/v1/node_agent.proto",
 }
