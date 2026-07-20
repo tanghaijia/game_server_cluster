@@ -33,10 +33,14 @@ export REGISTRY_PORT="${REGISTRY_PORT:-5000}"
 # export REGISTRY_PASSWORD="pass"
 # export REGISTRY_SERVER_ADDRESS="https://"
 
-# AWS S3 配置（S3ObjectStore 使用标准 AWS 凭据链）
-# export AWS_REGION="us-east-1"
-# export AWS_ACCESS_KEY_ID="..."
-# export AWS_SECRET_ACCESS_KEY="..."
+# AWS S3 / S3 兼容对象存储配置
+# 如果使用 AWS S3（默认），配置 region 和凭据即可，SDK 自动推导 endpoint：
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
+
+# 如果使用 MinIO 或其他 S3 兼容服务，需指定自定义 endpoint：
+# export S3_ENDPOINT="http://192.168.1.100:9000"
 
 # SQLite 数据文件路径（debug 模式下为内存，生产环境自动创建）
 # 默认在 apalis-sqlite 的工作目录下创建 jobs.db

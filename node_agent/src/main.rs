@@ -125,8 +125,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let system_info = Arc::new(RealSystemInfoProvider::new(node_id.clone()));
 
         // 5. 对象存储
-        let s3_config = aws_config::load_from_env().await;
-        let s3_client = aws_sdk_s3::Client::new(&s3_config);
+        let sdk_config = aws_config::load_from_env().await;
+        let s3_endpoint = std::env::var("S3_ENDPOINT").ok();
+        let s3_client = if let Some(endpoint) = &s3_endpoint {
+            // 使用自定义 endpoint（如 MinIO）
+            let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+                .endpoint_url(endpoint)
+                .build();
+            aws_sdk_s3::Client::from_conf(s3_config)
+        } else {
+            aws_sdk_s3::Client::new(&sdk_config)
+        };
         let object_store = Arc::new(S3ObjectStore::new(s3_client));
 
         // 6. NodeAgentService
