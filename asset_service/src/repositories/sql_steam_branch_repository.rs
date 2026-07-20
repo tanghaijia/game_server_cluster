@@ -41,7 +41,7 @@ impl SteamBranchRepository for SqlSteamBranchRepository {
             })?;
 
         for branch in branches {
-            let branch_id: i64 = sqlx::query_scalar(
+            let branch_id: i32 = sqlx::query_scalar(
                 r#"
                 INSERT INTO t_asset_service_steam_branches (game_id, name, build_id, description, app_id)
                 VALUES ($1, $2, $3, $4, $5)
@@ -160,7 +160,7 @@ impl SteamBranchRepository for SqlSteamBranchRepository {
 
 #[derive(sqlx::FromRow)]
 struct SteamBranchRow {
-    id: i64,
+    id: i32,
     game_id: String,
     name: String,
     build_id: i64,
