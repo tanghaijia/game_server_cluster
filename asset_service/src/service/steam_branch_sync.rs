@@ -37,8 +37,8 @@ impl SteamBranchSync {
     /// 启动后台循环，通过 `tokio::spawn` 在独立任务中运行。
     pub async fn run(&self) {
         loop {
-            tokio::time::sleep(self.interval).await;
             self.sync_all_games().await;
+            tokio::time::sleep(self.interval).await;
         }
     }
 
@@ -60,11 +60,7 @@ impl SteamBranchSync {
     }
 
     async fn sync_game(&self, game: &Game) {
-        let branches = match self
-            .steam_service
-            .get_steam_branchs(&game.app_id)
-            .await
-        {
+        let branches = match self.steam_service.get_steam_branchs(&game.app_id).await {
             Ok(branches) => branches,
             Err(e) => {
                 eprintln!(
@@ -75,7 +71,11 @@ impl SteamBranchSync {
             }
         };
 
-        if let Err(e) = self.branch_repo.save_branches(&game.app_id, &branches).await {
+        if let Err(e) = self
+            .branch_repo
+            .save_branches(&game.app_id, &branches)
+            .await
+        {
             eprintln!(
                 "[steam-branch-sync] failed to save branches for {} (app_id={}): {e}",
                 game.id, game.app_id
