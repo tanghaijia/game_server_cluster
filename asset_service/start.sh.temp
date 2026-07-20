@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# asset-service 启动脚本（只启动，不编译）
+#
+# 环境变量:
+#   DATABASE_URL       — PostgreSQL 连接串（设置后使用 SQL 存储）
+#   ASSET_SERVICE_ADDR — 监听地址，默认 127.0.0.1:50053
+#   PROFILE            — debug / release，默认 debug
+#
+# 示例:
+#   # 内存模式（开发）
+#   ./start.sh
+#
+#   # SQL 模式（需要先编译）
+#   DATABASE_URL="postgres://postgres:password@localhost/asset_service" ./start.sh
+#
+#   # Release 模式
+#   PROFILE=release DATABASE_URL="postgres://postgres:password@localhost/asset_service" ./start.sh
+
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+PROFILE="${PROFILE:-debug}"
+
+if [ "$PROFILE" = "release" ]; then
+    BINARY="target/release/asset_service"
+else
+    BINARY="target/debug/asset_service"
+fi
+
+if [ ! -f "$BINARY" ]; then
+    echo "Error: binary not found at $BINARY"
+    echo "Run 'cargo build' or 'cargo build --release' first."
+    exit 1
+fi
+
+export ASSET_SERVICE_ADDR="${ASSET_SERVICE_ADDR:-127.0.0.1:50053}"
+export DATABASE_URL="postgres://postgres:password@localhost/asset_service"
+
+if [ -n "${DATABASE_URL:-}" ]; then
+    echo "Starting asset-service with PostgreSQL ..."
+else
+    echo "Starting asset-service with in-memory storage (no DATABASE_URL set) ..."
+fi
+
+echo "  Listen:  $ASSET_SERVICE_ADDR"
+echo "  Profile: $PROFILE"
+echo ""
+
+exec "$BINARY" "$@"
