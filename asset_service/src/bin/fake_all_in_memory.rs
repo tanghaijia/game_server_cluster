@@ -36,10 +36,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     seed_demo_builds(service.clone(), fake_game_repos.clone()).await?;
 
+    let steam_branch_repo = Arc::new(InMemorySteamBranchRepository::default());
+
     // 启动 Steam 分支定期同步（每 15 分钟）
     let sync = SteamBranchSync::new(
         Arc::new(FakeSteamService),
-        Arc::new(InMemorySteamBranchRepository::default()),
+        steam_branch_repo.clone(),
         game_repo.clone(),
         Duration::from_secs(15 * 60),
     );
@@ -51,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         game_repo,
         Arc::new(InMemoryNodeRepository::default()),
         Arc::new(InMemoryNodeAgentRepository::default()),
+        steam_branch_repo,
     );
 
     let grpc = GrpcAssetService::new(service);

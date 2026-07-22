@@ -18,10 +18,7 @@ pub trait SteamBranchRepository: Send + Sync {
     ) -> Result<(), AssetServiceError>;
 
     /// 查询某个游戏的所有分支。
-    async fn get_branches(
-        &self,
-        game_id: &str,
-    ) -> Result<Vec<SteamBranch>, AssetServiceError>;
+    async fn get_branches(&self, game_id: &str) -> Result<Vec<SteamBranch>, AssetServiceError>;
 
     /// 查询某个游戏的指定分支。
     async fn get_branch(

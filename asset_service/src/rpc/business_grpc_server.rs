@@ -5,49 +5,57 @@ use tonic::{Request, Response, Status};
 use crate::{
     domain::{Game, Node, NodeAgent},
     error::AssetServiceError,
-    ports::{GameRepository, NodeAgentRepository, NodeRepository},
+    ports::{GameRepository, NodeAgentRepository, NodeRepository, SteamBranchRepository},
     proto::asset_service::{
-        self,
-        business_service_server::BusinessService as BusinessRpc,
-        CreateGameRequest, CreateGameResponse, CreateNodeRequest, CreateNodeResponse,
+        self, CreateGameRequest, CreateGameResponse, CreateNodeRequest, CreateNodeResponse,
         DeleteGameRequest, DeleteGameResponse, DeleteNodeRequest, DeleteNodeResponse,
-        GetGameRequest, GetGameResponse, GetNodeAgentRequest, GetNodeAgentResponse,
-        GetNodeRequest, GetNodeResponse, ListGamesRequest, ListGamesResponse,
-        ListNodeAgentsRequest, ListNodeAgentsResponse, ListNodesRequest, ListNodesResponse,
-        RegisterNodeAgentRequest, RegisterNodeAgentResponse, UnregisterNodeAgentRequest,
-        UnregisterNodeAgentResponse, UpdateGameRequest, UpdateGameResponse,
-        UpdateNodeAgentRequest, UpdateNodeAgentResponse, UpdateNodeRequest, UpdateNodeResponse,
+        GetGameRequest, GetGameResponse, GetNodeAgentRequest, GetNodeAgentResponse, GetNodeRequest,
+        GetNodeResponse, ListGamesRequest, ListGamesResponse, ListNodeAgentsRequest,
+        ListNodeAgentsResponse, ListNodesRequest, ListNodesResponse, ListSteamBranchesRequest,
+        ListSteamBranchesResponse, RegisterNodeAgentRequest, RegisterNodeAgentResponse,
+        UnregisterNodeAgentRequest, UnregisterNodeAgentResponse, UpdateGameRequest,
+        UpdateGameResponse, UpdateNodeAgentRequest, UpdateNodeAgentResponse, UpdateNodeRequest,
+        UpdateNodeResponse, business_service_server::BusinessService as BusinessRpc,
     },
 };
 
-pub struct GrpcBusinessService<G, N, A>
+pub struct GrpcBusinessService<G, N, A, S>
 where
     G: GameRepository,
     N: NodeRepository,
     A: NodeAgentRepository,
+    S: SteamBranchRepository,
 {
     games: Arc<G>,
     nodes: Arc<N>,
     agents: Arc<A>,
+    steam_branches: Arc<S>,
 }
 
-impl<G, N, A> GrpcBusinessService<G, N, A>
+impl<G, N, A, S> GrpcBusinessService<G, N, A, S>
 where
     G: GameRepository,
     N: NodeRepository,
     A: NodeAgentRepository,
+    S: SteamBranchRepository,
 {
-    pub fn new(games: Arc<G>, nodes: Arc<N>, agents: Arc<A>) -> Self {
-        Self { games, nodes, agents }
+    pub fn new(games: Arc<G>, nodes: Arc<N>, agents: Arc<A>, steam_branches: Arc<S>) -> Self {
+        Self {
+            games,
+            nodes,
+            agents,
+            steam_branches,
+        }
     }
 }
 
 #[tonic::async_trait]
-impl<G, N, A> BusinessRpc for GrpcBusinessService<G, N, A>
+impl<G, N, A, S> BusinessRpc for GrpcBusinessService<G, N, A, S>
 where
     G: GameRepository + 'static,
     N: NodeRepository + 'static,
     A: NodeAgentRepository + 'static,
+    S: SteamBranchRepository + 'static,
 {
     // ==================== Game CRUD ====================
 
@@ -283,6 +291,29 @@ where
             agents: agents.into_iter().map(|a| map_agent_to_proto(&a)).collect(),
         }))
     }
+
+    // ==================== SteamBranch ====================
+
+    async fn list_steam_branches(
+        &self,
+        request: Request<ListSteamBranchesRequest>,
+    ) -> Result<Response<ListSteamBranchesResponse>, Status> {
+        let game_id = request.into_inner().game_id;
+        if game_id.is_empty() {
+            return Err(Status::invalid_argument("game_id is required"));
+        }
+        let branches = self
+            .steam_branches
+            .get_branches(&game_id)
+            .await
+            .map_err(map_error)?;
+        Ok(Response::new(ListSteamBranchesResponse {
+            branches: branches
+                .into_iter()
+                .map(|b| map_steam_branch_to_proto(&b))
+                .collect(),
+        }))
+    }
 }
 
 // ==================== Mapping Helpers ====================
@@ -359,5 +390,30 @@ fn map_agent_to_proto(value: &NodeAgent) -> asset_service::NodeAgent {
         endpoint: value.endpoint.clone(),
         status: value.status.clone(),
         last_heartbeat_at: value.last_heartbeat_at,
+    }
+}
+
+// ==================== SteamBranch Mapping ====================
+
+fn map_steam_branch_to_proto(value: &crate::ports::SteamBranch) -> asset_service::SteamBranch {
+    asset_service::SteamBranch {
+        name: value.name.clone(),
+        build_id: value.build_id,
+        description: value.description.clone(),
+        app_id: value.app_id.clone(),
+        manifests: value
+            .manifests
+            .iter()
+            .map(|m| map_depot_manifest_to_proto(m))
+            .collect(),
+    }
+}
+
+fn map_depot_manifest_to_proto(
+    value: &crate::ports::DepotManifest,
+) -> asset_service::DepotManifest {
+    asset_service::DepotManifest {
+        depot_id: value.depot_id,
+        manifest_gid: value.manifest_gid,
     }
 }

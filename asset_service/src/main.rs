@@ -63,7 +63,7 @@ async fn run_with_sql(database_url: &str, addr: SocketAddr) -> Result<(), Box<dy
 
     let sync = SteamBranchSync::new(
         Arc::new(SteamServiceHttp::new()),
-        steam_branch_repo,
+        steam_branch_repo.clone(),
         game_repo.clone(),
         Duration::from_secs(15 * 60),
     );
@@ -71,7 +71,7 @@ async fn run_with_sql(database_url: &str, addr: SocketAddr) -> Result<(), Box<dy
         sync.run().await;
     });
 
-    let business = GrpcBusinessService::new(game_repo, node_repo, node_agent_repo);
+    let business = GrpcBusinessService::new(game_repo, node_repo, node_agent_repo, steam_branch_repo);
     let grpc = GrpcAssetService::new(service);
 
     println!("asset-service listening on {}", addr);
@@ -102,9 +102,11 @@ async fn run_with_in_memory(addr: SocketAddr) -> Result<(), Box<dyn std::error::
 
     seed_demo_builds(service.clone(), demo_game_repo).await?;
 
+    let steam_branch_repo = Arc::new(InMemorySteamBranchRepository::default());
+
     let sync = SteamBranchSync::new(
         Arc::new(SteamServiceHttp::new()),
-        Arc::new(InMemorySteamBranchRepository::default()),
+        steam_branch_repo.clone(),
         game_repo.clone(),
         Duration::from_secs(15 * 60),
     );
@@ -116,6 +118,7 @@ async fn run_with_in_memory(addr: SocketAddr) -> Result<(), Box<dyn std::error::
         game_repo,
         Arc::new(InMemoryNodeRepository::default()),
         Arc::new(InMemoryNodeAgentRepository::default()),
+        steam_branch_repo,
     );
 
     let grpc = GrpcAssetService::new(service);
