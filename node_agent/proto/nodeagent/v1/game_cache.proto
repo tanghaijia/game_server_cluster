@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package nodeagent.v1;
+import "google/protobuf/timestamp.proto";
+
+
+enum GameCacheStatus {
+    DOWNLOADING = 0;
+    AVAILABLE = 1;
+    REMOVED = 2;
+    UNAVAILABLE = 3;
+}
+
+message GameCache {
+    string game_id = 1;
+    string branch_name = 2;
+    GameCacheStatus status = 3;
+    optional string path = 4;
+    optional float download_progress = 5;
+    google.protobuf.Timestamp create_time = 6;
+    google.protobuf.Timestamp update_time = 7;
+}

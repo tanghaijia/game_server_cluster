@@ -3,10 +3,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use sqlx::SqlitePool;
 
-use crate::domain::{GameContainer, GameInstance, NodeOperation, OperationId};
+use crate::domain::{GameCache, GameContainer, GameInstance, NodeOperation, OperationId};
 use crate::error::NodeAgentError;
 use crate::ports::{
-    DockerInstanceRepository, GameInstanceRepository, OperationRepository,
+    DockerInstanceRepository, GameCacheRepository, GameInstanceRepository, OperationRepository,
 };
 
 // ============================================================
@@ -15,13 +15,19 @@ use crate::ports::{
 const TABLE_OPERATION: &str = "node_operation_store";
 const TABLE_GAME_INSTANCE: &str = "game_instance_store";
 const TABLE_DOCKER_INSTANCE: &str = "docker_instance_store";
+const TABLE_GAME_CACHE: &str = "game_cache_store";
 
 // ============================================================
 // 建表
 // ============================================================
 
 async fn ensure_tables(pool: &SqlitePool) -> Result<(), NodeAgentError> {
-    for table in [TABLE_OPERATION, TABLE_GAME_INSTANCE, TABLE_DOCKER_INSTANCE] {
+    for table in [
+        TABLE_OPERATION,
+        TABLE_GAME_INSTANCE,
+        TABLE_DOCKER_INSTANCE,
+        TABLE_GAME_CACHE,
+    ] {
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {table} (
                 key   TEXT PRIMARY KEY,
@@ -71,7 +77,10 @@ impl OperationRepository for SqliteOperationRepository {
         Ok(())
     }
 
-    async fn get(&self, operation_id: &OperationId) -> Result<Option<NodeOperation>, NodeAgentError> {
+    async fn get(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<NodeOperation>, NodeAgentError> {
         let row: Option<(String,)> = sqlx::query_as(&format!(
             "SELECT value FROM {TABLE_OPERATION} WHERE key = ?1"
         ))
@@ -84,11 +93,10 @@ impl OperationRepository for SqliteOperationRepository {
 
         match row {
             Some((json,)) => {
-                let op: NodeOperation = serde_json::from_str(&json).map_err(|e| {
-                    NodeAgentError::Internal {
+                let op: NodeOperation =
+                    serde_json::from_str(&json).map_err(|e| NodeAgentError::Internal {
                         message: format!("deserialize operation failed: {e}"),
-                    }
-                })?;
+                    })?;
                 Ok(Some(op))
             }
             None => Ok(None),
@@ -143,11 +151,10 @@ impl GameInstanceRepository for SqliteGameInstanceRepository {
 
         match row {
             Some((json,)) => {
-                let instance: GameInstance = serde_json::from_str(&json).map_err(|e| {
-                    NodeAgentError::Internal {
+                let instance: GameInstance =
+                    serde_json::from_str(&json).map_err(|e| NodeAgentError::Internal {
                         message: format!("deserialize game_instance failed: {e}"),
-                    }
-                })?;
+                    })?;
                 Ok(instance)
             }
             None => Err(NodeAgentError::InstanceNotFound {
@@ -157,22 +164,19 @@ impl GameInstanceRepository for SqliteGameInstanceRepository {
     }
 
     async fn get_all(&self) -> Result<Vec<GameInstance>, NodeAgentError> {
-        let rows: Vec<(String,)> = sqlx::query_as(&format!(
-            "SELECT value FROM {TABLE_GAME_INSTANCE}"
-        ))
-        .fetch_all(&*self.pool)
-        .await
-        .map_err(|e| NodeAgentError::DBOperationFail {
-            message: format!("get_all game_instances failed: {e}"),
-        })?;
+        let rows: Vec<(String,)> =
+            sqlx::query_as(&format!("SELECT value FROM {TABLE_GAME_INSTANCE}"))
+                .fetch_all(&*self.pool)
+                .await
+                .map_err(|e| NodeAgentError::DBOperationFail {
+                    message: format!("get_all game_instances failed: {e}"),
+                })?;
 
         let instances: Result<Vec<_>, _> = rows
             .into_iter()
             .map(|(json,)| {
-                serde_json::from_str::<GameInstance>(&json).map_err(|e| {
-                    NodeAgentError::Internal {
-                        message: format!("deserialize game_instance failed: {e}"),
-                    }
+                serde_json::from_str::<GameInstance>(&json).map_err(|e| NodeAgentError::Internal {
+                    message: format!("deserialize game_instance failed: {e}"),
                 })
             })
             .collect();
@@ -227,11 +231,10 @@ impl DockerInstanceRepository for SqliteDockerInstanceRepository {
 
         match row {
             Some((json,)) => {
-                let container: GameContainer = serde_json::from_str(&json).map_err(|e| {
-                    NodeAgentError::Internal {
+                let container: GameContainer =
+                    serde_json::from_str(&json).map_err(|e| NodeAgentError::Internal {
                         message: format!("deserialize container failed: {e}"),
-                    }
-                })?;
+                    })?;
                 Ok(Some(container))
             }
             None => Ok(None),
@@ -249,5 +252,58 @@ impl DockerInstanceRepository for SqliteDockerInstanceRepository {
             message: format!("delete container failed: {e}"),
         })?;
         Ok(())
+    }
+}
+
+// ============================================================
+// SqliteGameCacheRepository
+// ============================================================
+
+pub struct SqliteGameCacheRepository {
+    pool: Arc<SqlitePool>,
+}
+
+impl SqliteGameCacheRepository {
+    pub async fn new(pool: Arc<SqlitePool>) -> Result<Self, NodeAgentError> {
+        ensure_tables(&pool).await?;
+        Ok(Self { pool })
+    }
+}
+
+#[async_trait]
+impl GameCacheRepository for SqliteGameCacheRepository {
+    async fn save(&self, game_cache: &GameCache) -> anyhow::Result<()> {
+        let json = serde_json::to_string(game_cache)?;
+        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        sqlx::query(&format!(
+            "INSERT OR REPLACE INTO {TABLE_GAME_CACHE} (key, value) VALUES (?1, ?2)"
+        ))
+        .bind(&key)
+        .bind(&json)
+        .execute(&*self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+    ) -> anyhow::Result<Option<GameCache>> {
+        let key = format!("{}:{}", game_id, branch_name);
+        let row: Option<(String,)> = sqlx::query_as(&format!(
+            "SELECT value FROM {TABLE_GAME_CACHE} WHERE key = ?1"
+        ))
+        .bind(&key)
+        .fetch_optional(&*self.pool)
+        .await?;
+
+        match row {
+            Some((json,)) => {
+                let cache: GameCache = serde_json::from_str(&json)?;
+                Ok(Some(cache))
+            }
+            None => Ok(None),
+        }
     }
 }

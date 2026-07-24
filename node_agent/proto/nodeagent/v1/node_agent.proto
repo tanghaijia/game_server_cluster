@@ -21,6 +21,8 @@ service NodeAgentService {
   rpc CleanInstance(CleanInstanceRequest) returns (CleanInstanceResponse);
 
   rpc InspectInstanceStream (InspectInstanceRequest) returns (stream InspectInstanceResponse);
+
+  rpc CacheGame (CacheGameRequest) returns (CacheGameResponse);
 }
 
 message GetInstancesRequest {}
@@ -37,6 +39,16 @@ message CleanInstanceRequest {
 
 message CleanInstanceResponse {
     NodeOperation operation = 1;
+}
+
+message CacheGameRequest {
+    string game_id = 1;
+    string branch_name = 2;
+}
+
+message CacheGameResponse {
+    NodeOperation operation = 1;
+    bool downloading = 2;
 }
 
 message PrepareGameBuildRequest {

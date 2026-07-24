@@ -2,12 +2,14 @@ mod docker_container_client;
 mod real_system_info;
 mod s3_object_store;
 mod sqlite_repositories;
+mod steam_service_client;
 
 use async_trait::async_trait;
 pub use docker_container_client::DockerContainerClient;
 pub use real_system_info::*;
 pub use s3_object_store::*;
 pub use sqlite_repositories::*;
+pub use steam_service_client::*;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
