@@ -26,6 +26,9 @@ service BusinessService {
   rpc UpdateNodeAgent(UpdateNodeAgentRequest) returns (UpdateNodeAgentResponse);
   rpc UnregisterNodeAgent(UnregisterNodeAgentRequest) returns (UnregisterNodeAgentResponse);
   rpc ListNodeAgents(ListNodeAgentsRequest) returns (ListNodeAgentsResponse);
+
+  // SteamBranch 查询
+  rpc ListSteamBranches(ListSteamBranchesRequest) returns (ListSteamBranchesResponse);
 }
 
 // ==================== Game ====================
@@ -159,4 +162,27 @@ message ListNodeAgentsRequest {}
 
 message ListNodeAgentsResponse {
   repeated NodeAgent agents = 1;
+}
+
+// ==================== SteamBranch ====================
+
+message SteamBranch {
+  string name = 1;
+  uint64 build_id = 2;
+  optional string description = 3;
+  string app_id = 4;
+  repeated DepotManifest manifests = 5;
+}
+
+message DepotManifest {
+  uint32 depot_id = 1;
+  uint64 manifest_gid = 2;
+}
+
+message ListSteamBranchesRequest {
+  string game_id = 1;
+}
+
+message ListSteamBranchesResponse {
+  repeated SteamBranch branches = 1;
 }
