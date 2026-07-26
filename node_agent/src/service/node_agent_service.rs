@@ -135,7 +135,14 @@ where
             .get(&game_id.to_string(), &branch_name.to_string())
             .await
         {
-            Ok(Some(c)) if !matches!(c.status, DomainGameCacheStatus::Removed) => Ok(c),
+            Ok(Some(c))
+                if matches!(
+                    c.status,
+                    DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
+                ) =>
+            {
+                Ok(c)
+            }
             _ => {
                 let game = self.asset_service.get_game(game_id).await?;
 

@@ -67,6 +67,12 @@ fi
 DATA_DIR="${DATA_DIR:-./data}"
 mkdir -p "$DATA_DIR"
 
+export RUST_LOG=info
+sudo mkdir -p /server
+sudo mkdir -p /data
+sudo chown -R $USER:$USER /server
+sudo chown -R $USER:$USER /data
+
 # ============================================================
 # 启动
 # ============================================================
