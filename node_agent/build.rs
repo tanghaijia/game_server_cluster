@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
     println!("cargo:rerun-if-changed=proto/nodeagent/v1/node_agent.proto");
+    println!("cargo:rerun-if-changed=proto/nodeagent/v1/game_cache.proto");
     println!("cargo:rerun-if-changed=proto/assetservice/v1/asset_service.proto");
     println!("cargo:rerun-if-changed=proto/assetservice/v1/business_service.proto");
     Ok(())

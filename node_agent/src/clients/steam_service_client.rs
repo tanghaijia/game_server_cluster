@@ -64,6 +64,8 @@ impl SteamServiceClient {
 
         let mut lines = BufReader::new(stdout).lines();
 
+        game_cache.status = GameCacheStatus::Downloading;
+        self.game_cache_repos.save(game_cache).await?;
         while let Some(line) = lines.next_line().await? {
             if let Ok(Some(progress)) = progress_regex(&line) {
                 game_cache.download_progress = Some(progress);

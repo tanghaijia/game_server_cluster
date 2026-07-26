@@ -11,18 +11,19 @@ use crate::{
     domain::{
         BuildCompatibility, BuildPreparation, BuildPreparationResult, ConatinerType,
         ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
-        ContainerStatus, Endpoint, Game, GameBuild, GameContainer, GameInstance,
-        GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord, LocalGameBuild, ModManifest,
-        NodeAgentInfo, NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState,
+        ContainerStatus, Endpoint, Game, GameBuild, GameCache, GameCacheStatus, GameContainer,
+        GameInstance, GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord, LocalGameBuild,
+        ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState,
         SnapshotCaptureRequest, SnapshotRecord, SnapshotRestorePlan, SnapshotRestoreRequest,
         SnapshotRestoreResult, StartInstanceArgument, instance_data_path,
     },
     error::NodeAgentError,
     ports::{
         AssetServiceFace, ContainerClient, ContainerError, DockerInstanceRepository,
-        GameInstanceRepository, NodeHeartbeat, OperationRepository, Snapshot_manager,
-        SystemInfoProvider,
+        GameCacheRepository, GameInstanceRepository, NodeHeartbeat, OperationRepository,
+        Snapshot_manager, SystemInfoProvider,
     },
+    service::{SteamService, SteamServiceError},
 };
 
 #[derive(Default, Clone)]
@@ -543,5 +544,69 @@ impl DockerInstanceRepository for InMemoryDockerInstanceRepository {
         })?;
         store.remove(container_id);
         Ok(())
+    }
+}
+
+// ============================================================
+// InMemoryGameCacheRepository — 用于测试
+// ============================================================
+
+#[derive(Default, Clone)]
+pub struct InMemoryGameCacheRepository {
+    store: Arc<Mutex<HashMap<String, GameCache>>>,
+}
+
+#[async_trait]
+impl GameCacheRepository for InMemoryGameCacheRepository {
+    async fn save(&self, game_cache: &GameCache) -> anyhow::Result<()> {
+        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        store.insert(key, game_cache.clone());
+        Ok(())
+    }
+
+    async fn get(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+    ) -> anyhow::Result<Option<GameCache>> {
+        let key = format!("{}:{}", game_id, branch_name);
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        Ok(store.get(&key).cloned())
+    }
+}
+
+// ============================================================
+// FakeSteamService — 用于测试
+// ============================================================
+
+#[derive(Default, Clone)]
+pub struct FakeSteamService;
+
+#[async_trait]
+impl SteamService for FakeSteamService {
+    async fn start_download(
+        &self,
+        _game_cache: GameCache,
+    ) -> tokio::task::JoinHandle<Result<(), SteamServiceError>> {
+        tokio::spawn(async { Ok(()) })
+    }
+
+    async fn uninstall(&self, _game_cache: GameCache) -> Result<String, SteamServiceError> {
+        Ok("/fake/install/path".to_string())
+    }
+
+    async fn get_download_progress(
+        &self,
+        _game_id: &String,
+        _branch_name: &String,
+    ) -> anyhow::Result<Option<f32>> {
+        Ok(Some(100.0))
     }
 }

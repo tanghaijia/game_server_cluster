@@ -4,13 +4,14 @@ use chrono::Utc;
 use lmrc_docker::DockerClient;
 
 use crate::domain::{
-    ConatinerType, GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager,
-    NodeId, RemoteImage, RuntimeState,
+    ConatinerType, GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
+    GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager, NodeId,
+    RemoteImage, RuntimeState,
 };
-use crate::ports::{ContainerClient, GameInstanceRepository, ObjectStore};
+use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository, ObjectStore};
 use crate::proto::asset_service::SnapshotType;
 use crate::proto::node_agent::NodeAgentGameInstance;
-use crate::service::{download_and_extract_tar_zst, upload_dir_as_tar_zst};
+use crate::service::{SteamService, download_and_extract_tar_zst, upload_dir_as_tar_zst};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
@@ -68,6 +69,8 @@ where
     container_client: Arc<IMC>,
     local_game_build_manager: LocalGameBuildManager,
     object_store: Arc<dyn ObjectStore>,
+    game_cache_repos: Arc<dyn GameCacheRepository>,
+    steam_service: Arc<dyn SteamService>,
 }
 
 impl<I, S, A, IMC> NodeAgentService<I, S, A, IMC>
@@ -83,6 +86,8 @@ where
         asset_service: Arc<A>,
         container_client: Arc<IMC>,
         object_store: Arc<dyn ObjectStore>,
+        game_cache_repos: Arc<dyn GameCacheRepository>,
+        steam_service: Arc<dyn SteamService>,
     ) -> Self {
         Self {
             game_instance_repos,
@@ -91,6 +96,8 @@ where
             container_client: container_client,
             local_game_build_manager: LocalGameBuildManager::new(),
             object_store,
+            game_cache_repos,
+            steam_service,
         }
     }
 
@@ -111,6 +118,52 @@ where
 
     pub async fn heartbeat(&self) -> Result<crate::ports::NodeHeartbeat, NodeAgentError> {
         self.system_info.heartbeat().await
+    }
+
+    pub async fn cache_game(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<DomainGameCache, NodeAgentError> {
+        let now = Utc::now();
+
+        match self.game_cache_repos.get(&game_id.to_string(), &branch_name.to_string()).await {
+            Ok(Some(c)) if !matches!(c.status, DomainGameCacheStatus::Removed) => Ok(c),
+            _ => {
+                let cache = DomainGameCache {
+                    game_id: game_id.to_string(),
+                    branch_name: branch_name.to_string(),
+                    status: DomainGameCacheStatus::Downloading,
+                    path: None,
+                    download_progress: None,
+                    create_time: now,
+                    update_time: now,
+                };
+                self.game_cache_repos.save(&cache).await.map_err(|e| {
+                    NodeAgentError::Internal {
+                        message: format!("save game_cache failed: {e}"),
+                    }
+                })?;
+                self.steam_service.start_download(cache.clone()).await;
+                Ok(cache)
+            }
+        }
+    }
+
+    pub async fn get_cache_game(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<DomainGameCache, NodeAgentError> {
+        self.game_cache_repos
+            .get(&game_id.to_string(), &branch_name.to_string())
+            .await
+            .map_err(|e| NodeAgentError::Internal {
+                message: format!("get game_cache failed: {e}"),
+            })?
+            .ok_or_else(|| NodeAgentError::Internal {
+                message: format!("game cache not found: {}:{}", game_id, branch_name),
+            })
     }
 
     pub fn failure(message: impl Into<String>, retryable: bool) -> FailureInfo {

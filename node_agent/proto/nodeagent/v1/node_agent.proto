@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package nodeagent.v1;
+import "nodeagent/v1/game_cache.proto";
 import "nodeagent/v1/instance.proto";
 
 service NodeAgentService {
@@ -23,6 +24,8 @@ service NodeAgentService {
   rpc InspectInstanceStream (InspectInstanceRequest) returns (stream InspectInstanceResponse);
 
   rpc CacheGame (CacheGameRequest) returns (CacheGameResponse);
+
+  rpc GetCacheGame (CacheGameRequest) returns (CacheGameResponse);
 }
 
 message GetInstancesRequest {}
@@ -47,8 +50,7 @@ message CacheGameRequest {
 }
 
 message CacheGameResponse {
-    NodeOperation operation = 1;
-    bool downloading = 2;
+    GameCache game_cache = 1;
 }
 
 message PrepareGameBuildRequest {

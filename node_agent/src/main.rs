@@ -5,13 +5,15 @@ use std::{net::SocketAddr, sync::Arc};
 use node_agent::{
     clients::{
         AssetServiceGrpcClient, DockerContainerClient, RealSystemInfoProvider, S3ObjectStore,
-        SqliteDockerInstanceRepository, SqliteGameInstanceRepository, SqliteOperationRepository,
+        SqliteDockerInstanceRepository, SqliteGameInstanceRepository,
+        SqliteGameCacheRepository, SqliteOperationRepository, SteamServiceClient,
     },
     domain::{ImageRepository, ImageRepositoryCredentials},
     proto::node_agent::node_agent_service_server::NodeAgentServiceServer,
     providers::{
-        FakeAssetServiceFace, FakeImageClient, FakeInstanceRuntime, FakeSystemInfoProvider,
-        InMemoryObjectStore, InMemoryOperationRepository,
+        FakeAssetServiceFace, FakeImageClient, FakeInstanceRuntime, FakeSteamService,
+        FakeSystemInfoProvider, InMemoryGameCacheRepository, InMemoryObjectStore,
+        InMemoryOperationRepository,
     },
     rpc::GrpcNodeAgentServer,
     service::{
@@ -36,19 +38,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let concrete_image = Arc::new(FakeImageClient::default());
         let concrete_object_store = Arc::new(InMemoryObjectStore::new());
 
-        // 2. 构造 NodeAgentService（具体泛型）
+        // 2. 初始化 apalis SQLite backend
+        let pool = init_backend().await?;
+
+        // 3. GameCache + Steam 依赖
+        let game_cache_repos = Arc::new(InMemoryGameCacheRepository::default());
+        let steam_service = Arc::new(FakeSteamService);
+
+        // 4. 构造 NodeAgentService（具体泛型）
         let node_agent_service = Arc::new(NodeAgentService::new(
             concrete_instance.clone(),
             concrete_sysinfo.clone(),
             concrete_asset.clone(),
             concrete_image.clone(),
             concrete_object_store.clone(),
+            game_cache_repos.clone(),
+            steam_service.clone(),
         ));
 
-        // 3. 初始化 apalis SQLite backend
-        let pool = init_backend().await?;
-
-        // 4. 构造 TaskContext（cast 到 Arc<dyn Trait>）
+        // 5. 构造 TaskContext（cast 到 Arc<dyn Trait>）
         let task_ctx = Arc::new(TaskContext::new(
             node_agent_service.clone() as Arc<dyn BackgroundWorker>,
             concrete_instance.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
@@ -57,10 +65,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             concrete_image as Arc<dyn node_agent::ports::ContainerClient>,
         ));
 
-        // 5. 启动后台 worker
+        // 6. 启动后台 worker
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
 
-        // 6. gRPC server（传入 pool + operations 用于投递后台任务）
+        // 7. gRPC server
         let grpc =
             GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance);
 
@@ -138,16 +146,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let object_store = Arc::new(S3ObjectStore::new(s3_client));
 
-        // 6. NodeAgentService
+        // 6. GameCache + Steam 依赖
+        let game_cache_repos =
+            Arc::new(SqliteGameCacheRepository::new(pool_arc.clone()).await?);
+        let steam_service = Arc::new(SteamServiceClient::new(game_cache_repos.clone()));
+
+        // 7. NodeAgentService
         let node_agent_service = Arc::new(NodeAgentService::new(
             sqlite_game_instances.clone(),
             system_info.clone(),
             asset_client.clone(),
             docker_client.clone(),
             object_store.clone(),
+            game_cache_repos.clone(),
+            steam_service.clone(),
         ));
 
-        // 7. TaskContext
+        // 8. TaskContext
         let task_ctx = Arc::new(TaskContext::new(
             node_agent_service.clone() as Arc<dyn BackgroundWorker>,
             sqlite_game_instances.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
@@ -156,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             docker_client.clone() as Arc<dyn node_agent::ports::ContainerClient>,
         ));
 
-        // 8. 后台 worker + gRPC server
+        // 9. 后台 worker + gRPC server
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
         let grpc = GrpcNodeAgentServer::new(
             node_agent_service,

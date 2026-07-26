@@ -17,6 +17,7 @@ use crate::{
         InstanceRuntimeRecord, InstanceSpec, LocalGameBuild, NodeId, NodeOperation, OperationId,
         OperationKind, OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
         SnapshotReference, SnapshotRestoreResult, StartInstanceArgument,
+        GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
     },
     error::NodeAgentError,
     ports::{
@@ -26,10 +27,11 @@ use crate::{
     proto::{
         asset_service::Node,
         node_agent::{
-            self, BuildPreparationResult as ProtoBuildPreparationResult, CleanInstanceRequest,
-            CleanInstanceResponse, CreateSnapshotRequest, CreateSnapshotResponse,
-            FailureInfo as ProtoFailureInfo, GameBuild as ProtoGameBuild, GetHeartbeatRequest,
-            GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
+            self, BuildPreparationResult as ProtoBuildPreparationResult, CacheGameRequest,
+            CacheGameResponse, CleanInstanceRequest, CleanInstanceResponse,
+            CreateSnapshotRequest, CreateSnapshotResponse, FailureInfo as ProtoFailureInfo,
+            GameBuild as ProtoGameBuild, GetHeartbeatRequest, GetHeartbeatResponse,
+            GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
             GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
             InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
             InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
@@ -48,7 +50,6 @@ use crate::{
         enqueue_start_instance, enqueue_stop_instance,
     },
 };
-
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
 where
     I: GameInstanceRepository,
@@ -345,6 +346,38 @@ where
 
         Ok(Response::new(Box::pin(ReceiverStream::new(rx))))
     }
+
+    async fn cache_game(
+        &self,
+        request: Request<CacheGameRequest>,
+    ) -> Result<Response<CacheGameResponse>, Status> {
+        let req = request.into_inner();
+        let cache = self
+            .service
+            .cache_game(&req.game_id, &req.branch_name)
+            .await
+            .map_err(map_error)?;
+
+        Ok(Response::new(CacheGameResponse {
+            game_cache: Some(map_domain_cache_to_proto(cache)),
+        }))
+    }
+
+    async fn get_cache_game(
+        &self,
+        request: Request<CacheGameRequest>,
+    ) -> Result<Response<CacheGameResponse>, Status> {
+        let req = request.into_inner();
+        let cache = self
+            .service
+            .get_cache_game(&req.game_id, &req.branch_name)
+            .await
+            .map_err(map_error)?;
+
+        Ok(Response::new(CacheGameResponse {
+            game_cache: Some(map_domain_cache_to_proto(cache)),
+        }))
+    }
 }
 
 fn map_error(error: NodeAgentError) -> Status {
@@ -550,6 +583,33 @@ fn map_game_instance_to_proto(instance: GameInstance) -> NodeAgentGameInstance {
         update_time: Some(Timestamp {
             seconds: instance.update_time.timestamp(),
             nanos: instance.update_time.timestamp_subsec_nanos() as i32,
+        }),
+    }
+}
+
+fn map_domain_cache_status_to_proto(status: DomainGameCacheStatus) -> i32 {
+    match status {
+        DomainGameCacheStatus::Downloading => node_agent::GameCacheStatus::Downloading as i32,
+        DomainGameCacheStatus::Available => node_agent::GameCacheStatus::Available as i32,
+        DomainGameCacheStatus::Removed => node_agent::GameCacheStatus::Removed as i32,
+        DomainGameCacheStatus::Unavailable => node_agent::GameCacheStatus::Unavailable as i32,
+    }
+}
+
+fn map_domain_cache_to_proto(cache: DomainGameCache) -> node_agent::GameCache {
+    node_agent::GameCache {
+        game_id: cache.game_id,
+        branch_name: cache.branch_name,
+        status: map_domain_cache_status_to_proto(cache.status),
+        path: cache.path,
+        download_progress: cache.download_progress,
+        create_time: Some(Timestamp {
+            seconds: cache.create_time.timestamp(),
+            nanos: cache.create_time.timestamp_subsec_nanos() as i32,
+        }),
+        update_time: Some(Timestamp {
+            seconds: cache.update_time.timestamp(),
+            nanos: cache.update_time.timestamp_subsec_nanos() as i32,
         }),
     }
 }
