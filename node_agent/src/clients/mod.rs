@@ -199,12 +199,15 @@ impl AssetServiceFace for AssetServiceGrpcClient {
     async fn get_game_build(&self, build_id: &str) -> Result<GameBuild, NodeAgentError> {
         use crate::proto::asset_service::GetGameBuildRequest;
 
+        log::info!("get_game_build calling asset_service for build_id={}", build_id);
         let mut client = self.asset.lock().await;
-        let response = client
+        let result = client
             .get_game_build(GetGameBuildRequest {
                 build_id: build_id.to_string(),
             })
-            .await
+            .await;
+        log::info!("get_game_build result: {:?}", result);
+        let response = result
             .map_err(|e| NodeAgentError::Internal {
                 message: format!("get_game_build failed: {e}"),
             })?;
