@@ -173,8 +173,8 @@ async fn handle_prepare_build(
         .await
     {
         error!(
-            "prepare game build service fail, operation id: {}.",
-            op_id.0
+            "prepare game build service fail, operation id: {}, error: {}.",
+            op_id.0, err
         );
         fail_operation(&ctx.operations, op, &err.to_string()).await;
     } else {
@@ -203,7 +203,7 @@ async fn handle_start_instance(
         .expect("can not find operation");
     running_operation(&ctx.operations, op.clone()).await;
     if let Err(err) = ctx.node_agent_service.start_instance(job.spec).await {
-        error!("start game instance fail, operation id: {}.", op_id.0);
+        error!("start game instance fail, operation id: {}, error: {}.", op_id.0, err);
         fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
 
         // 将 GameInstance 状态标记为 Failed
