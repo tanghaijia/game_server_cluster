@@ -8,11 +8,11 @@ use asset_service::{
         asset_service_server::AssetServiceServer, business_service_server::BusinessServiceServer,
     },
     repositories::{
-        create_pool, run_migrations, InMemoryBuildRepository, InMemoryGameRepository,
-        InMemoryModManifestRepository, InMemoryNodeAgentRepository, InMemoryNodeRepository,
-        InMemorySnapshotRepository, InMemorySteamBranchRepository, SqlBuildRepository,
-        SqlGameRepository, SqlModManifestRepository, SqlNodeAgentRepository, SqlNodeRepository,
-        SqlSnapshotRepository, SqlSteamBranchRepository,
+        InMemoryBuildRepository, InMemoryGameRepository, InMemoryModManifestRepository,
+        InMemoryNodeAgentRepository, InMemoryNodeRepository, InMemorySnapshotRepository,
+        InMemorySteamBranchRepository, SqlBuildRepository, SqlGameRepository,
+        SqlModManifestRepository, SqlNodeAgentRepository, SqlNodeRepository, SqlSnapshotRepository,
+        SqlSteamBranchRepository, create_pool, run_migrations,
     },
     rpc::{GrpcAssetService, GrpcBusinessService},
     service::{AssetService, RegisterBuildRequest, SteamBranchSync},
@@ -38,7 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── SQL (PostgreSQL) 模式 ─────────────────────────────────────────────────────
 
-async fn run_with_sql(database_url: &str, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_with_sql(
+    database_url: &str,
+    addr: SocketAddr,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("[asset-service] using PostgreSQL storage");
 
     let pool = create_pool(database_url).await?;
@@ -71,7 +74,8 @@ async fn run_with_sql(database_url: &str, addr: SocketAddr) -> Result<(), Box<dy
         sync.run().await;
     });
 
-    let business = GrpcBusinessService::new(game_repo, node_repo, node_agent_repo, steam_branch_repo);
+    let business =
+        GrpcBusinessService::new(game_repo, node_repo, node_agent_repo, steam_branch_repo);
     let grpc = GrpcAssetService::new(service);
 
     println!("asset-service listening on {}", addr);
@@ -148,7 +152,7 @@ async fn seed_demo_builds(
     game_repository: Arc<InMemoryGameRepository>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let now = Utc::now();
-    let game_id = "dst".to_string();
+    let game_id = "343050".to_string();
     game_repository
         .save(&Game {
             id: game_id.clone(),

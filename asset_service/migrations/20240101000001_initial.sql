@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_t_asset_service_steam_branches_game_id ON t_asset
 -- ── 种子数据 ────────────────────────────────────────────────────────────────
 
 INSERT INTO t_asset_service_games (id, name, app_id)
-VALUES ('dst', 'Dont stave together', '343050')
+VALUES ('343050', 'Dont stave together', '343050')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO t_asset_service_game_builds (
@@ -119,7 +119,7 @@ INSERT INTO t_asset_service_game_builds (
     status, pinned, resolved_at, created_at, updated_at
 )
 SELECT
-    'dst-public-demo-build', 'dst', 'public',
+    'dst-public-demo-build', '343050', 'public',
     'dst', 0, 1, 0,
     'demo-upstream', 'ccr.ccs.tencentyun.com/cluster_game_server',
     'dst-adapter', '0.2.2',
