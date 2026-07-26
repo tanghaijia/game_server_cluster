@@ -11,4 +11,6 @@ pub trait GameCacheRepository: Send + Sync {
         game_id: &String,
         branch_name: &String,
     ) -> anyhow::Result<Option<GameCache>>;
+
+    async fn get_all(&self) -> anyhow::Result<Vec<GameCache>>;
 }

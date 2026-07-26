@@ -20,6 +20,17 @@ impl SteamServiceClient {
         Self { game_cache_repos }
     }
 
+    pub async fn program_init(&self) -> anyhow::Result<()> {
+        let game_caches = self.game_cache_repos.get_all().await?;
+        for mut cache in game_caches {
+            if cache.status == GameCacheStatus::Downloading {
+                cache.status = GameCacheStatus::Removed;
+                self.game_cache_repos.save(&cache).await?;
+            }
+        }
+        Ok(())
+    }
+
     async fn download(&self, mut game_cache: GameCache) -> Result<(), SteamServiceError> {
         // path 为空是调用方错误，不需写 DB
         if game_cache.path.is_none() {

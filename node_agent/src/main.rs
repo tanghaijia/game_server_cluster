@@ -5,8 +5,8 @@ use std::{net::SocketAddr, sync::Arc};
 use node_agent::{
     clients::{
         AssetServiceGrpcClient, DockerContainerClient, RealSystemInfoProvider, S3ObjectStore,
-        SqliteDockerInstanceRepository, SqliteGameInstanceRepository,
-        SqliteGameCacheRepository, SqliteOperationRepository, SteamServiceClient,
+        SqliteDockerInstanceRepository, SqliteGameCacheRepository, SqliteGameInstanceRepository,
+        SqliteOperationRepository, SteamServiceClient,
     },
     domain::{ImageRepository, ImageRepositoryCredentials},
     proto::node_agent::node_agent_service_server::NodeAgentServiceServer,
@@ -147,9 +147,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let object_store = Arc::new(S3ObjectStore::new(s3_client));
 
         // 6. GameCache + Steam 依赖
-        let game_cache_repos =
-            Arc::new(SqliteGameCacheRepository::new(pool_arc.clone()).await?);
-        let steam_service = Arc::new(SteamServiceClient::new(game_cache_repos.clone()));
+        let game_cache_repos = Arc::new(SqliteGameCacheRepository::new(pool_arc.clone()).await?);
+        let ssc = SteamServiceClient::new(game_cache_repos.clone());
+        if let Err(e) = ssc.program_init().await {
+            log::error!("SteamServiceClient program_init fail: {e}");
+            return Err(e.into());
+        }
+        let steam_service = Arc::new(ssc);
 
         // 7. NodeAgentService
         let node_agent_service = Arc::new(NodeAgentService::new(

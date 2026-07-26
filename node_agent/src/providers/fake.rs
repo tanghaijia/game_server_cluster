@@ -596,6 +596,14 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
             .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
         Ok(store.get(&key).cloned())
     }
+
+    async fn get_all(&self) -> anyhow::Result<Vec<GameCache>> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        Ok(store.values().cloned().collect())
+    }
 }
 
 // ============================================================

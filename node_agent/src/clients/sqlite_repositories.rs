@@ -306,4 +306,16 @@ impl GameCacheRepository for SqliteGameCacheRepository {
             None => Ok(None),
         }
     }
+
+    async fn get_all(&self) -> anyhow::Result<Vec<GameCache>> {
+        let rows: Vec<(String,)> = sqlx::query_as(&format!(
+            "SELECT value FROM {TABLE_GAME_CACHE}"
+        ))
+        .fetch_all(&*self.pool)
+        .await?;
+
+        rows.iter()
+            .map(|(json,)| serde_json::from_str::<GameCache>(json).map_err(Into::into))
+            .collect()
+    }
 }
