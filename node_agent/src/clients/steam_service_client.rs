@@ -1,8 +1,10 @@
+use std::path::PathBuf;
 use std::println;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use regex::Regex;
+use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tonic::async_trait;
@@ -43,7 +45,14 @@ impl SteamServiceClient {
             let _ = self.game_cache_repos.save(&game_cache).await;
             return Err(SteamServiceError::EmptyDownloadPathError {});
         }
-
+        let path = PathBuf::from(game_cache.path.clone().unwrap());
+        if !path.exists() {
+            fs::create_dir_all(&path).await.map_err(|e| {
+                let error_msg = format!("Failed to create directory {:?}: {}", path, e);
+                log::error!("{}", error_msg);
+                SteamServiceError::IoError(e)
+            })?;
+        }
         let result = self.run_download(&mut game_cache).await;
 
         match result {
@@ -71,10 +80,10 @@ impl SteamServiceClient {
     async fn run_download(&self, game_cache: &mut GameCache) -> Result<(), SteamServiceError> {
         let mut child = Command::new("steamcmd")
             .args([
-                "+login",
-                "anonymous",
                 "+force_install_dir",
                 game_cache.path.clone().unwrap().as_str(),
+                "+login",
+                "anonymous",
                 "+app_update",
                 game_cache.game_id.as_str(),
                 "-beta",
