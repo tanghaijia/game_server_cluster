@@ -386,6 +386,22 @@ impl AssetServiceFace for FakeAssetServiceFace {
         })
     }
 
+    async fn get_game(&self, game_id: &str) -> Result<Game, NodeAgentError> {
+        Ok(Game {
+            id: game_id.to_string(),
+            name: game_id.to_string(),
+            app_id: String::new(),
+        })
+    }
+
+    async fn list_games(&self) -> Result<Vec<Game>, NodeAgentError> {
+        Ok(vec![Game {
+            id: "fake-game".to_string(),
+            name: "fake-game".to_string(),
+            app_id: String::new(),
+        }])
+    }
+
     async fn register_node_agent(
         &self,
         _node_id: &str,

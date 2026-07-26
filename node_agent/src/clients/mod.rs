@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
 use crate::domain::{
-    BuildCompatibility, GameBuild, ModEntry, ModManifest, NodeAgentInfo, SnapshotRecord,
+    BuildCompatibility, Game, GameBuild, ModEntry, ModManifest, NodeAgentInfo, SnapshotRecord,
     SnapshotRestorePlan,
 };
 use crate::error::NodeAgentError;
@@ -75,6 +75,14 @@ fn map_game_build(
         artifact_image_name: proto.artifact_image_name,
         artifact_image_tag: proto.artifact_image_tag,
     })
+}
+
+fn map_game_proto(proto: crate::proto::asset_service::Game) -> Game {
+    Game {
+        id: proto.id,
+        name: proto.name,
+        app_id: proto.app_id,
+    }
 }
 
 fn map_snapshot_record(proto: crate::proto::asset_service::SnapshotRecord) -> SnapshotRecord {
@@ -447,6 +455,49 @@ impl AssetServiceFace for AssetServiceGrpcClient {
                     message: "check_build_mod_compatibility returned empty result".to_string(),
                 })?;
         Ok(map_compatibility(compatibility))
+    }
+
+    // ---- BusinessService — Game ----
+
+    async fn get_game(&self, game_id: &str) -> Result<Game, NodeAgentError> {
+        use crate::proto::asset_service::GetGameRequest;
+
+        let mut client = self.business.lock().await;
+        let response = client
+            .get_game(GetGameRequest {
+                id: game_id.to_string(),
+            })
+            .await
+            .map_err(|e| NodeAgentError::Internal {
+                message: format!("get_game failed: {e}"),
+            })?;
+
+        let game = response
+            .into_inner()
+            .game
+            .ok_or_else(|| NodeAgentError::Internal {
+                message: format!("game {game_id} not found"),
+            })?;
+        Ok(map_game_proto(game))
+    }
+
+    async fn list_games(&self) -> Result<Vec<Game>, NodeAgentError> {
+        use crate::proto::asset_service::ListGamesRequest;
+
+        let mut client = self.business.lock().await;
+        let response = client
+            .list_games(ListGamesRequest {})
+            .await
+            .map_err(|e| NodeAgentError::Internal {
+                message: format!("list_games failed: {e}"),
+            })?;
+
+        Ok(response
+            .into_inner()
+            .games
+            .into_iter()
+            .map(map_game_proto)
+            .collect())
     }
 
     // ---- NodeAgent ----

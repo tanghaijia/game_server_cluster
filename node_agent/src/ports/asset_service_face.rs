@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 
 use crate::domain::{
-    BuildCompatibility, GameBuild, ModManifest, NodeAgentInfo, SnapshotRecord, SnapshotRestorePlan,
+    BuildCompatibility, Game, GameBuild, ModManifest, NodeAgentInfo, SnapshotRecord,
+    SnapshotRestorePlan,
 };
 use crate::error::NodeAgentError;
 
@@ -88,6 +89,12 @@ pub trait AssetServiceFace: Send + Sync {
     ) -> Result<BuildCompatibility, NodeAgentError>;
 
     // ==================== BusinessService — NodeAgent ====================
+
+    /// 获取游戏信息。
+    async fn get_game(&self, game_id: &str) -> Result<Game, NodeAgentError>;
+
+    /// 列出所有游戏。
+    async fn list_games(&self) -> Result<Vec<Game>, NodeAgentError>;
 
     /// 注册节点代理。
     async fn register_node_agent(

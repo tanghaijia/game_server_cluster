@@ -1,4 +1,5 @@
 pub mod clients;
+pub mod common;
 pub mod domain;
 pub mod error;
 pub mod ports;

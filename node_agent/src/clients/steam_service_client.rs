@@ -23,6 +23,13 @@ impl SteamServiceClient {
     async fn download(&self, mut game_cache: GameCache) -> Result<(), SteamServiceError> {
         // path 为空是调用方错误，不需写 DB
         if game_cache.path.is_none() {
+            log::error!(
+                "{} {} 下载路径空",
+                game_cache.path.clone().unwrap().as_str(),
+                game_cache.game_id.as_str(),
+            );
+            game_cache.status = GameCacheStatus::Unavailable;
+            let _ = self.game_cache_repos.save(&game_cache).await;
             return Err(SteamServiceError::EmptyDownloadPathError {});
         }
 
@@ -35,6 +42,13 @@ impl SteamServiceClient {
                 Ok(())
             }
             Err(e) => {
+                log::error!(
+                    "下载失败：{} {} 在路径 {}",
+                    game_cache.path.clone().unwrap().as_str(),
+                    game_cache.game_id.as_str(),
+                    game_cache.branch_name.as_str()
+                );
+
                 game_cache.status = GameCacheStatus::Unavailable;
                 let _ = self.game_cache_repos.save(&game_cache).await;
                 Err(e)
@@ -65,6 +79,12 @@ impl SteamServiceClient {
         let mut lines = BufReader::new(stdout).lines();
 
         game_cache.status = GameCacheStatus::Downloading;
+        log::info!(
+            "开始下载：{} {} 在路径 {}",
+            game_cache.path.clone().unwrap().as_str(),
+            game_cache.game_id.as_str(),
+            game_cache.branch_name.as_str()
+        );
         self.game_cache_repos.save(game_cache).await?;
         while let Some(line) = lines.next_line().await? {
             if let Ok(Some(progress)) = progress_regex(&line) {

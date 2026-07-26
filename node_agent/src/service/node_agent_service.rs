@@ -1,12 +1,15 @@
+use std::format;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::Utc;
 use lmrc_docker::DockerClient;
 
+use crate::common::GAME_CACHE_SERVER_ROOT_PATH;
 use crate::domain::{
     ConatinerType, GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
-    GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager, NodeId,
-    RemoteImage, RuntimeState,
+    GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage,
+    RuntimeState,
 };
 use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository, ObjectStore};
 use crate::proto::asset_service::SnapshotType;
@@ -127,23 +130,39 @@ where
     ) -> Result<DomainGameCache, NodeAgentError> {
         let now = Utc::now();
 
-        match self.game_cache_repos.get(&game_id.to_string(), &branch_name.to_string()).await {
+        match self
+            .game_cache_repos
+            .get(&game_id.to_string(), &branch_name.to_string())
+            .await
+        {
             Ok(Some(c)) if !matches!(c.status, DomainGameCacheStatus::Removed) => Ok(c),
             _ => {
+                let game = self.asset_service.get_game(game_id).await?;
+
+                let mut path = PathBuf::from(GAME_CACHE_SERVER_ROOT_PATH);
+                path.push(game.id);
+                path.push(branch_name);
+                let path_str = path.to_str().ok_or_else(|| {
+                    let error = format!("{} {} path error.", game.name, branch_name);
+                    log::error!("{}", error);
+                    NodeAgentError::Internal { message: error }
+                })?;
+
                 let cache = DomainGameCache {
                     game_id: game_id.to_string(),
                     branch_name: branch_name.to_string(),
                     status: DomainGameCacheStatus::Downloading,
-                    path: None,
+                    path: Some(path_str.to_string()),
                     download_progress: None,
                     create_time: now,
                     update_time: now,
                 };
-                self.game_cache_repos.save(&cache).await.map_err(|e| {
-                    NodeAgentError::Internal {
+                self.game_cache_repos
+                    .save(&cache)
+                    .await
+                    .map_err(|e| NodeAgentError::Internal {
                         message: format!("save game_cache failed: {e}"),
-                    }
-                })?;
+                    })?;
                 self.steam_service.start_download(cache.clone()).await;
                 Ok(cache)
             }
