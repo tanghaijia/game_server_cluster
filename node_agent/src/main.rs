@@ -25,6 +25,7 @@ use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
     if cfg!(debug_assertions) {
         let addr: SocketAddr = std::env::var("NODE_AGENT_ADDR")
             .unwrap_or_else(|_| "127.0.0.1:50052".to_string())
