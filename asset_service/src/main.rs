@@ -22,6 +22,7 @@ use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
     let addr: SocketAddr = std::env::var("ASSET_SERVICE_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:50053".to_string())
         .parse()?;
