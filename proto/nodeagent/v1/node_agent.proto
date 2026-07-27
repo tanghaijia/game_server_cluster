@@ -38,8 +38,7 @@ message CleanInstanceResponse {
 }
 
 message PrepareGameBuildRequest {
-  string node_id = 1;
-  GameBuild build = 2;
+  string build_id = 1;
 }
 
 message PrepareGameBuildResponse {

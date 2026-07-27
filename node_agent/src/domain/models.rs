@@ -66,6 +66,8 @@ pub struct StartInstanceArgument {
     pub spec: InstanceSpec,
     pub assignment: InstanceAssignment,
     pub latest_snapshot: Option<SnapshotReference>,
+    pub container_server_path: String,
+    pub branch_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

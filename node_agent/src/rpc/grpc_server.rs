@@ -448,6 +448,8 @@ fn map_instance_runtime_spec(
             ),
         },
         latest_snapshot: value.latest_snapshot.map(map_snapshot_reference),
+        container_server_path: value.container_server_path,
+        branch_name: value.branch_name.unwrap_or_else(|| "public".to_string()),
     })
 }
 

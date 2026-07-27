@@ -7,13 +7,11 @@ use lmrc_docker::DockerClient;
 
 use crate::common::GAME_CACHE_SERVER_ROOT_PATH;
 use crate::domain::{
-    ConatinerType, GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
-    GameContainer, GameInstance, HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage,
-    RuntimeState,
+    ConatinerType, ContainerFilePath, ContainerFilePathMappingHost, GameCache as DomainGameCache,
+    GameCacheStatus as DomainGameCacheStatus, GameContainer, GameInstance, HostFilePath,
+    HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage, RuntimeState,
 };
 use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository, ObjectStore};
-use crate::proto::asset_service::SnapshotType;
-use crate::proto::node_agent::NodeAgentGameInstance;
 use crate::service::{SteamService, download_and_extract_tar_zst, upload_dir_as_tar_zst};
 use crate::{
     domain::{
@@ -263,7 +261,7 @@ where
     ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
         let instance_id = argument.instance_id.clone();
 
-        let mut game_instance = self.game_instance_repos.get(instance_id.0).await?;
+        let mut game_instance = self.game_instance_repos.get(instance_id.0.clone()).await?;
         game_instance.status = crate::domain::GameInstanceStatus::Preparing;
         self.game_instance_repos.save(&game_instance).await?;
 
@@ -275,9 +273,54 @@ where
                 message: format!("get local game build fail: {}", err),
             })?;
 
+        let game_cache = self
+            .game_cache_repos
+            .get(&argument.game.id, &argument.branch_name)
+            .await
+            .map_err(|err| NodeAgentError::DBOperationFail {
+                message: format!("get game cache fail: {}", err),
+            })?
+            .ok_or_else(|| NodeAgentError::InvalidRequest {
+                message: format!(
+                    "game cache not found for game_id={}, branch_name={}",
+                    argument.game.id, argument.branch_name
+                ),
+            })?;
+        if game_cache.status != DomainGameCacheStatus::Available {
+            return Err(NodeAgentError::InvalidRequest {
+                message: format!(
+                    "game cache is not available for game_id={}, branch_name={}",
+                    argument.game.id, argument.branch_name
+                ),
+            });
+        };
+
+        let host_path = game_cache
+            .path
+            .ok_or_else(|| NodeAgentError::InvalidRequest {
+                message: format!(
+                    "game cache path is empty for game_id={}, branch_name={}",
+                    argument.game.id, argument.branch_name
+                ),
+            })?;
+
+        let path_mapping = Some(ContainerFilePathMappingHost {
+            host_path: HostFilePath { path: host_path },
+            container_file_path: ContainerFilePath {
+                path: argument.container_server_path.clone(),
+            },
+            mapped_permission: "rw".to_string(),
+        });
+
         let container = self
             .container_client
-            .create_container(game_instance.id.clone(), local_game_build, None, None, None)
+            .create_container(
+                game_instance.id.clone(),
+                local_game_build,
+                path_mapping,
+                None,
+                None,
+            )
             .await?;
 
         game_instance.status = crate::domain::GameInstanceStatus::Running;

@@ -190,6 +190,8 @@ message InstanceRuntimeSpec {
   InstanceSpec spec = 5;
   InstanceAssignment assignment = 6;
   optional SnapshotReference latest_snapshot = 7;
+  string container_server_path = 8;
+  optional string branch_name = 9;
 }
 
 message BuildPreparationResult {
