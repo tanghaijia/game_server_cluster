@@ -309,7 +309,7 @@ where
             container_file_path: ContainerFilePath {
                 path: argument.container_server_path.clone(),
             },
-            mapped_permission: "rw".to_string(),
+            mapped_permission: "r".to_string(),
         });
 
         let container = self
