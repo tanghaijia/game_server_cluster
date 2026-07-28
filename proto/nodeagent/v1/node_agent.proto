@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package nodeagent.v1;
 import "nodeagent/v1/instance.proto";
+import "nodeagent/v1/port_mapping.proto";
 
 service NodeAgentService {
   rpc PrepareGameBuild(PrepareGameBuildRequest) returns (PrepareGameBuildResponse);
@@ -174,6 +175,7 @@ message InstanceRuntimeSpec {
   InstanceSpec spec = 5;
   InstanceAssignment assignment = 6;
   optional SnapshotReference latest_snapshot = 7;
+  optional PortMapping port_mapping = 10;
 }
 
 message BuildPreparationResult {

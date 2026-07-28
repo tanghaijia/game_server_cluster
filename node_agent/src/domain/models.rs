@@ -1,4 +1,4 @@
-use super::{InstanceId, NodeId, OperationId};
+use super::{ContainerPortMapping, InstanceId, NodeId, OperationId};
 use crate::domain::game::Game;
 use crate::domain::game_build::GameBuild;
 use chrono::{DateTime, Utc};
@@ -68,6 +68,7 @@ pub struct StartInstanceArgument {
     pub latest_snapshot: Option<SnapshotReference>,
     pub container_server_path: String,
     pub branch_name: String,
+    pub port_mapping: Option<ContainerPortMapping>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

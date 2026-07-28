@@ -87,8 +87,30 @@ pub struct ContainerFilePathMappingHost {
 **/
 pub struct MappedGameContainerRootFilePath {}
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ContainerPortMapping {}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ContainerPortMappingMod {
+    HOST,
+    NAT,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MappingPortType {
+    UDP,
+    TCP,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortMap {
+    pub host_port: u16,
+    pub container_port: u16,
+    pub mapping_port_type: MappingPortType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerPortMapping {
+    pub container_port_mapping_mod: ContainerPortMappingMod,
+    pub port_maps: Vec<PortMap>,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ContainerResourceLimitation {}

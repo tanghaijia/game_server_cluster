@@ -318,7 +318,7 @@ where
                 game_instance.id.clone(),
                 local_game_build,
                 path_mapping,
-                None,
+                argument.port_mapping,
                 None,
             )
             .await?;

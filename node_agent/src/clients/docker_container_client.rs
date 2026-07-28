@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::domain::{
     ConatinerType, ContainerStatus, GameContainer, Image, ImageRepository,
-    ImageRepositoryCredentials, ImageStatus, LocalGameBuild, RemoteImage,
+    ImageRepositoryCredentials, ImageStatus, LocalGameBuild, MappingPortType, RemoteImage,
 };
 use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository};
 use async_trait::async_trait;
@@ -127,8 +127,18 @@ impl ContainerClient for DockerContainerClient {
         }
 
         // 端口映射
-        if port_mapping.is_some() {
-            // ContainerPortMapping 当前为空结构体，后续扩展
+        if let Some(ref port_mapping) = port_mapping {
+            for port_map in &port_mapping.port_maps {
+                let protocol = match port_map.mapping_port_type {
+                    MappingPortType::TCP => "tcp",
+                    MappingPortType::UDP => "udp",
+                };
+                builder = builder.port(
+                    port_map.host_port,
+                    port_map.container_port,
+                    protocol,
+                );
+            }
         }
 
         // 资源限制

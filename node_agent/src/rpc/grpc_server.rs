@@ -12,11 +12,12 @@ use prost_types::Timestamp;
 
 use crate::{
     domain::{
-        BuildPreparation, BuildPreparationResult, DesiredRuntimeState, Endpoint, FailureInfo,
-        GameBuild, GameInstance, GameInstanceStatus, InstanceAssignment, InstanceId,
-        InstanceRuntimeRecord, InstanceSpec, LocalGameBuild, NodeId, NodeOperation, OperationId,
-        OperationKind, OperationStatus, ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
-        SnapshotReference, SnapshotRestoreResult, StartInstanceArgument,
+        BuildPreparation, BuildPreparationResult, ContainerPortMapping, ContainerPortMappingMod,
+        DesiredRuntimeState, Endpoint, FailureInfo, GameBuild, GameInstance, GameInstanceStatus,
+        InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceSpec, LocalGameBuild,
+        MappingPortType, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus, PortMap,
+        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
+        SnapshotRestoreResult, StartInstanceArgument,
         GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
     },
     error::NodeAgentError,
@@ -35,8 +36,9 @@ use crate::{
             GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
             InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
             InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
-            NodeAgentGameInstance, NodeAgentGameInstanceStatus,
+            MappingPortProtocol, NodeAgentGameInstance, NodeAgentGameInstanceStatus,
             NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
+            PortMapEntry, PortMapping, PortMappingMod,
             PrepareGameBuildRequest, PrepareGameBuildResponse,
             RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
             SnapshotReference as ProtoSnapshotReference,
@@ -450,6 +452,7 @@ fn map_instance_runtime_spec(
         latest_snapshot: value.latest_snapshot.map(map_snapshot_reference),
         container_server_path: value.container_server_path,
         branch_name: value.branch_name.unwrap_or_else(|| "public".to_string()),
+        port_mapping: value.port_mapping.map(map_port_mapping),
     })
 }
 
@@ -476,6 +479,33 @@ fn map_snapshot_reference(value: ProtoSnapshotReference) -> SnapshotReference {
         storage_uri: value.storage_uri,
         manifest_uri: value.manifest_uri,
         checksum: value.checksum,
+    }
+}
+
+fn map_port_mapping(value: PortMapping) -> ContainerPortMapping {
+    ContainerPortMapping {
+        container_port_mapping_mod: match PortMappingMod::try_from(value.mode)
+            .unwrap_or(PortMappingMod::Unspecified)
+        {
+            PortMappingMod::Host => ContainerPortMappingMod::HOST,
+            PortMappingMod::Nat => ContainerPortMappingMod::NAT,
+            PortMappingMod::Unspecified => ContainerPortMappingMod::NAT,
+        },
+        port_maps: value.entries.into_iter().map(map_port_map_entry).collect(),
+    }
+}
+
+fn map_port_map_entry(value: PortMapEntry) -> PortMap {
+    PortMap {
+        host_port: value.host_port as u16,
+        container_port: value.container_port as u16,
+        mapping_port_type: match MappingPortProtocol::try_from(value.protocol)
+            .unwrap_or(MappingPortProtocol::Unspecified)
+        {
+            MappingPortProtocol::Tcp => MappingPortType::TCP,
+            MappingPortProtocol::Udp => MappingPortType::UDP,
+            MappingPortProtocol::Unspecified => MappingPortType::TCP,
+        },
     }
 }
 
