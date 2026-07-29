@@ -102,7 +102,7 @@ impl ContainerClient for DockerContainerClient {
         &self,
         container_name: String,
         game_build: LocalGameBuild,
-        path_mapping: Option<crate::domain::ContainerFilePathMappingHost>,
+        path_mapping: Vec<crate::domain::ContainerFilePathMappingHost>,
         port_mapping: Option<crate::domain::ContainerPortMapping>,
         resource_limitation: Option<crate::domain::ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError> {
@@ -122,8 +122,11 @@ impl ContainerClient for DockerContainerClient {
             .label("managed-by", "node-agent");
 
         // 挂载卷
-        if let Some(ref mapping) = path_mapping {
-            builder = builder.volume(&mapping.host_path.path, &mapping.container_file_path.path);
+        if path_mapping.len() > 0 {
+            for mapping in path_mapping.clone() {
+                builder =
+                    builder.volume(&mapping.host_path.path, &mapping.container_file_path.path);
+            }
         }
 
         // 端口映射
@@ -133,11 +136,7 @@ impl ContainerClient for DockerContainerClient {
                     MappingPortType::TCP => "tcp",
                     MappingPortType::UDP => "udp",
                 };
-                builder = builder.port(
-                    port_map.host_port,
-                    port_map.container_port,
-                    protocol,
-                );
+                builder = builder.port(port_map.host_port, port_map.container_port, protocol);
             }
         }
 

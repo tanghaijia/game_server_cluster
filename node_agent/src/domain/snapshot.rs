@@ -76,8 +76,8 @@ impl HostSnapShotDataPath {
         }
     }
 
-    pub fn to_string(self) -> anyhow::Result<String> {
-        Ok(self.path)
+    pub fn to_string(&self) -> anyhow::Result<String> {
+        Ok(self.path.clone())
     }
 }
 

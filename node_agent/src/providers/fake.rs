@@ -481,7 +481,7 @@ impl ContainerClient for FakeImageClient {
         &self,
         _container_name: String,
         game_build: LocalGameBuild,
-        path_mapping: Option<ContainerFilePathMappingHost>,
+        path_mapping: Vec<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,
         resource_limitation: Option<ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError> {

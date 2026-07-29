@@ -50,7 +50,7 @@ pub struct GameContainer {
     pub id: String,
     pub game_build: LocalGameBuild,
     pub container: ConatinerType,
-    pub container_file_path_mapping: Option<ContainerFilePathMappingHost>,
+    pub container_file_path_mapping: Vec<ContainerFilePathMappingHost>,
     pub container_port_mapping: Option<ContainerPortMapping>,
     pub resource_limitation: Option<ContainerResourceLimitation>,
     pub status: ContainerStatus,

@@ -20,7 +20,7 @@ pub trait ContainerClient: Send + Sync {
         &self,
         container_name: String,
         game_build: LocalGameBuild,
-        path_mapping: Option<ContainerFilePathMappingHost>,
+        path_mapping: Vec<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,
         resource_limitation: Option<ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError>;

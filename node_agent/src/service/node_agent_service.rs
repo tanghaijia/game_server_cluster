@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use lmrc_docker::DockerClient;
 
-use crate::common::GAME_CACHE_SERVER_ROOT_PATH;
+use crate::common::{CONTAINER_DATA_PATH, GAME_CACHE_SERVER_ROOT_PATH};
 use crate::domain::{
     ConatinerType, ContainerFilePath, ContainerFilePathMappingHost, GameCache as DomainGameCache,
     GameCacheStatus as DomainGameCacheStatus, GameContainer, GameInstance, HostFilePath,
@@ -295,6 +295,7 @@ where
             });
         };
 
+        // 游戏服务器目录映射
         let host_path = game_cache
             .path
             .ok_or_else(|| NodeAgentError::InvalidRequest {
@@ -304,20 +305,41 @@ where
                 ),
             })?;
 
-        let path_mapping = Some(ContainerFilePathMappingHost {
+        let mut v2: Vec<ContainerFilePathMappingHost> = Vec::new();
+        let path_mapping = ContainerFilePathMappingHost {
             host_path: HostFilePath { path: host_path },
             container_file_path: ContainerFilePath {
                 path: argument.container_server_path.clone(),
             },
             mapped_permission: "r".to_string(),
-        });
+        };
+        v2.push(path_mapping);
+
+        // 数据目录/data映射
+        let data_host_path =
+            game_instance
+                .host_data_path
+                .to_string()
+                .map_err(|e| NodeAgentError::PathError {
+                    message: e.to_string(),
+                })?;
+        let path_mapping = ContainerFilePathMappingHost {
+            host_path: HostFilePath {
+                path: data_host_path,
+            },
+            container_file_path: ContainerFilePath {
+                path: CONTAINER_DATA_PATH.to_string(),
+            },
+            mapped_permission: "r".to_string(),
+        };
+        v2.push(path_mapping);
 
         let container = self
             .container_client
             .create_container(
                 game_instance.id.clone(),
                 local_game_build,
-                path_mapping,
+                v2,
                 argument.port_mapping,
                 None,
             )
