@@ -47,6 +47,10 @@ impl BackendContainerChecker {
                         match repos.get_all().await {
                             Ok(instances) => {
                                 for instance in &instances {
+                                    if instance.status != GameInstanceStatus::Running {
+                                        continue;
+                                    }
+
                                     if let Some(container_id) = &instance.container_id {
                                         match client.get_container(container_id.clone()).await {
                                             Ok(container) => {
