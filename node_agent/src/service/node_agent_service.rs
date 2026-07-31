@@ -17,10 +17,14 @@ use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
         OperationId, SnapshotCaptureRequest, SnapshotRestoreRequest, SnapshotRestoreResult,
-        StartInstanceArgument,
+        StartInstanceArgument, instance_data_path,
     },
     error::NodeAgentError,
     ports::{AssetServiceFace, SystemInfoProvider},
+    proto::{
+        asset_service::SnapshotType,
+        node_agent::SnapshotArtifact,
+    },
 };
 
 // ============================================================
@@ -97,23 +101,24 @@ where
         }
     }
 
-    /// 创建内容寻址增量快照。
+    /// 执行内容寻址增量快照上传。
     ///
-    /// 流程：取源（运行中先本地冻结拷贝）→ 创建快照记录 → 读上一份 manifest 增量对照
-    /// → 增量上传 + 写 manifest 提交点 → 完成/失败记录。
+    /// 快照记录由 controller 预先创建并通过 `snapshot_id` 传入，这里只做：
+    /// 取源（运行中冻结拷贝）→ 读上一份已完成快照 manifest 增量对照 → 增量上传 + 写 manifest 提交点。
+    /// 完成/失败记录由 controller 负责，因此不调 create/complete/set_latest。
     pub async fn create_snapshot(
         &self,
         request: SnapshotCaptureRequest,
-    ) -> Result<(), NodeAgentError> {
+    ) -> Result<SnapshotArtifact, NodeAgentError> {
         let instance_id = request.instance_id.0.clone();
         let game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
-        let node_id = self
-            .system_info
-            .get_node_id()
-            .await
-            .ok_or_else(|| NodeAgentError::Internal {
-                message: "node_id not registered".to_string(),
-            })?;
+
+        // 从预创建的快照记录拿 bucket
+        let snapshot_record = self
+            .asset_service
+            .get_snapshot(request.snapshot_id.as_str())
+            .await?;
+        let bucket = snapshot_record.bucket;
 
         // 取源：运行中 → 本地冻结拷贝（点时间一致）；否则直接用宿主数据目录
         let running = matches!(
@@ -131,24 +136,10 @@ where
             None
         };
 
-        let mut created_snapshot_id: Option<String> = None;
-        let result: Result<(), NodeAgentError> = async {
-            // 创建快照记录（拿 bucket + 权威 snapshot_id；snapshot_type 0 = 常规快照）
-            let record = self
-                .asset_service
-                .create_snapshot_record(
-                    &instance_id,
-                    Some(game_instance.game_build_id.clone()),
-                    0,
-                    Some(node_id),
-                )
-                .await?;
-            created_snapshot_id = Some(record.snapshot_id.clone());
-            let bucket = record.bucket;
-
-            // 取上一份 manifest 作增量对照（旧格式/下载失败则全量）
+        let upload_result = async {
+            // 上一份已完成快照的 manifest 作增量对照（get_latest 返回 set_latest 的记录）
             let prev = match self.asset_service.get_latest_snapshot(&instance_id).await {
-                Ok(Some(prev_record)) => self
+                Ok(Some(prev_record)) if prev_record.snapshot_id != request.snapshot_id => self
                     .directory_service
                     .download_manifest(&prev_record.bucket, &prev_record.snapshot_id)
                     .await
@@ -162,34 +153,18 @@ where
                 game_instance.host_data_path.as_ref().to_path_buf()
             };
 
-            let _manifest = self
-                .directory_service
+            self.directory_service
                 .create_snapshot(
                     &bucket,
                     src,
                     &instance_id,
-                    &record.snapshot_id,
+                    &request.snapshot_id,
                     prev.as_ref(),
                 )
                 .await
                 .map_err(|err| NodeAgentError::S3UploadFail {
                     message: err.to_string(),
-                })?;
-
-            // 完成快照记录（新布局：storage_uri/manifest_uri 都指向 manifest，无单归档）
-            let manifest_uri = manifest_key(&record.snapshot_id);
-            self.asset_service
-                .complete_snapshot_record(
-                    &record.snapshot_id,
-                    &manifest_uri,
-                    Some(manifest_uri.clone()),
-                    None,
-                )
-                .await?;
-            self.asset_service
-                .set_latest_snapshot(&instance_id, &record.snapshot_id)
-                .await?;
-            Ok(())
+                })
         }
         .await;
 
@@ -198,15 +173,18 @@ where
             let _ = tokio::fs::remove_dir_all(tmp).await;
         }
 
-        if let Err(err) = &result {
-            if let Some(snapshot_id) = created_snapshot_id {
-                let _ = self
-                    .asset_service
-                    .fail_snapshot_record(&snapshot_id, &err.to_string())
-                    .await;
-            }
-        }
-        result
+        let manifest = upload_result?;
+
+        // 返回 artifact（storage_uri/manifest_uri 指向 manifest，无单归档）
+        let manifest_uri = manifest_key(&request.snapshot_id);
+        Ok(SnapshotArtifact {
+            snapshot_id: request.snapshot_id,
+            instance_data_path: instance_data_path(&request.instance_id),
+            storage_uri: manifest_uri.clone(),
+            manifest_uri: Some(manifest_uri),
+            checksum: None,
+            captured_at: manifest.captured_at,
+        })
     }
 
     pub async fn inspect_instance(
@@ -525,17 +503,58 @@ where
     }
 
     async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {
-        // 复用完整快照生命周期：create_snapshot 内部会建记录（拿 bucket + 权威 snapshot_id）、
-        // 增量上传 + 写 manifest 提交点、complete/set_latest、失败时 fail_snapshot_record。
-        // 传入的 snapshot_id 会被 create_snapshot_record 的权威 snapshot_id 取代。
-        self.create_snapshot(SnapshotCaptureRequest {
-            instance_id: instance_id.clone(),
-            snapshot_id: String::new(),
-        })
-        .await?;
+        let instance_id = instance_id.0;
+        let mut game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
+        let node_id = self
+            .system_info
+            .get_node_id()
+            .await
+            .ok_or_else(|| NodeAgentError::Internal {
+                message: "node_id not registered".to_string(),
+            })?;
+
+        // clean = 实例最终停止，快照类型用 FINAL_STOP；记录由本流程创建并完成
+        let record = self
+            .asset_service
+            .create_snapshot_record(
+                &instance_id,
+                Some(game_instance.game_build_id.clone()),
+                SnapshotType::FinalStop as i32,
+                Some(node_id),
+            )
+            .await?;
+        let bucket = record.bucket;
+
+        // 停机场景直接用宿主数据目录增量上传
+        let _manifest = self
+            .directory_service
+            .create_snapshot(
+                &bucket,
+                game_instance.host_data_path.as_ref(),
+                &instance_id,
+                &record.snapshot_id,
+                None,
+            )
+            .await
+            .map_err(|err| NodeAgentError::S3UploadFail {
+                message: err.to_string(),
+            })?;
+
+        // 完成记录并设为最新
+        let manifest_uri = manifest_key(&record.snapshot_id);
+        self.asset_service
+            .complete_snapshot_record(
+                &record.snapshot_id,
+                &manifest_uri,
+                Some(manifest_uri.clone()),
+                None,
+            )
+            .await?;
+        self.asset_service
+            .set_latest_snapshot(&instance_id, &record.snapshot_id)
+            .await?;
 
         // 标记实例为 Stopped
-        let mut game_instance = self.game_instance_repos.get(instance_id.0.clone()).await?;
         game_instance.status = crate::domain::GameInstanceStatus::Stopped;
         self.game_instance_repos.save(&game_instance).await?;
 

@@ -153,7 +153,8 @@ where
         request: Request<CreateSnapshotRequest>,
     ) -> Result<Response<CreateSnapshotResponse>, Status> {
         let request = request.into_inner();
-        self.service
+        let snapshot = self
+            .service
             .create_snapshot(SnapshotCaptureRequest {
                 instance_id: InstanceId(request.instance_id),
                 snapshot_id: request.snapshot_id,
@@ -162,7 +163,7 @@ where
             .map_err(map_error)?;
         Ok(Response::new(CreateSnapshotResponse {
             operation: None,
-            snapshot: None,
+            snapshot: Some(snapshot),
         }))
     }
 
