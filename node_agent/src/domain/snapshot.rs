@@ -38,7 +38,6 @@ pub struct Manifest {
     pub snapshot_id: String,
     pub instance_id: String,
     pub captured_at: String,
-    pub checksum: String,
     pub file_count: usize,
     pub total_size_bytes: u64,
     pub entries: Vec<Entry>,
@@ -49,6 +48,8 @@ pub struct Entry {
     pub path: String,
     pub size: u64,
     pub mode: String,
+    pub object_key: String, // objects/{sha256}
+    pub sha256: String,
 }
 
 /**

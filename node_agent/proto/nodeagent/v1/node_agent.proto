@@ -37,8 +37,6 @@ message GetInstancesResponse {
 
 message CleanInstanceRequest {
     string instance_id = 1;
-    string bucket = 2;
-    string key = 3;
 }
 
 message CleanInstanceResponse {

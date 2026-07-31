@@ -45,4 +45,35 @@ impl ObjectStore for InMemoryObjectStore {
             .cloned()
             .ok_or_else(|| format!("object not found: bucket={}, key={}", bucket, key).into())
     }
+
+    async fn object_exists(
+        &self,
+        bucket: &str,
+        key: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let storage_key = format!("{}/{}", bucket, key);
+        Ok(self.data.lock().unwrap().contains_key(&storage_key))
+    }
+
+    async fn list_objects(
+        &self,
+        bucket: &str,
+        prefix: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let bucket_prefix = format!("{}/{}", bucket, prefix);
+        let data = self.data.lock().unwrap();
+        let mut keys = data
+            .keys()
+            .filter(|k| k.starts_with(&bucket_prefix))
+            .map(|k| k.trim_start_matches(&format!("{}/", bucket)).to_string())
+            .collect::<Vec<_>>();
+        keys.sort();
+        Ok(keys)
+    }
+
+    async fn delete_object(&self, bucket: &str, key: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let storage_key = format!("{}/{}", bucket, key);
+        self.data.lock().unwrap().remove(&storage_key);
+        Ok(())
+    }
 }

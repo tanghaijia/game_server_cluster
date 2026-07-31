@@ -96,8 +96,6 @@ pub struct RestoreSnapshotJob {
 pub struct CleanInstanceJob {
     pub operation_id: String,
     pub instance_id: String,
-    pub bucket: String,
-    pub key: String,
 }
 
 // ============================================================
@@ -322,7 +320,7 @@ async fn handle_clean_instance(
     running_operation(&ctx.operations, op.clone()).await;
     match ctx
         .node_agent_service
-        .clean_instance(instance_id, job.bucket, job.key)
+        .clean_instance(instance_id)
         .await
     {
         Ok(_) => {
@@ -603,8 +601,6 @@ pub async fn enqueue_clean_instance(
     pool: &SqlitePool,
     ops: &Arc<dyn OperationRepository>,
     instance_id: &str,
-    bucket: &str,
-    key: &str,
 ) -> NodeOperation {
     let op = NodeOperation {
         operation_id: OperationId::new(),
@@ -624,8 +620,6 @@ pub async fn enqueue_clean_instance(
         .push(CleanInstanceJob {
             operation_id: job_op_id,
             instance_id: instance_id.to_string(),
-            bucket: bucket.to_string(),
-            key: key.to_string(),
         })
         .await;
 

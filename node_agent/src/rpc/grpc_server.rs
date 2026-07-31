@@ -279,8 +279,6 @@ where
             &self.pool,
             &self.operations,
             &request.instance_id,
-            &request.bucket,
-            &request.key,
         )
         .await;
         Ok(Response::new(CleanInstanceResponse {

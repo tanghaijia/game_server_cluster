@@ -12,7 +12,7 @@ use crate::domain::{
     HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage, RuntimeState,
 };
 use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository};
-use crate::service::{DirectoryUploadDownloadService, SteamService};
+use crate::service::{DirectoryUploadDownloadService, SteamService, freeze_copy, manifest_key};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
@@ -49,12 +49,7 @@ pub trait BackgroundWorker: Send + Sync {
 
     async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
 
-    async fn clean_instance(
-        &self,
-        instance_id: InstanceId,
-        bucket: String,
-        key: String,
-    ) -> Result<(), NodeAgentError>;
+    async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
 }
 
 pub struct NodeAgentService<I, S, A, IMC>
@@ -102,11 +97,116 @@ where
         }
     }
 
+    /// 创建内容寻址增量快照。
+    ///
+    /// 流程：取源（运行中先本地冻结拷贝）→ 创建快照记录 → 读上一份 manifest 增量对照
+    /// → 增量上传 + 写 manifest 提交点 → 完成/失败记录。
     pub async fn create_snapshot(
         &self,
-        _request: SnapshotCaptureRequest,
+        request: SnapshotCaptureRequest,
     ) -> Result<(), NodeAgentError> {
-        todo!()
+        let instance_id = request.instance_id.0.clone();
+        let game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
+        let node_id = self
+            .system_info
+            .get_node_id()
+            .await
+            .ok_or_else(|| NodeAgentError::Internal {
+                message: "node_id not registered".to_string(),
+            })?;
+
+        // 取源：运行中 → 本地冻结拷贝（点时间一致）；否则直接用宿主数据目录
+        let running = matches!(
+            game_instance.status,
+            crate::domain::GameInstanceStatus::Running
+        );
+        let freeze_temp: Option<PathBuf> = if running {
+            let tmp = freeze_copy(game_instance.host_data_path.as_ref())
+                .await
+                .map_err(|err| NodeAgentError::S3UploadFail {
+                    message: format!("freeze copy failed: {err}"),
+                })?;
+            Some(tmp)
+        } else {
+            None
+        };
+
+        let mut created_snapshot_id: Option<String> = None;
+        let result: Result<(), NodeAgentError> = async {
+            // 创建快照记录（拿 bucket + 权威 snapshot_id；snapshot_type 0 = 常规快照）
+            let record = self
+                .asset_service
+                .create_snapshot_record(
+                    &instance_id,
+                    Some(game_instance.game_build_id.clone()),
+                    0,
+                    Some(node_id),
+                )
+                .await?;
+            created_snapshot_id = Some(record.snapshot_id.clone());
+            let bucket = record.bucket;
+
+            // 取上一份 manifest 作增量对照（旧格式/下载失败则全量）
+            let prev = match self.asset_service.get_latest_snapshot(&instance_id).await {
+                Ok(Some(prev_record)) => self
+                    .directory_service
+                    .download_manifest(&prev_record.bucket, &prev_record.snapshot_id)
+                    .await
+                    .ok(),
+                _ => None,
+            };
+
+            let src = if running {
+                freeze_temp.as_ref().expect("freeze temp missing").clone()
+            } else {
+                game_instance.host_data_path.as_ref().to_path_buf()
+            };
+
+            let _manifest = self
+                .directory_service
+                .create_snapshot(
+                    &bucket,
+                    src,
+                    &instance_id,
+                    &record.snapshot_id,
+                    prev.as_ref(),
+                )
+                .await
+                .map_err(|err| NodeAgentError::S3UploadFail {
+                    message: err.to_string(),
+                })?;
+
+            // 完成快照记录（新布局：storage_uri/manifest_uri 都指向 manifest，无单归档）
+            let manifest_uri = manifest_key(&record.snapshot_id);
+            self.asset_service
+                .complete_snapshot_record(
+                    &record.snapshot_id,
+                    &manifest_uri,
+                    Some(manifest_uri.clone()),
+                    None,
+                )
+                .await?;
+            self.asset_service
+                .set_latest_snapshot(&instance_id, &record.snapshot_id)
+                .await?;
+            Ok(())
+        }
+        .await;
+
+        // 清理冻结拷贝临时目录（无论成败）
+        if let Some(tmp) = freeze_temp {
+            let _ = tokio::fs::remove_dir_all(tmp).await;
+        }
+
+        if let Err(err) = &result {
+            if let Some(snapshot_id) = created_snapshot_id {
+                let _ = self
+                    .asset_service
+                    .fail_snapshot_record(&snapshot_id, &err.to_string())
+                    .await;
+            }
+        }
+        result
     }
 
     pub async fn inspect_instance(
@@ -364,39 +464,41 @@ where
         request: SnapshotRestoreRequest,
     ) -> Result<SnapshotRestoreResult, NodeAgentError> {
         let instance_id = request.instance_id.0.clone();
-        // 获取snapshot
-        let snapshot = self
+        // 获取该快照的记录（拿 bucket）
+        let snapshot_record = self
             .asset_service
-            .get_latest_snapshot(instance_id.as_str())
+            .get_snapshot(request.snapshot_id.as_str())
             .await?;
-        if snapshot.is_none() {
-            return Err(NodeAgentError::EmptySnapShotFail {
-                message: format!("get empty snapshot for {}", instance_id.as_str()),
-            });
-        }
 
-        // 下载到目录/data/game-instances/{game_intance_id}
-        let snapshot_record = snapshot.unwrap();
+        // 读该快照的 manifest（新布局：snapshots/{snapshot_id}/manifest.json）
+        let manifest = self
+            .directory_service
+            .download_manifest(&snapshot_record.bucket, &request.snapshot_id)
+            .await
+            .map_err(|err| NodeAgentError::S3DownloadFail {
+                message: err.to_string(),
+            })?;
+
+        // 恢复到 /data/game-instances/{game_instance_id}
         let data_path = HostSnapShotDataPath::new(instance_id.clone());
         let restore_path_string = data_path.as_ref().display().to_string();
-        let _manifest = self
-            .directory_service
-            .download_and_extract_tar_zst(
+        self.directory_service
+            .restore_snapshot(
                 &snapshot_record.bucket,
-                &snapshot_record.key,
-                data_path,
+                &manifest,
+                data_path.as_ref(),
+                None,
             )
             .await
             .map_err(|err| NodeAgentError::S3DownloadFail {
                 message: err.to_string(),
             })?;
 
-        let result = SnapshotRestoreResult {
-            snapshot_id: snapshot_record.snapshot_id,
+        Ok(SnapshotRestoreResult {
+            snapshot_id: request.snapshot_id,
             restored_at: Utc::now(),
             restore_path: restore_path_string,
-        };
-        Ok(result)
+        })
     }
 
     async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {
@@ -422,33 +524,20 @@ where
         Ok(())
     }
 
-    async fn clean_instance(
-        &self,
-        instance_id: InstanceId,
-        bucket: String,
-        key: String,
-    ) -> Result<(), NodeAgentError> {
-        let instance_id = instance_id.0;
-        let mut local_game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
-        let game_build_id = local_game_instance.game_build_id.clone();
-        let node_id = self
-            .system_info
-            .get_node_id()
-            .await
-            .expect("node_id not registed.");
-        self.directory_service
-            .upload_dir_as_tar_zst(
-                bucket.as_str(),
-                key.as_str(),
-                local_game_instance.host_data_path.as_ref(),
-            )
-            .await
-            .map_err(|err| NodeAgentError::S3UploadFail {
-                message: err.to_string(),
-            })?;
+    async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {
+        // 复用完整快照生命周期：create_snapshot 内部会建记录（拿 bucket + 权威 snapshot_id）、
+        // 增量上传 + 写 manifest 提交点、complete/set_latest、失败时 fail_snapshot_record。
+        // 传入的 snapshot_id 会被 create_snapshot_record 的权威 snapshot_id 取代。
+        self.create_snapshot(SnapshotCaptureRequest {
+            instance_id: instance_id.clone(),
+            snapshot_id: String::new(),
+        })
+        .await?;
 
-        local_game_instance.status = crate::domain::GameInstanceStatus::Stopped;
-        self.game_instance_repos.save(&local_game_instance).await?;
+        // 标记实例为 Stopped
+        let mut game_instance = self.game_instance_repos.get(instance_id.0.clone()).await?;
+        game_instance.status = crate::domain::GameInstanceStatus::Stopped;
+        self.game_instance_repos.save(&game_instance).await?;
 
         Ok(())
     }

@@ -20,4 +20,17 @@ pub trait ObjectStore: Send + Sync {
         bucket: &str,
         key: &str,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+
+    /// 判断对象是否存在（增量上传短路：已存在则直接引用）
+    async fn object_exists(&self, bucket: &str, key: &str) -> Result<bool, Box<dyn std::error::Error>>;
+
+    /// 列出 bucket 下指定前缀的所有对象 key（不含 bucket 前缀，用于 GC）
+    async fn list_objects(
+        &self,
+        bucket: &str,
+        prefix: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>>;
+
+    /// 删除单个对象（用于 GC）
+    async fn delete_object(&self, bucket: &str, key: &str) -> Result<(), Box<dyn std::error::Error>>;
 }
