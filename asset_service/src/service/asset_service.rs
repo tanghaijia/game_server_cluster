@@ -142,7 +142,7 @@ where
             created_at: now,
             completed_at: None,
             failure_message: None,
-            bucket: String::new(),
+            bucket: "cluster".to_string(), // 快照统一存储 bucket（当前写死，后续可改为配置）
             key: String::new(),
             host: String::new(),
             host_port: 0,
