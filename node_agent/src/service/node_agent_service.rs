@@ -11,8 +11,8 @@ use crate::domain::{
     GameCacheStatus as DomainGameCacheStatus, GameContainer, GameInstance, HostFilePath,
     HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage, RuntimeState,
 };
-use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository, ObjectStore};
-use crate::service::{SteamService, download_and_extract_tar_zst, upload_dir_as_tar_zst};
+use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository};
+use crate::service::{DirectoryUploadDownloadService, SteamService};
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, FailureInfo, InstanceId, InstanceRuntimeRecord,
@@ -69,7 +69,7 @@ where
     asset_service: Arc<A>,
     container_client: Arc<IMC>,
     local_game_build_manager: LocalGameBuildManager,
-    object_store: Arc<dyn ObjectStore>,
+    directory_service: Arc<DirectoryUploadDownloadService>,
     game_cache_repos: Arc<dyn GameCacheRepository>,
     steam_service: Arc<dyn SteamService>,
 }
@@ -86,7 +86,7 @@ where
         system_info: Arc<S>,
         asset_service: Arc<A>,
         container_client: Arc<IMC>,
-        object_store: Arc<dyn ObjectStore>,
+        directory_service: Arc<DirectoryUploadDownloadService>,
         game_cache_repos: Arc<dyn GameCacheRepository>,
         steam_service: Arc<dyn SteamService>,
     ) -> Self {
@@ -96,7 +96,7 @@ where
             asset_service,
             container_client: container_client,
             local_game_build_manager: LocalGameBuildManager::new(),
-            object_store,
+            directory_service,
             game_cache_repos,
             steam_service,
         }
@@ -379,16 +379,17 @@ where
         let snapshot_record = snapshot.unwrap();
         let data_path = HostSnapShotDataPath::new(instance_id.clone());
         let restore_path_string = data_path.as_ref().display().to_string();
-        let _manifest = download_and_extract_tar_zst(
-            &*self.object_store,
-            &snapshot_record.bucket,
-            &snapshot_record.key,
-            data_path,
-        )
-        .await
-        .map_err(|err| NodeAgentError::S3DownloadFail {
-            message: err.to_string(),
-        })?;
+        let _manifest = self
+            .directory_service
+            .download_and_extract_tar_zst(
+                &snapshot_record.bucket,
+                &snapshot_record.key,
+                data_path,
+            )
+            .await
+            .map_err(|err| NodeAgentError::S3DownloadFail {
+                message: err.to_string(),
+            })?;
 
         let result = SnapshotRestoreResult {
             snapshot_id: snapshot_record.snapshot_id,
@@ -435,16 +436,16 @@ where
             .get_node_id()
             .await
             .expect("node_id not registed.");
-        upload_dir_as_tar_zst(
-            &*self.object_store,
-            bucket.as_str(),
-            key.as_str(),
-            local_game_instance.host_data_path.as_ref(),
-        )
-        .await
-        .map_err(|err| NodeAgentError::S3UploadFail {
-            message: err.to_string(),
-        })?;
+        self.directory_service
+            .upload_dir_as_tar_zst(
+                bucket.as_str(),
+                key.as_str(),
+                local_game_instance.host_data_path.as_ref(),
+            )
+            .await
+            .map_err(|err| NodeAgentError::S3UploadFail {
+                message: err.to_string(),
+            })?;
 
         local_game_instance.status = crate::domain::GameInstanceStatus::Stopped;
         self.game_instance_repos.save(&local_game_instance).await?;

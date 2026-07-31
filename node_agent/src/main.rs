@@ -17,8 +17,8 @@ use node_agent::{
     },
     rpc::GrpcNodeAgentServer,
     service::{
-        BackendContainerChecker, BackgroundWorker, NodeAgentService, TaskContext, init_backend,
-        start_all_workers,
+        BackendContainerChecker, BackgroundWorker, DirectoryUploadDownloadService,
+        NodeAgentService, TaskContext, init_backend, start_all_workers,
     },
 };
 use tonic::transport::Server;
@@ -38,6 +38,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let concrete_asset = Arc::new(FakeAssetServiceFace);
         let concrete_image = Arc::new(FakeImageClient::default());
         let concrete_object_store = Arc::new(InMemoryObjectStore::new());
+        let directory_service =
+            Arc::new(DirectoryUploadDownloadService::new(concrete_object_store.clone()));
 
         // 2. 初始化 apalis SQLite backend
         let pool = init_backend().await?;
@@ -52,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             concrete_sysinfo.clone(),
             concrete_asset.clone(),
             concrete_image.clone(),
-            concrete_object_store.clone(),
+            directory_service.clone(),
             game_cache_repos.clone(),
             steam_service.clone(),
         ));
@@ -146,6 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             aws_sdk_s3::Client::new(&sdk_config)
         };
         let object_store = Arc::new(S3ObjectStore::new(s3_client));
+        let directory_service = Arc::new(DirectoryUploadDownloadService::new(object_store.clone()));
 
         // 6. GameCache + Steam 依赖
         let game_cache_repos = Arc::new(SqliteGameCacheRepository::new(pool_arc.clone()).await?);
@@ -162,7 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             system_info.clone(),
             asset_client.clone(),
             docker_client.clone(),
-            object_store.clone(),
+            directory_service.clone(),
             game_cache_repos.clone(),
             steam_service.clone(),
         ));
