@@ -174,7 +174,7 @@ impl ContainerClient for DockerContainerClient {
 
     async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError> {
         // 先从 repo 取出记录
-        let container = self
+        let mut container = self
             .docker_instances
             .get(&id)
             .await
@@ -191,6 +191,12 @@ impl ContainerClient for DockerContainerClient {
                 lmrc_docker::DockerError::ContainerNotFound(_) => ContainerError::NotFound(id),
                 _ => ContainerError::Unknown,
             })?;
+
+        container.status = ContainerStatus::Exited;
+        self.docker_instances
+            .save(&container)
+            .await
+            .map_err(|_| ContainerError::Unknown)?;
 
         Ok(container)
     }

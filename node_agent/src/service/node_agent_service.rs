@@ -12,7 +12,7 @@ use crate::domain::{
     GameCacheStatus as DomainGameCacheStatus, GameContainer, GameInstance, HostFilePath,
     HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage, RuntimeState,
 };
-use crate::ports::{ContainerClient, GameCacheRepository, GameInstanceRepository};
+use crate::ports::{ContainerClient, ContainerError, GameCacheRepository, GameInstanceRepository};
 use crate::service::{DirectoryUploadDownloadService, SteamService, freeze_copy, manifest_key};
 use crate::{
     domain::{
@@ -546,6 +546,15 @@ where
         self.asset_service
             .set_latest_snapshot(&instance_id, &record.snapshot_id)
             .await?;
+
+        // 删除容器
+        if let Some(docker_id) = game_instance.container_id.clone() {
+            self.container_client.remove_container(docker_id).await?;
+        } else {
+            let err = format!("容器不存在，game_instance: {}", game_instance.id);
+            log::error!("{}", err);
+            return Err(NodeAgentError::Internal { message: err });
+        }
 
         // 删除本地data
         let path = game_instance
