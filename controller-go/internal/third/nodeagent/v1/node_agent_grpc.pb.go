@@ -22,6 +22,7 @@ const (
 	NodeAgentService_PrepareGameBuild_FullMethodName      = "/nodeagent.v1.NodeAgentService/PrepareGameBuild"
 	NodeAgentService_StartInstance_FullMethodName         = "/nodeagent.v1.NodeAgentService/StartInstance"
 	NodeAgentService_StopInstance_FullMethodName          = "/nodeagent.v1.NodeAgentService/StopInstance"
+	NodeAgentService_RestartInstance_FullMethodName       = "/nodeagent.v1.NodeAgentService/RestartInstance"
 	NodeAgentService_CreateSnapshot_FullMethodName        = "/nodeagent.v1.NodeAgentService/CreateSnapshot"
 	NodeAgentService_RestoreSnapshot_FullMethodName       = "/nodeagent.v1.NodeAgentService/RestoreSnapshot"
 	NodeAgentService_GetOperation_FullMethodName          = "/nodeagent.v1.NodeAgentService/GetOperation"
@@ -30,6 +31,8 @@ const (
 	NodeAgentService_InspectInstance_FullMethodName       = "/nodeagent.v1.NodeAgentService/InspectInstance"
 	NodeAgentService_CleanInstance_FullMethodName         = "/nodeagent.v1.NodeAgentService/CleanInstance"
 	NodeAgentService_InspectInstanceStream_FullMethodName = "/nodeagent.v1.NodeAgentService/InspectInstanceStream"
+	NodeAgentService_CacheGame_FullMethodName             = "/nodeagent.v1.NodeAgentService/CacheGame"
+	NodeAgentService_GetCacheGame_FullMethodName          = "/nodeagent.v1.NodeAgentService/GetCacheGame"
 )
 
 // NodeAgentServiceClient is the client API for NodeAgentService service.
@@ -39,6 +42,7 @@ type NodeAgentServiceClient interface {
 	PrepareGameBuild(ctx context.Context, in *PrepareGameBuildRequest, opts ...grpc.CallOption) (*PrepareGameBuildResponse, error)
 	StartInstance(ctx context.Context, in *StartInstanceRequest, opts ...grpc.CallOption) (*StartInstanceResponse, error)
 	StopInstance(ctx context.Context, in *StopInstanceRequest, opts ...grpc.CallOption) (*StopInstanceResponse, error)
+	RestartInstance(ctx context.Context, in *RestartInstanceRequest, opts ...grpc.CallOption) (*RestartInstanceResponse, error)
 	CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*CreateSnapshotResponse, error)
 	RestoreSnapshot(ctx context.Context, in *RestoreSnapshotRequest, opts ...grpc.CallOption) (*RestoreSnapshotResponse, error)
 	GetOperation(ctx context.Context, in *GetOperationRequest, opts ...grpc.CallOption) (*GetOperationResponse, error)
@@ -49,6 +53,8 @@ type NodeAgentServiceClient interface {
 	// StopInstance后收尾工作
 	CleanInstance(ctx context.Context, in *CleanInstanceRequest, opts ...grpc.CallOption) (*CleanInstanceResponse, error)
 	InspectInstanceStream(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InspectInstanceResponse], error)
+	CacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error)
+	GetCacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error)
 }
 
 type nodeAgentServiceClient struct {
@@ -83,6 +89,16 @@ func (c *nodeAgentServiceClient) StopInstance(ctx context.Context, in *StopInsta
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StopInstanceResponse)
 	err := c.cc.Invoke(ctx, NodeAgentService_StopInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeAgentServiceClient) RestartInstance(ctx context.Context, in *RestartInstanceRequest, opts ...grpc.CallOption) (*RestartInstanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestartInstanceResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_RestartInstance_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +194,26 @@ func (c *nodeAgentServiceClient) InspectInstanceStream(ctx context.Context, in *
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type NodeAgentService_InspectInstanceStreamClient = grpc.ServerStreamingClient[InspectInstanceResponse]
 
+func (c *nodeAgentServiceClient) CacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CacheGameResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_CacheGame_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeAgentServiceClient) GetCacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CacheGameResponse)
+	err := c.cc.Invoke(ctx, NodeAgentService_GetCacheGame_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeAgentServiceServer is the server API for NodeAgentService service.
 // All implementations must embed UnimplementedNodeAgentServiceServer
 // for forward compatibility.
@@ -185,6 +221,7 @@ type NodeAgentServiceServer interface {
 	PrepareGameBuild(context.Context, *PrepareGameBuildRequest) (*PrepareGameBuildResponse, error)
 	StartInstance(context.Context, *StartInstanceRequest) (*StartInstanceResponse, error)
 	StopInstance(context.Context, *StopInstanceRequest) (*StopInstanceResponse, error)
+	RestartInstance(context.Context, *RestartInstanceRequest) (*RestartInstanceResponse, error)
 	CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error)
 	RestoreSnapshot(context.Context, *RestoreSnapshotRequest) (*RestoreSnapshotResponse, error)
 	GetOperation(context.Context, *GetOperationRequest) (*GetOperationResponse, error)
@@ -195,6 +232,8 @@ type NodeAgentServiceServer interface {
 	// StopInstance后收尾工作
 	CleanInstance(context.Context, *CleanInstanceRequest) (*CleanInstanceResponse, error)
 	InspectInstanceStream(*InspectInstanceRequest, grpc.ServerStreamingServer[InspectInstanceResponse]) error
+	CacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error)
+	GetCacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error)
 	mustEmbedUnimplementedNodeAgentServiceServer()
 }
 
@@ -213,6 +252,9 @@ func (UnimplementedNodeAgentServiceServer) StartInstance(context.Context, *Start
 }
 func (UnimplementedNodeAgentServiceServer) StopInstance(context.Context, *StopInstanceRequest) (*StopInstanceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopInstance not implemented")
+}
+func (UnimplementedNodeAgentServiceServer) RestartInstance(context.Context, *RestartInstanceRequest) (*RestartInstanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestartInstance not implemented")
 }
 func (UnimplementedNodeAgentServiceServer) CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateSnapshot not implemented")
@@ -237,6 +279,12 @@ func (UnimplementedNodeAgentServiceServer) CleanInstance(context.Context, *Clean
 }
 func (UnimplementedNodeAgentServiceServer) InspectInstanceStream(*InspectInstanceRequest, grpc.ServerStreamingServer[InspectInstanceResponse]) error {
 	return status.Error(codes.Unimplemented, "method InspectInstanceStream not implemented")
+}
+func (UnimplementedNodeAgentServiceServer) CacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CacheGame not implemented")
+}
+func (UnimplementedNodeAgentServiceServer) GetCacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCacheGame not implemented")
 }
 func (UnimplementedNodeAgentServiceServer) mustEmbedUnimplementedNodeAgentServiceServer() {}
 func (UnimplementedNodeAgentServiceServer) testEmbeddedByValue()                          {}
@@ -309,6 +357,24 @@ func _NodeAgentService_StopInstance_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(NodeAgentServiceServer).StopInstance(ctx, req.(*StopInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NodeAgentService_RestartInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestartInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeAgentServiceServer).RestartInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeAgentService_RestartInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeAgentServiceServer).RestartInstance(ctx, req.(*RestartInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -450,6 +516,42 @@ func _NodeAgentService_InspectInstanceStream_Handler(srv interface{}, stream grp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type NodeAgentService_InspectInstanceStreamServer = grpc.ServerStreamingServer[InspectInstanceResponse]
 
+func _NodeAgentService_CacheGame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CacheGameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeAgentServiceServer).CacheGame(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeAgentService_CacheGame_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeAgentServiceServer).CacheGame(ctx, req.(*CacheGameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _NodeAgentService_GetCacheGame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CacheGameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeAgentServiceServer).GetCacheGame(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NodeAgentService_GetCacheGame_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeAgentServiceServer).GetCacheGame(ctx, req.(*CacheGameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NodeAgentService_ServiceDesc is the grpc.ServiceDesc for NodeAgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -468,6 +570,10 @@ var NodeAgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopInstance",
 			Handler:    _NodeAgentService_StopInstance_Handler,
+		},
+		{
+			MethodName: "RestartInstance",
+			Handler:    _NodeAgentService_RestartInstance_Handler,
 		},
 		{
 			MethodName: "CreateSnapshot",
@@ -496,6 +602,14 @@ var NodeAgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CleanInstance",
 			Handler:    _NodeAgentService_CleanInstance_Handler,
+		},
+		{
+			MethodName: "CacheGame",
+			Handler:    _NodeAgentService_CacheGame_Handler,
+		},
+		{
+			MethodName: "GetCacheGame",
+			Handler:    _NodeAgentService_GetCacheGame_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

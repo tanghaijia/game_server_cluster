@@ -34,6 +34,7 @@ const (
 	BusinessService_UpdateNodeAgent_FullMethodName     = "/assetservice.v1.BusinessService/UpdateNodeAgent"
 	BusinessService_UnregisterNodeAgent_FullMethodName = "/assetservice.v1.BusinessService/UnregisterNodeAgent"
 	BusinessService_ListNodeAgents_FullMethodName      = "/assetservice.v1.BusinessService/ListNodeAgents"
+	BusinessService_ListSteamBranches_FullMethodName   = "/assetservice.v1.BusinessService/ListSteamBranches"
 )
 
 // BusinessServiceClient is the client API for BusinessService service.
@@ -58,6 +59,8 @@ type BusinessServiceClient interface {
 	UpdateNodeAgent(ctx context.Context, in *UpdateNodeAgentRequest, opts ...grpc.CallOption) (*UpdateNodeAgentResponse, error)
 	UnregisterNodeAgent(ctx context.Context, in *UnregisterNodeAgentRequest, opts ...grpc.CallOption) (*UnregisterNodeAgentResponse, error)
 	ListNodeAgents(ctx context.Context, in *ListNodeAgentsRequest, opts ...grpc.CallOption) (*ListNodeAgentsResponse, error)
+	// SteamBranch 查询
+	ListSteamBranches(ctx context.Context, in *ListSteamBranchesRequest, opts ...grpc.CallOption) (*ListSteamBranchesResponse, error)
 }
 
 type businessServiceClient struct {
@@ -218,6 +221,16 @@ func (c *businessServiceClient) ListNodeAgents(ctx context.Context, in *ListNode
 	return out, nil
 }
 
+func (c *businessServiceClient) ListSteamBranches(ctx context.Context, in *ListSteamBranchesRequest, opts ...grpc.CallOption) (*ListSteamBranchesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSteamBranchesResponse)
+	err := c.cc.Invoke(ctx, BusinessService_ListSteamBranches_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BusinessServiceServer is the server API for BusinessService service.
 // All implementations must embed UnimplementedBusinessServiceServer
 // for forward compatibility.
@@ -240,6 +253,8 @@ type BusinessServiceServer interface {
 	UpdateNodeAgent(context.Context, *UpdateNodeAgentRequest) (*UpdateNodeAgentResponse, error)
 	UnregisterNodeAgent(context.Context, *UnregisterNodeAgentRequest) (*UnregisterNodeAgentResponse, error)
 	ListNodeAgents(context.Context, *ListNodeAgentsRequest) (*ListNodeAgentsResponse, error)
+	// SteamBranch 查询
+	ListSteamBranches(context.Context, *ListSteamBranchesRequest) (*ListSteamBranchesResponse, error)
 	mustEmbedUnimplementedBusinessServiceServer()
 }
 
@@ -294,6 +309,9 @@ func (UnimplementedBusinessServiceServer) UnregisterNodeAgent(context.Context, *
 }
 func (UnimplementedBusinessServiceServer) ListNodeAgents(context.Context, *ListNodeAgentsRequest) (*ListNodeAgentsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListNodeAgents not implemented")
+}
+func (UnimplementedBusinessServiceServer) ListSteamBranches(context.Context, *ListSteamBranchesRequest) (*ListSteamBranchesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSteamBranches not implemented")
 }
 func (UnimplementedBusinessServiceServer) mustEmbedUnimplementedBusinessServiceServer() {}
 func (UnimplementedBusinessServiceServer) testEmbeddedByValue()                         {}
@@ -586,6 +604,24 @@ func _BusinessService_ListNodeAgents_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BusinessService_ListSteamBranches_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSteamBranchesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BusinessServiceServer).ListSteamBranches(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BusinessService_ListSteamBranches_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BusinessServiceServer).ListSteamBranches(ctx, req.(*ListSteamBranchesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BusinessService_ServiceDesc is the grpc.ServiceDesc for BusinessService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -652,6 +688,10 @@ var BusinessService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListNodeAgents",
 			Handler:    _BusinessService_ListNodeAgents_Handler,
+		},
+		{
+			MethodName: "ListSteamBranches",
+			Handler:    _BusinessService_ListSteamBranches_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

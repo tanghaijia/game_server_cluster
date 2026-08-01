@@ -1469,6 +1469,222 @@ func (x *ListNodeAgentsResponse) GetAgents() []*NodeAgent {
 	return nil
 }
 
+type SteamBranch struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	BuildId       uint64                 `protobuf:"varint,2,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
+	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	AppId         string                 `protobuf:"bytes,4,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	Manifests     []*DepotManifest       `protobuf:"bytes,5,rep,name=manifests,proto3" json:"manifests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SteamBranch) Reset() {
+	*x = SteamBranch{}
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SteamBranch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SteamBranch) ProtoMessage() {}
+
+func (x *SteamBranch) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SteamBranch.ProtoReflect.Descriptor instead.
+func (*SteamBranch) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *SteamBranch) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SteamBranch) GetBuildId() uint64 {
+	if x != nil {
+		return x.BuildId
+	}
+	return 0
+}
+
+func (x *SteamBranch) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+func (x *SteamBranch) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *SteamBranch) GetManifests() []*DepotManifest {
+	if x != nil {
+		return x.Manifests
+	}
+	return nil
+}
+
+type DepotManifest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DepotId       uint32                 `protobuf:"varint,1,opt,name=depot_id,json=depotId,proto3" json:"depot_id,omitempty"`
+	ManifestGid   uint64                 `protobuf:"varint,2,opt,name=manifest_gid,json=manifestGid,proto3" json:"manifest_gid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DepotManifest) Reset() {
+	*x = DepotManifest{}
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DepotManifest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DepotManifest) ProtoMessage() {}
+
+func (x *DepotManifest) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DepotManifest.ProtoReflect.Descriptor instead.
+func (*DepotManifest) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *DepotManifest) GetDepotId() uint32 {
+	if x != nil {
+		return x.DepotId
+	}
+	return 0
+}
+
+func (x *DepotManifest) GetManifestGid() uint64 {
+	if x != nil {
+		return x.ManifestGid
+	}
+	return 0
+}
+
+type ListSteamBranchesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSteamBranchesRequest) Reset() {
+	*x = ListSteamBranchesRequest{}
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSteamBranchesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSteamBranchesRequest) ProtoMessage() {}
+
+func (x *ListSteamBranchesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSteamBranchesRequest.ProtoReflect.Descriptor instead.
+func (*ListSteamBranchesRequest) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ListSteamBranchesRequest) GetGameId() string {
+	if x != nil {
+		return x.GameId
+	}
+	return ""
+}
+
+type ListSteamBranchesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Branches      []*SteamBranch         `protobuf:"bytes,1,rep,name=branches,proto3" json:"branches,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSteamBranchesResponse) Reset() {
+	*x = ListSteamBranchesResponse{}
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSteamBranchesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSteamBranchesResponse) ProtoMessage() {}
+
+func (x *ListSteamBranchesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_business_service_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSteamBranchesResponse.ProtoReflect.Descriptor instead.
+func (*ListSteamBranchesResponse) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_business_service_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ListSteamBranchesResponse) GetBranches() []*SteamBranch {
+	if x != nil {
+		return x.Branches
+	}
+	return nil
+}
+
 var File_assetservice_v1_business_service_proto protoreflect.FileDescriptor
 
 const file_assetservice_v1_business_service_proto_rawDesc = "" +
@@ -1543,8 +1759,21 @@ const file_assetservice_v1_business_service_proto_rawDesc = "" +
 	"\x1bUnregisterNodeAgentResponse\"\x17\n" +
 	"\x15ListNodeAgentsRequest\"L\n" +
 	"\x16ListNodeAgentsResponse\x122\n" +
-	"\x06agents\x18\x01 \x03(\v2\x1a.assetservice.v1.NodeAgentR\x06agents2\xe3\n" +
-	"\n" +
+	"\x06agents\x18\x01 \x03(\v2\x1a.assetservice.v1.NodeAgentR\x06agents\"\xc8\x01\n" +
+	"\vSteamBranch\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\bbuild_id\x18\x02 \x01(\x04R\abuildId\x12%\n" +
+	"\vdescription\x18\x03 \x01(\tH\x00R\vdescription\x88\x01\x01\x12\x15\n" +
+	"\x06app_id\x18\x04 \x01(\tR\x05appId\x12<\n" +
+	"\tmanifests\x18\x05 \x03(\v2\x1e.assetservice.v1.DepotManifestR\tmanifestsB\x0e\n" +
+	"\f_description\"M\n" +
+	"\rDepotManifest\x12\x19\n" +
+	"\bdepot_id\x18\x01 \x01(\rR\adepotId\x12!\n" +
+	"\fmanifest_gid\x18\x02 \x01(\x04R\vmanifestGid\"3\n" +
+	"\x18ListSteamBranchesRequest\x12\x17\n" +
+	"\agame_id\x18\x01 \x01(\tR\x06gameId\"U\n" +
+	"\x19ListSteamBranchesResponse\x128\n" +
+	"\bbranches\x18\x01 \x03(\v2\x1c.assetservice.v1.SteamBranchR\bbranches2\xcf\v\n" +
 	"\x0fBusinessService\x12U\n" +
 	"\n" +
 	"CreateGame\x12\".assetservice.v1.CreateGameRequest\x1a#.assetservice.v1.CreateGameResponse\x12L\n" +
@@ -1566,7 +1795,8 @@ const file_assetservice_v1_business_service_proto_rawDesc = "" +
 	"\fGetNodeAgent\x12$.assetservice.v1.GetNodeAgentRequest\x1a%.assetservice.v1.GetNodeAgentResponse\x12d\n" +
 	"\x0fUpdateNodeAgent\x12'.assetservice.v1.UpdateNodeAgentRequest\x1a(.assetservice.v1.UpdateNodeAgentResponse\x12p\n" +
 	"\x13UnregisterNodeAgent\x12+.assetservice.v1.UnregisterNodeAgentRequest\x1a,.assetservice.v1.UnregisterNodeAgentResponse\x12a\n" +
-	"\x0eListNodeAgents\x12&.assetservice.v1.ListNodeAgentsRequest\x1a'.assetservice.v1.ListNodeAgentsResponseB\xc5\x01\n" +
+	"\x0eListNodeAgents\x12&.assetservice.v1.ListNodeAgentsRequest\x1a'.assetservice.v1.ListNodeAgentsResponse\x12j\n" +
+	"\x11ListSteamBranches\x12).assetservice.v1.ListSteamBranchesRequest\x1a*.assetservice.v1.ListSteamBranchesResponseB\xc5\x01\n" +
 	"\x13com.assetservice.v1B\x14BusinessServiceProtoP\x01Z;controller-go/internal/third/assetservice/v1;assetservicev1\xa2\x02\x03AXX\xaa\x02\x0fAssetservice.V1\xca\x02\x0fAssetservice\\V1\xe2\x02\x1bAssetservice\\V1\\GPBMetadata\xea\x02\x10Assetservice::V1b\x06proto3"
 
 var (
@@ -1581,7 +1811,7 @@ func file_assetservice_v1_business_service_proto_rawDescGZIP() []byte {
 	return file_assetservice_v1_business_service_proto_rawDescData
 }
 
-var file_assetservice_v1_business_service_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_assetservice_v1_business_service_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_assetservice_v1_business_service_proto_goTypes = []any{
 	(*CreateGameRequest)(nil),           // 0: assetservice.v1.CreateGameRequest
 	(*CreateGameResponse)(nil),          // 1: assetservice.v1.CreateGameResponse
@@ -1615,15 +1845,19 @@ var file_assetservice_v1_business_service_proto_goTypes = []any{
 	(*UnregisterNodeAgentResponse)(nil), // 29: assetservice.v1.UnregisterNodeAgentResponse
 	(*ListNodeAgentsRequest)(nil),       // 30: assetservice.v1.ListNodeAgentsRequest
 	(*ListNodeAgentsResponse)(nil),      // 31: assetservice.v1.ListNodeAgentsResponse
-	(*Game)(nil),                        // 32: assetservice.v1.Game
+	(*SteamBranch)(nil),                 // 32: assetservice.v1.SteamBranch
+	(*DepotManifest)(nil),               // 33: assetservice.v1.DepotManifest
+	(*ListSteamBranchesRequest)(nil),    // 34: assetservice.v1.ListSteamBranchesRequest
+	(*ListSteamBranchesResponse)(nil),   // 35: assetservice.v1.ListSteamBranchesResponse
+	(*Game)(nil),                        // 36: assetservice.v1.Game
 }
 var file_assetservice_v1_business_service_proto_depIdxs = []int32{
-	32, // 0: assetservice.v1.CreateGameRequest.game:type_name -> assetservice.v1.Game
-	32, // 1: assetservice.v1.CreateGameResponse.game:type_name -> assetservice.v1.Game
-	32, // 2: assetservice.v1.GetGameResponse.game:type_name -> assetservice.v1.Game
-	32, // 3: assetservice.v1.UpdateGameRequest.game:type_name -> assetservice.v1.Game
-	32, // 4: assetservice.v1.UpdateGameResponse.game:type_name -> assetservice.v1.Game
-	32, // 5: assetservice.v1.ListGamesResponse.games:type_name -> assetservice.v1.Game
+	36, // 0: assetservice.v1.CreateGameRequest.game:type_name -> assetservice.v1.Game
+	36, // 1: assetservice.v1.CreateGameResponse.game:type_name -> assetservice.v1.Game
+	36, // 2: assetservice.v1.GetGameResponse.game:type_name -> assetservice.v1.Game
+	36, // 3: assetservice.v1.UpdateGameRequest.game:type_name -> assetservice.v1.Game
+	36, // 4: assetservice.v1.UpdateGameResponse.game:type_name -> assetservice.v1.Game
+	36, // 5: assetservice.v1.ListGamesResponse.games:type_name -> assetservice.v1.Game
 	10, // 6: assetservice.v1.CreateNodeRequest.node:type_name -> assetservice.v1.Node
 	10, // 7: assetservice.v1.CreateNodeResponse.node:type_name -> assetservice.v1.Node
 	10, // 8: assetservice.v1.GetNodeResponse.node:type_name -> assetservice.v1.Node
@@ -1636,41 +1870,45 @@ var file_assetservice_v1_business_service_proto_depIdxs = []int32{
 	21, // 15: assetservice.v1.UpdateNodeAgentRequest.agent:type_name -> assetservice.v1.NodeAgent
 	21, // 16: assetservice.v1.UpdateNodeAgentResponse.agent:type_name -> assetservice.v1.NodeAgent
 	21, // 17: assetservice.v1.ListNodeAgentsResponse.agents:type_name -> assetservice.v1.NodeAgent
-	0,  // 18: assetservice.v1.BusinessService.CreateGame:input_type -> assetservice.v1.CreateGameRequest
-	2,  // 19: assetservice.v1.BusinessService.GetGame:input_type -> assetservice.v1.GetGameRequest
-	4,  // 20: assetservice.v1.BusinessService.UpdateGame:input_type -> assetservice.v1.UpdateGameRequest
-	6,  // 21: assetservice.v1.BusinessService.DeleteGame:input_type -> assetservice.v1.DeleteGameRequest
-	8,  // 22: assetservice.v1.BusinessService.ListGames:input_type -> assetservice.v1.ListGamesRequest
-	11, // 23: assetservice.v1.BusinessService.CreateNode:input_type -> assetservice.v1.CreateNodeRequest
-	13, // 24: assetservice.v1.BusinessService.GetNode:input_type -> assetservice.v1.GetNodeRequest
-	15, // 25: assetservice.v1.BusinessService.UpdateNode:input_type -> assetservice.v1.UpdateNodeRequest
-	17, // 26: assetservice.v1.BusinessService.DeleteNode:input_type -> assetservice.v1.DeleteNodeRequest
-	19, // 27: assetservice.v1.BusinessService.ListNodes:input_type -> assetservice.v1.ListNodesRequest
-	22, // 28: assetservice.v1.BusinessService.RegisterNodeAgent:input_type -> assetservice.v1.RegisterNodeAgentRequest
-	24, // 29: assetservice.v1.BusinessService.GetNodeAgent:input_type -> assetservice.v1.GetNodeAgentRequest
-	26, // 30: assetservice.v1.BusinessService.UpdateNodeAgent:input_type -> assetservice.v1.UpdateNodeAgentRequest
-	28, // 31: assetservice.v1.BusinessService.UnregisterNodeAgent:input_type -> assetservice.v1.UnregisterNodeAgentRequest
-	30, // 32: assetservice.v1.BusinessService.ListNodeAgents:input_type -> assetservice.v1.ListNodeAgentsRequest
-	1,  // 33: assetservice.v1.BusinessService.CreateGame:output_type -> assetservice.v1.CreateGameResponse
-	3,  // 34: assetservice.v1.BusinessService.GetGame:output_type -> assetservice.v1.GetGameResponse
-	5,  // 35: assetservice.v1.BusinessService.UpdateGame:output_type -> assetservice.v1.UpdateGameResponse
-	7,  // 36: assetservice.v1.BusinessService.DeleteGame:output_type -> assetservice.v1.DeleteGameResponse
-	9,  // 37: assetservice.v1.BusinessService.ListGames:output_type -> assetservice.v1.ListGamesResponse
-	12, // 38: assetservice.v1.BusinessService.CreateNode:output_type -> assetservice.v1.CreateNodeResponse
-	14, // 39: assetservice.v1.BusinessService.GetNode:output_type -> assetservice.v1.GetNodeResponse
-	16, // 40: assetservice.v1.BusinessService.UpdateNode:output_type -> assetservice.v1.UpdateNodeResponse
-	18, // 41: assetservice.v1.BusinessService.DeleteNode:output_type -> assetservice.v1.DeleteNodeResponse
-	20, // 42: assetservice.v1.BusinessService.ListNodes:output_type -> assetservice.v1.ListNodesResponse
-	23, // 43: assetservice.v1.BusinessService.RegisterNodeAgent:output_type -> assetservice.v1.RegisterNodeAgentResponse
-	25, // 44: assetservice.v1.BusinessService.GetNodeAgent:output_type -> assetservice.v1.GetNodeAgentResponse
-	27, // 45: assetservice.v1.BusinessService.UpdateNodeAgent:output_type -> assetservice.v1.UpdateNodeAgentResponse
-	29, // 46: assetservice.v1.BusinessService.UnregisterNodeAgent:output_type -> assetservice.v1.UnregisterNodeAgentResponse
-	31, // 47: assetservice.v1.BusinessService.ListNodeAgents:output_type -> assetservice.v1.ListNodeAgentsResponse
-	33, // [33:48] is the sub-list for method output_type
-	18, // [18:33] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	33, // 18: assetservice.v1.SteamBranch.manifests:type_name -> assetservice.v1.DepotManifest
+	32, // 19: assetservice.v1.ListSteamBranchesResponse.branches:type_name -> assetservice.v1.SteamBranch
+	0,  // 20: assetservice.v1.BusinessService.CreateGame:input_type -> assetservice.v1.CreateGameRequest
+	2,  // 21: assetservice.v1.BusinessService.GetGame:input_type -> assetservice.v1.GetGameRequest
+	4,  // 22: assetservice.v1.BusinessService.UpdateGame:input_type -> assetservice.v1.UpdateGameRequest
+	6,  // 23: assetservice.v1.BusinessService.DeleteGame:input_type -> assetservice.v1.DeleteGameRequest
+	8,  // 24: assetservice.v1.BusinessService.ListGames:input_type -> assetservice.v1.ListGamesRequest
+	11, // 25: assetservice.v1.BusinessService.CreateNode:input_type -> assetservice.v1.CreateNodeRequest
+	13, // 26: assetservice.v1.BusinessService.GetNode:input_type -> assetservice.v1.GetNodeRequest
+	15, // 27: assetservice.v1.BusinessService.UpdateNode:input_type -> assetservice.v1.UpdateNodeRequest
+	17, // 28: assetservice.v1.BusinessService.DeleteNode:input_type -> assetservice.v1.DeleteNodeRequest
+	19, // 29: assetservice.v1.BusinessService.ListNodes:input_type -> assetservice.v1.ListNodesRequest
+	22, // 30: assetservice.v1.BusinessService.RegisterNodeAgent:input_type -> assetservice.v1.RegisterNodeAgentRequest
+	24, // 31: assetservice.v1.BusinessService.GetNodeAgent:input_type -> assetservice.v1.GetNodeAgentRequest
+	26, // 32: assetservice.v1.BusinessService.UpdateNodeAgent:input_type -> assetservice.v1.UpdateNodeAgentRequest
+	28, // 33: assetservice.v1.BusinessService.UnregisterNodeAgent:input_type -> assetservice.v1.UnregisterNodeAgentRequest
+	30, // 34: assetservice.v1.BusinessService.ListNodeAgents:input_type -> assetservice.v1.ListNodeAgentsRequest
+	34, // 35: assetservice.v1.BusinessService.ListSteamBranches:input_type -> assetservice.v1.ListSteamBranchesRequest
+	1,  // 36: assetservice.v1.BusinessService.CreateGame:output_type -> assetservice.v1.CreateGameResponse
+	3,  // 37: assetservice.v1.BusinessService.GetGame:output_type -> assetservice.v1.GetGameResponse
+	5,  // 38: assetservice.v1.BusinessService.UpdateGame:output_type -> assetservice.v1.UpdateGameResponse
+	7,  // 39: assetservice.v1.BusinessService.DeleteGame:output_type -> assetservice.v1.DeleteGameResponse
+	9,  // 40: assetservice.v1.BusinessService.ListGames:output_type -> assetservice.v1.ListGamesResponse
+	12, // 41: assetservice.v1.BusinessService.CreateNode:output_type -> assetservice.v1.CreateNodeResponse
+	14, // 42: assetservice.v1.BusinessService.GetNode:output_type -> assetservice.v1.GetNodeResponse
+	16, // 43: assetservice.v1.BusinessService.UpdateNode:output_type -> assetservice.v1.UpdateNodeResponse
+	18, // 44: assetservice.v1.BusinessService.DeleteNode:output_type -> assetservice.v1.DeleteNodeResponse
+	20, // 45: assetservice.v1.BusinessService.ListNodes:output_type -> assetservice.v1.ListNodesResponse
+	23, // 46: assetservice.v1.BusinessService.RegisterNodeAgent:output_type -> assetservice.v1.RegisterNodeAgentResponse
+	25, // 47: assetservice.v1.BusinessService.GetNodeAgent:output_type -> assetservice.v1.GetNodeAgentResponse
+	27, // 48: assetservice.v1.BusinessService.UpdateNodeAgent:output_type -> assetservice.v1.UpdateNodeAgentResponse
+	29, // 49: assetservice.v1.BusinessService.UnregisterNodeAgent:output_type -> assetservice.v1.UnregisterNodeAgentResponse
+	31, // 50: assetservice.v1.BusinessService.ListNodeAgents:output_type -> assetservice.v1.ListNodeAgentsResponse
+	35, // 51: assetservice.v1.BusinessService.ListSteamBranches:output_type -> assetservice.v1.ListSteamBranchesResponse
+	36, // [36:52] is the sub-list for method output_type
+	20, // [20:36] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_assetservice_v1_business_service_proto_init() }
@@ -1680,13 +1918,14 @@ func file_assetservice_v1_business_service_proto_init() {
 	}
 	file_assetservice_v1_asset_service_proto_init()
 	file_assetservice_v1_game_proto_init()
+	file_assetservice_v1_business_service_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_assetservice_v1_business_service_proto_rawDesc), len(file_assetservice_v1_business_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   32,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
