@@ -416,7 +416,7 @@ where
             container_file_path: ContainerFilePath {
                 path: CONTAINER_DATA_PATH.to_string(),
             },
-            mapped_permission: "r".to_string(),
+            mapped_permission: "rwx".to_string(),
         };
         v2.push(path_mapping);
 

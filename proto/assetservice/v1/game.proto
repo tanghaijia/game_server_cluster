@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package assetservice.v1;
-
-message Game {
-  string id = 1;
-  string name = 2;
-  string app_id = 3;
-}
