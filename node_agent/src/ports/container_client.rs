@@ -27,6 +27,8 @@ pub trait ContainerClient: Send + Sync {
 
     async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError>;
 
+    async fn restart_container(&self, id: String) -> Result<GameContainer, ContainerError>;
+
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError>;
 
     async fn update_container_status(&self) -> Result<i32, ContainerError>;

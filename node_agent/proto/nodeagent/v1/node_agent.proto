@@ -9,6 +9,7 @@ service NodeAgentService {
   rpc PrepareGameBuild(PrepareGameBuildRequest) returns (PrepareGameBuildResponse);
   rpc StartInstance(StartInstanceRequest) returns (StartInstanceResponse);
   rpc StopInstance(StopInstanceRequest) returns (StopInstanceResponse);
+  rpc RestartInstance(RestartInstanceRequest) returns (RestartInstanceResponse);
   rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
   rpc RestoreSnapshot(RestoreSnapshotRequest) returns (RestoreSnapshotResponse);
   rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
@@ -75,6 +76,14 @@ message StopInstanceRequest {
 }
 
 message StopInstanceResponse {
+  NodeOperation operation = 1;
+}
+
+message RestartInstanceRequest {
+  string instance_id = 1;
+}
+
+message RestartInstanceResponse {
   NodeOperation operation = 1;
 }
 
@@ -278,6 +287,7 @@ enum OperationKind {
   OPERATION_KIND_CREATE_SNAPSHOT = 4;
   OPERATION_KIND_RESTORE_SNAPSHOT = 5;
   OPERATION_KIND_CLEAN_INSTANCE = 6;
+  OPERATION_KIND_RESTART_INSTANCE = 7;
 }
 
 enum OperationStatus {

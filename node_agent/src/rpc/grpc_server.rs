@@ -44,12 +44,13 @@ use crate::{
             SnapshotReference as ProtoSnapshotReference,
             SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
             StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
+            RestartInstanceRequest, RestartInstanceResponse,
             node_agent_service_server::NodeAgentService as NodeAgentRpc,
         },
     },
     service::{
-        NodeAgentService, enqueue_clean_instance, enqueue_prepare_build, enqueue_restore_snapshot,
-        enqueue_start_instance, enqueue_stop_instance,
+        NodeAgentService, enqueue_clean_instance, enqueue_prepare_build, enqueue_restart_instance,
+        enqueue_restore_snapshot, enqueue_start_instance, enqueue_stop_instance,
     },
 };
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
@@ -144,6 +145,18 @@ where
         let operation =
             enqueue_stop_instance(&self.pool, &self.operations, &request.instance_id).await;
         Ok(Response::new(StopInstanceResponse {
+            operation: Some(map_operation(operation)),
+        }))
+    }
+
+    async fn restart_instance(
+        &self,
+        request: Request<RestartInstanceRequest>,
+    ) -> Result<Response<RestartInstanceResponse>, Status> {
+        let request = request.into_inner();
+        let operation =
+            enqueue_restart_instance(&self.pool, &self.operations, &request.instance_id).await;
+        Ok(Response::new(RestartInstanceResponse {
             operation: Some(map_operation(operation)),
         }))
     }
@@ -523,6 +536,7 @@ fn map_operation(value: NodeOperation) -> ProtoNodeOperation {
             OperationKind::PrepareBuild => node_agent::OperationKind::PrepareBuild as i32,
             OperationKind::StartInstance => node_agent::OperationKind::StartInstance as i32,
             OperationKind::StopInstance => node_agent::OperationKind::StopInstance as i32,
+            OperationKind::RestartInstance => node_agent::OperationKind::RestartInstance as i32,
             OperationKind::CreateSnapshot => node_agent::OperationKind::CreateSnapshot as i32,
             OperationKind::RestoreSnapshot => node_agent::OperationKind::RestoreSnapshot as i32,
             OperationKind::CleanInstance => node_agent::OperationKind::CleanInstance as i32,

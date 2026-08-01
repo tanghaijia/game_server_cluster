@@ -54,6 +54,11 @@ pub trait BackgroundWorker: Send + Sync {
 
     async fn stop_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
 
+    async fn restart_instance(
+        &self,
+        instance_id: InstanceId,
+    ) -> Result<InstanceRuntimeRecord, NodeAgentError>;
+
     async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError>;
 }
 
@@ -503,6 +508,40 @@ where
         }
 
         Ok(())
+    }
+
+    async fn restart_instance(
+        &self,
+        instance_id: InstanceId,
+    ) -> Result<InstanceRuntimeRecord, NodeAgentError> {
+        let instance_id = instance_id.0;
+        let mut local_game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
+        let docker_id = local_game_instance.container_id.clone();
+        if docker_id.is_none() {
+            return Err(NodeAgentError::ConatinerFail {
+                source: crate::ports::ContainerError::NotFound(format!(
+                    "instance id {} 无docker_id",
+                    instance_id
+                )),
+            });
+        }
+        let docker_id = docker_id.unwrap();
+        self.container_client
+            .restart_container(docker_id)
+            .await
+            .map_err(|e| NodeAgentError::ConatinerFail { source: e })?;
+
+        local_game_instance.status = crate::domain::GameInstanceStatus::Running;
+        self.game_instance_repos.save(&local_game_instance).await?;
+
+        Ok(InstanceRuntimeRecord {
+            instance_id: InstanceId(instance_id),
+            node_id: NodeId("".to_string()),
+            state: RuntimeState::Running,
+            endpoint: None,
+            failure: None,
+            updated_at: Utc::now(),
+        })
     }
 
     async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {

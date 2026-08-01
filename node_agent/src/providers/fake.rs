@@ -511,6 +511,17 @@ impl ContainerClient for FakeImageClient {
         containers.remove(&id).ok_or(ContainerError::Unknown)
     }
 
+    async fn restart_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        let mut containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        let mut container = containers.get(&id).cloned().ok_or(ContainerError::Unknown)?;
+        container.status = ContainerStatus::Running;
+        containers.insert(id, container.clone());
+        Ok(container)
+    }
+
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
         let mut containers = self
             .containers

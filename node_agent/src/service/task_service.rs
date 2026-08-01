@@ -74,6 +74,12 @@ pub struct StopInstanceJob {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestartInstanceJob {
+    pub operation_id: String,
+    pub instance_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSnapshotJob {
     pub instance_id: String,
     pub snapshot_id: String,
@@ -263,6 +269,45 @@ async fn handle_stop_instance(
     Ok(())
 }
 
+async fn handle_restart_instance(
+    job: RestartInstanceJob,
+    ctx: Data<Arc<TaskContext>>,
+    _worker_ctx: WorkerContext,
+) -> Result<(), BoxDynError> {
+    let op_id = OperationId(job.operation_id);
+    let instance_id = InstanceId(job.instance_id.clone());
+
+    let op = ctx
+        .operations
+        .get(&op_id)
+        .await?
+        .expect("can not find operation");
+    running_operation(&ctx.operations, op.clone()).await;
+    match ctx
+        .node_agent_service
+        .restart_instance(instance_id.clone())
+        .await
+    {
+        Ok(_runtime) => {
+            succeed_operation(
+                &ctx.operations,
+                op,
+                format!(
+                    "restart instance {} success, operation id: {}",
+                    instance_id.0, op_id.0
+                )
+                .as_str(),
+            )
+            .await;
+        }
+        Err(err) => {
+            fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+        }
+    };
+
+    Ok(())
+}
+
 async fn handle_create_snapshot(
     job: CreateSnapshotJob,
     ctx: Data<Arc<TaskContext>>,
@@ -388,6 +433,21 @@ pub fn start_all_workers(
                 .run()
                 .await
                 .expect("stop-instance worker crashed");
+        }));
+    }
+
+    // --- RestartInstance Worker ---
+    {
+        let storage = SqliteStorage::new(&pool);
+        let ctx = Arc::clone(&task_ctx);
+        handles.push(tokio::spawn(async move {
+            WorkerBuilder::new("restart-instance-worker")
+                .backend(storage)
+                .data(ctx)
+                .build(handle_restart_instance)
+                .run()
+                .await
+                .expect("restart-instance worker crashed");
         }));
     }
 
@@ -554,6 +614,35 @@ pub async fn enqueue_stop_instance(
     let mut storage = SqliteStorage::new(pool);
     let _ = storage
         .push(StopInstanceJob {
+            operation_id: job_op_id,
+            instance_id: instance_id.to_string(),
+        })
+        .await;
+
+    op
+}
+
+pub async fn enqueue_restart_instance(
+    pool: &SqlitePool,
+    ops: &Arc<dyn OperationRepository>,
+    instance_id: &str,
+) -> NodeOperation {
+    let op = NodeOperation {
+        operation_id: OperationId::new(),
+        kind: OperationKind::RestartInstance,
+        status: OperationStatus::Pending,
+        instance_id: Some(InstanceId(instance_id.to_string())),
+        build_id: None,
+        message: Some("instance restart queued".to_string()),
+        started_at: Utc::now(),
+        finished_at: None,
+    };
+    let _ = ops.save(&op).await;
+
+    let job_op_id = op.operation_id.0.clone();
+    let mut storage = SqliteStorage::new(pool);
+    let _ = storage
+        .push(RestartInstanceJob {
             operation_id: job_op_id,
             instance_id: instance_id.to_string(),
         })

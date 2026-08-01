@@ -201,6 +201,35 @@ impl ContainerClient for DockerContainerClient {
         Ok(container)
     }
 
+    async fn restart_container(&self, id: String) -> Result<GameContainer, ContainerError> {
+        // 先从 repo 取出记录
+        let mut container = self
+            .docker_instances
+            .get(&id)
+            .await
+            .map_err(|_| ContainerError::Unknown)?
+            .ok_or_else(|| ContainerError::NotFound(id.clone()))?;
+
+        let client = DockerClient::new().map_err(to_io_error)?;
+        client
+            .containers()
+            .get(&id)
+            .restart(Some(30))
+            .await
+            .map_err(|e| match e {
+                lmrc_docker::DockerError::ContainerNotFound(_) => ContainerError::NotFound(id),
+                _ => ContainerError::Unknown,
+            })?;
+
+        container.status = ContainerStatus::Running;
+        self.docker_instances
+            .save(&container)
+            .await
+            .map_err(|_| ContainerError::Unknown)?;
+
+        Ok(container)
+    }
+
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError> {
         let container = self
             .docker_instances

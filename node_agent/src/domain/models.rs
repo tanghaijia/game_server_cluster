@@ -87,6 +87,7 @@ pub enum OperationKind {
     PrepareBuild,
     StartInstance,
     StopInstance,
+    RestartInstance,
     CreateSnapshot,
     RestoreSnapshot,
     CleanInstance,
