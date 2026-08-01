@@ -17,6 +17,7 @@ const (
 	StatusStarting
 	StatusRunning
 	StatusStopping
+	StatusCleaning
 	StatusStopped
 	Failed
 )
@@ -37,6 +38,8 @@ func (s InstanceStatus) String() string {
 		return "running"
 	case StatusStopping:
 		return "stopping"
+	case StatusCleaning:
+		return "cleaning"
 	case StatusStopped:
 		return "stopped"
 	case Failed:
@@ -78,6 +81,8 @@ func (g *GameInstance) Advance(ctx context.Context) (status InstanceStatus, err 
 	case StatusStarting:
 		g.Status = StatusRunning
 	case StatusStopping:
+		g.Status = StatusCleaning
+	case StatusCleaning:
 		g.Status = StatusStopped
 	default:
 		fmt.Printf("Instance %s is in status %d, cannot advance\n", g.ID, g.Status)

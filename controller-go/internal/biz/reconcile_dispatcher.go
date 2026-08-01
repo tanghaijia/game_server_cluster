@@ -62,7 +62,8 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 		instance.Status == entity.StatusPreparingBuild ||
 		instance.Status == entity.StatusRestoringSnapshot ||
 		instance.Status == entity.StatusStarting ||
-		instance.Status == entity.StatusStopping {
+		instance.Status == entity.StatusStopping ||
+		instance.Status == entity.StatusCleaning {
 		d.queue <- instance
 		return nil
 	}
@@ -245,6 +246,66 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			return nil
 		}
 		go d.PollingResult(ctx, startResp.Operation.OperationId, instance, client, d.onStartInstanceSucceeded)
+	case entity.StatusStopping:
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil {
+			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil {
+			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		stopResp, err := client.StopInstance(ctx, &nodeagentv1.StopInstanceRequest{
+			InstanceId: instance.ID,
+		})
+		if err != nil {
+			slog.Error("[NodeAgentClients] StopInstance fail",
+				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		go d.PollingResult(ctx, stopResp.Operation.OperationId, instance, client, d.onStopInstanceSucceeded)
+	case entity.StatusCleaning:
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil {
+			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil {
+			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		cleanResp, err := client.CleanInstance(ctx, &nodeagentv1.CleanInstanceRequest{
+			InstanceId: instance.ID,
+		})
+		if err != nil {
+			slog.Error("[NodeAgentClients] CleanInstance fail",
+				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		go d.PollingResult(ctx, cleanResp.Operation.OperationId, instance, client, d.onCleanInstanceSucceeded)
 	default:
 		slog.Warn("无法被调度的状态", "status", instance.Status, "id", instance.ID)
 		instance.Status = entity.Failed
@@ -330,6 +391,23 @@ func (d *ReconcileDispatcher) onRestoreSnapshotSucceeded(ctx context.Context, in
 **/
 func (d *ReconcileDispatcher) onStartInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.StatusRunning
+	d.instanceRepo.UpdateStatus(ctx, instance)
+}
+
+/**
+* StopInstance 成功后的回调：进入清理流程（clean_instance 由 StatusCleaning 分支处理）
+**/
+func (d *ReconcileDispatcher) onStopInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	instance.Status = entity.StatusCleaning
+	d.instanceRepo.UpdateStatus(ctx, instance)
+	d.RequestDispatch(ctx, instance)
+}
+
+/**
+* CleanInstance 成功后的回调：实例完全停止（终态）
+**/
+func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	instance.Status = entity.StatusStopped
 	d.instanceRepo.UpdateStatus(ctx, instance)
 }
 
