@@ -170,17 +170,6 @@ message InstanceSpec {
   optional string mod_manifest_id = 5;
 }
 
-message SnapshotReference {
-  string snapshot_id = 1;
-  optional string storage_uri = 2;
-  optional string manifest_uri = 3;
-  optional string checksum = 4;
-}
-
-message InstanceAssignment {
-  string node_id = 1;
-}
-
 message Endpoint {
   string host = 1;
   uint32 game_port = 2;
@@ -189,15 +178,11 @@ message Endpoint {
 
 message InstanceRuntimeSpec {
   string instance_id = 1;
-  Game game = 2;
-  GameBuild build = 3;
-  DesiredRuntimeState desired_state = 4;
-  InstanceSpec spec = 5;
-  InstanceAssignment assignment = 6;
-  optional SnapshotReference latest_snapshot = 7;
-  string container_server_path = 8;
-  optional string branch_name = 9;
-  optional PortMapping port_mapping = 10;
+  GameBuild build = 2;
+  InstanceSpec spec = 3;
+  string container_server_path = 4;
+  optional string branch_name = 5;
+  optional PortMapping port_mapping = 6;
 }
 
 message BuildPreparationResult {
@@ -257,12 +242,6 @@ message Game {
   string id = 1;
   string name = 2;
   string app_id = 3;
-}
-
-enum DesiredRuntimeState {
-  DESIRED_RUNTIME_STATE_UNSPECIFIED = 0;
-  DESIRED_RUNTIME_STATE_RUNNING = 1;
-  DESIRED_RUNTIME_STATE_STOPPED = 2;
 }
 
 enum RuntimeState {

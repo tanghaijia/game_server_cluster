@@ -366,7 +366,7 @@ where
 
         let game_cache = self
             .game_cache_repos
-            .get(&argument.game.id, &argument.branch_name)
+            .get(&argument.build.game.id, &argument.branch_name)
             .await
             .map_err(|err| NodeAgentError::DBOperationFail {
                 message: format!("get game cache fail: {}", err),
@@ -374,14 +374,14 @@ where
             .ok_or_else(|| NodeAgentError::InvalidRequest {
                 message: format!(
                     "game cache not found for game_id={}, branch_name={}",
-                    argument.game.id, argument.branch_name
+                    argument.build.game.id, argument.branch_name
                 ),
             })?;
         if game_cache.status != DomainGameCacheStatus::Available {
             return Err(NodeAgentError::InvalidRequest {
                 message: format!(
                     "game cache is not available for game_id={}, branch_name={}",
-                    argument.game.id, argument.branch_name
+                    argument.build.game.id, argument.branch_name
                 ),
             });
         };
@@ -392,7 +392,7 @@ where
             .ok_or_else(|| NodeAgentError::InvalidRequest {
                 message: format!(
                     "game cache path is empty for game_id={}, branch_name={}",
-                    argument.game.id, argument.branch_name
+                    argument.build.game.id, argument.branch_name
                 ),
             })?;
 

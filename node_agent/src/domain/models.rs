@@ -1,5 +1,4 @@
 use super::{ContainerPortMapping, InstanceId, NodeId, OperationId};
-use crate::domain::game::Game;
 use crate::domain::game_build::GameBuild;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -32,19 +31,6 @@ pub struct InstanceSpec {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SnapshotReference {
-    pub snapshot_id: String,
-    pub storage_uri: Option<String>,
-    pub manifest_uri: Option<String>,
-    pub checksum: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InstanceAssignment {
-    pub node_id: NodeId,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Endpoint {
     pub host: String,
     pub game_port: u16,
@@ -52,20 +38,10 @@ pub struct Endpoint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DesiredRuntimeState {
-    Running,
-    Stopped,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StartInstanceArgument {
     pub instance_id: InstanceId,
-    pub game: Game,
     pub build: GameBuild,
-    pub desired_state: DesiredRuntimeState,
     pub spec: InstanceSpec,
-    pub assignment: InstanceAssignment,
-    pub latest_snapshot: Option<SnapshotReference>,
     pub container_server_path: String,
     pub branch_name: String,
     pub port_mapping: Option<ContainerPortMapping>,

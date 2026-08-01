@@ -13,10 +13,10 @@ use prost_types::Timestamp;
 use crate::{
     domain::{
         BuildPreparation, BuildPreparationResult, ContainerPortMapping, ContainerPortMappingMod,
-        DesiredRuntimeState, Endpoint, FailureInfo, GameBuild, GameInstance, GameInstanceStatus,
-        InstanceAssignment, InstanceId, InstanceRuntimeRecord, InstanceSpec, LocalGameBuild,
-        MappingPortType, NodeId, NodeOperation, OperationId, OperationKind, OperationStatus, PortMap,
-        ResourceRequirements, RuntimeState, SnapshotCaptureRequest, SnapshotReference,
+        Endpoint, FailureInfo, GameBuild, GameInstance, GameInstanceStatus,
+        InstanceId, InstanceRuntimeRecord, InstanceSpec, LocalGameBuild,
+        MappingPortType, NodeOperation, OperationId, OperationKind, OperationStatus, PortMap,
+        ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
         SnapshotRestoreResult, StartInstanceArgument,
         GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
     },
@@ -41,7 +41,6 @@ use crate::{
             PortMapEntry, PortMapping, PortMappingMod,
             PrepareGameBuildRequest, PrepareGameBuildResponse,
             RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
-            SnapshotReference as ProtoSnapshotReference,
             SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
             StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
             RestartInstanceRequest, RestartInstanceResponse,
@@ -434,31 +433,12 @@ fn map_instance_runtime_spec(
     )?;
     Ok(StartInstanceArgument {
         instance_id: InstanceId(value.instance_id),
-        game: build.game.clone(),
         build,
-        desired_state: match node_agent::DesiredRuntimeState::try_from(value.desired_state)
-            .unwrap_or(node_agent::DesiredRuntimeState::Unspecified)
-        {
-            node_agent::DesiredRuntimeState::Running => DesiredRuntimeState::Running,
-            node_agent::DesiredRuntimeState::Stopped => DesiredRuntimeState::Stopped,
-            node_agent::DesiredRuntimeState::Unspecified => {
-                return Err(Status::invalid_argument("desired_state is required"));
-            }
-        },
         spec: map_instance_spec(
             value
                 .spec
                 .ok_or_else(|| Status::invalid_argument("spec is required"))?,
         )?,
-        assignment: InstanceAssignment {
-            node_id: NodeId(
-                value
-                    .assignment
-                    .ok_or_else(|| Status::invalid_argument("assignment is required"))?
-                    .node_id,
-            ),
-        },
-        latest_snapshot: value.latest_snapshot.map(map_snapshot_reference),
         container_server_path: value.container_server_path,
         branch_name: value.branch_name.unwrap_or_else(|| "public".to_string()),
         port_mapping: value.port_mapping.map(map_port_mapping),
@@ -480,15 +460,6 @@ fn map_instance_spec(value: ProtoInstanceSpec) -> Result<InstanceSpec, Status> {
         world_preset: value.world_preset,
         mod_manifest_id: value.mod_manifest_id,
     })
-}
-
-fn map_snapshot_reference(value: ProtoSnapshotReference) -> SnapshotReference {
-    SnapshotReference {
-        snapshot_id: value.snapshot_id,
-        storage_uri: value.storage_uri,
-        manifest_uri: value.manifest_uri,
-        checksum: value.checksum,
-    }
 }
 
 fn map_port_mapping(value: PortMapping) -> ContainerPortMapping {
