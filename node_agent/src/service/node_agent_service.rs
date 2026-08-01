@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use lmrc_docker::DockerClient;
+use tokio::fs;
 
 use crate::common::{CONTAINER_DATA_PATH, GAME_CACHE_SERVER_ROOT_PATH};
 use crate::domain::{
@@ -21,10 +22,7 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{AssetServiceFace, SystemInfoProvider},
-    proto::{
-        asset_service::SnapshotType,
-        node_agent::SnapshotArtifact,
-    },
+    proto::{asset_service::SnapshotType, node_agent::SnapshotArtifact},
 };
 
 // ============================================================
@@ -461,12 +459,7 @@ where
         let data_path = HostSnapShotDataPath::new(instance_id.clone());
         let restore_path_string = data_path.as_ref().display().to_string();
         self.directory_service
-            .restore_snapshot(
-                &snapshot_record.bucket,
-                &manifest,
-                data_path.as_ref(),
-                None,
-            )
+            .restore_snapshot(&snapshot_record.bucket, &manifest, data_path.as_ref(), None)
             .await
             .map_err(|err| NodeAgentError::S3DownloadFail {
                 message: err.to_string(),
@@ -505,13 +498,13 @@ where
     async fn clean_instance(&self, instance_id: InstanceId) -> Result<(), NodeAgentError> {
         let instance_id = instance_id.0;
         let mut game_instance = self.game_instance_repos.get(instance_id.clone()).await?;
-        let node_id = self
-            .system_info
-            .get_node_id()
-            .await
-            .ok_or_else(|| NodeAgentError::Internal {
-                message: "node_id not registered".to_string(),
-            })?;
+        let node_id =
+            self.system_info
+                .get_node_id()
+                .await
+                .ok_or_else(|| NodeAgentError::Internal {
+                    message: "node_id not registered".to_string(),
+                })?;
 
         // clean = 实例最终停止，快照类型用 FINAL_STOP；记录由本流程创建并完成
         let record = self
@@ -554,10 +547,19 @@ where
             .set_latest_snapshot(&instance_id, &record.snapshot_id)
             .await?;
 
+        // 删除本地data
+        let path = game_instance
+            .host_data_path
+            .to_string()
+            .expect("host_data_path.to_string fail");
+        match fs::remove_dir_all(game_instance.host_data_path.as_ref()).await {
+            Ok(_) => log::info!("{} 目录及内容删除成功", path),
+            Err(e) => log::error!("{} 目录删除失败: {}", path, e),
+        }
+
         // 标记实例为 Stopped
         game_instance.status = crate::domain::GameInstanceStatus::Stopped;
         self.game_instance_repos.save(&game_instance).await?;
-
         Ok(())
     }
 }
