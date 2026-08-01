@@ -129,9 +129,6 @@ pub struct SnapshotCaptureRequest {
 pub struct SnapshotRestoreRequest {
     pub instance_id: InstanceId,
     pub snapshot_id: String,
-    pub storage_uri: String,
-    pub manifest_uri: Option<String>,
-    pub checksum: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -89,9 +89,6 @@ pub struct CreateSnapshotJob {
 pub struct RestoreSnapshotJob {
     pub instance_id: String,
     pub snapshot_id: String,
-    pub storage_uri: String,
-    pub manifest_uri: Option<String>,
-    pub checksum: Option<String>,
     pub operation: NodeOperation,
 }
 
@@ -328,9 +325,6 @@ async fn handle_restore_snapshot(
     let request = SnapshotRestoreRequest {
         instance_id,
         snapshot_id: job.snapshot_id.clone(),
-        storage_uri: job.storage_uri.clone(),
-        manifest_uri: job.manifest_uri.clone(),
-        checksum: job.checksum.clone(),
     };
 
     match ctx.node_agent_service.restore_snapshot(request).await {
@@ -665,9 +659,6 @@ pub async fn enqueue_restore_snapshot(
     pool: &SqlitePool,
     instance_id: &str,
     snapshot_id: &str,
-    storage_uri: &str,
-    manifest_uri: Option<&str>,
-    checksum: Option<&str>,
     operation: NodeOperation,
 ) {
     let mut storage = SqliteStorage::new(pool);
@@ -675,9 +666,6 @@ pub async fn enqueue_restore_snapshot(
         .push(RestoreSnapshotJob {
             instance_id: instance_id.to_string(),
             snapshot_id: snapshot_id.to_string(),
-            storage_uri: storage_uri.to_string(),
-            manifest_uri: manifest_uri.map(|s| s.to_string()),
-            checksum: checksum.map(|s| s.to_string()),
             operation,
         })
         .await;

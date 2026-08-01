@@ -100,9 +100,6 @@ message CreateSnapshotResponse {
 message RestoreSnapshotRequest {
   string instance_id = 1;
   string snapshot_id = 2;
-  string storage_uri = 3;
-  optional string manifest_uri = 4;
-  optional string checksum = 5;
 }
 
 message RestoreSnapshotResponse {

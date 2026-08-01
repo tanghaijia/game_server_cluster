@@ -202,9 +202,6 @@ where
             &self.pool,
             request.instance_id.as_str(),
             request.snapshot_id.as_str(),
-            request.storage_uri.as_str(),
-            request.manifest_uri.as_deref(),
-            request.checksum.as_deref(),
             operation.clone(),
         )
         .await;
