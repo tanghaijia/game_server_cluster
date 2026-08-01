@@ -94,6 +94,7 @@ func main() {
 		nodeRepo,
 		scheduler,
 		nodeAgentClients,
+		assetClient,
 	)
 
 	// ---------------------------------------------------------------

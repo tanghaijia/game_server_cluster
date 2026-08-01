@@ -2,9 +2,11 @@ package biz
 
 import (
 	"context"
+	"controller-go/internal/client/assetservice"
 	"controller-go/internal/client/nodeagent"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
+	assetservicev1 "controller-go/internal/third/assetservice/v1"
 	nodeagentv1 "controller-go/internal/third/nodeagent/v1"
 	"errors"
 	"fmt"
@@ -19,6 +21,7 @@ type ReconcileDispatcher struct {
 	nodeRepo         repository.NodeRepository
 	scheduler        Scheduler
 	nodeAgentClients *nodeagent.ClientRegistry
+	assetClient      *assetservice.AssetServiceFaceClient
 }
 
 func NewReconcileDispatcher(
@@ -27,6 +30,7 @@ func NewReconcileDispatcher(
 	nodeRepo repository.NodeRepository,
 	scheduler Scheduler,
 	nodeAgentClients *nodeagent.ClientRegistry,
+	assetClient *assetservice.AssetServiceFaceClient,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
 		queue:            make(chan *entity.GameInstance, 100),
@@ -35,6 +39,7 @@ func NewReconcileDispatcher(
 		nodeRepo:         nodeRepo,
 		scheduler:        scheduler,
 		nodeAgentClients: nodeAgentClients,
+		assetClient:      assetClient,
 	}
 }
 
@@ -90,16 +95,19 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
 			d.FailedInstance(ctx, instance)
+			return nil
 		}
 		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
 		if err != nil {
 			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
 			d.FailedInstance(ctx, instance)
+			return nil
 		}
 		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
 		if err != nil {
 			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
 			d.FailedInstance(ctx, instance)
+			return nil
 		}
 		req := &nodeagentv1.PrepareGameBuildRequest{
 			BuildId: instance.GameBuildId,
@@ -111,8 +119,60 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 				"GameBuildId", instance.GameBuildId, "err", err,
 			)
 			d.FailedInstance(ctx, instance)
+			return nil
 		}
-		go d.PollingResult(ctx, resp.Operation.OperationId, instance, client)
+		go d.PollingResult(ctx, resp.Operation.OperationId, instance, client, d.onPrepareBuildSucceeded)
+	case entity.StatusRestoringSnapshot:
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil {
+			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil {
+			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		snapshotResp, err := d.assetClient.GetLatestSnapshot(ctx, &assetservicev1.GetLatestSnapshotRequest{
+			InstanceId: instance.ID,
+		})
+		if err != nil {
+			slog.Error("[AssetService] GetLatestSnapshot fail",
+				"instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		if snapshotResp.Snapshot == nil ||
+			snapshotResp.Snapshot.Status != assetservicev1.SnapshotStatus_SNAPSHOT_STATUS_COMPLETED {
+			slog.Info("[AssetService] instance 无可用 snapshot，视为全新实例",
+				"instanceId", instance.ID,
+			)
+			instance.Status = entity.StatusRunning
+			d.instanceRepo.UpdateStatus(ctx, instance)
+			return nil
+		}
+		restoreResp, err := client.RestoreSnapshot(ctx, &nodeagentv1.RestoreSnapshotRequest{
+			InstanceId: instance.ID,
+			SnapshotId: snapshotResp.Snapshot.SnapshotId,
+		})
+		if err != nil {
+			slog.Error("[NodeAgentClients] RestoreSnapshot fail",
+				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+				"SnapshotId", snapshotResp.Snapshot.SnapshotId, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		go d.PollingResult(ctx, restoreResp.Operation.OperationId, instance, client, d.onRestoreSnapshotSucceeded)
 	default:
 		slog.Warn("无法被调度的状态", "status", instance.Status, "id", instance.ID)
 		instance.Status = entity.Failed
@@ -131,7 +191,9 @@ func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *enti
  */
 func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 	operation_id string, instance *entity.GameInstance,
-	client *nodeagent.NodeAgentFaceClient) {
+	client *nodeagent.NodeAgentFaceClient,
+	onSucceeded func(ctx context.Context, instance *entity.GameInstance)) {
+	time.Sleep(500 * time.Millisecond)
 	deadLine := time.Now().Add(OPERATION_POLLING_MINITE * time.Minute)
 	for time.Now().Before(deadLine) {
 		req := &nodeagentv1.GetOperationRequest{
@@ -160,8 +222,7 @@ func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
 				"OperationId", operation_id,
 			)
-			instance.Status = entity.StatusRestoringSnapshot
-			d.RequestDispatch(ctx, instance)
+			onSucceeded(ctx, instance)
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -173,6 +234,22 @@ func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 		"OperationId", operation_id,
 	)
 	d.FailedInstance(ctx, instance)
+}
+
+/**
+* PrepareGameBuild 成功后的回调：推进到还原快照阶段
+**/
+func (d *ReconcileDispatcher) onPrepareBuildSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	instance.Status = entity.StatusRestoringSnapshot
+	d.RequestDispatch(ctx, instance)
+}
+
+/**
+* RestoreSnapshot 成功后的回调：实例进入运行状态
+**/
+func (d *ReconcileDispatcher) onRestoreSnapshotSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	instance.Status = entity.StatusRunning
+	d.instanceRepo.UpdateStatus(ctx, instance)
 }
 
 /**
