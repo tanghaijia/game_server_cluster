@@ -14,6 +14,7 @@ const (
 	StatusScheduling
 	StatusPreparingBuild
 	StatusRestoringSnapshot
+	StatusStarting
 	StatusRunning
 	StatusStopping
 	StatusStopped
@@ -30,6 +31,8 @@ func (s InstanceStatus) String() string {
 		return "preparing_build"
 	case StatusRestoringSnapshot:
 		return "restoring_snapshot"
+	case StatusStarting:
+		return "starting"
 	case StatusRunning:
 		return "running"
 	case StatusStopping:
@@ -71,6 +74,8 @@ func (g *GameInstance) Advance(ctx context.Context) (status InstanceStatus, err 
 	case StatusPreparingBuild:
 		g.Status = StatusRestoringSnapshot
 	case StatusRestoringSnapshot:
+		g.Status = StatusStarting
+	case StatusStarting:
 		g.Status = StatusRunning
 	case StatusStopping:
 		g.Status = StatusStopped

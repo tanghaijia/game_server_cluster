@@ -39,6 +39,9 @@ func (uc *GameInstanceAdvanceUseCase) AdvanceGameInstance(ctx context.Context, g
 		gameInstance.Status = entity.StatusRestoringSnapshot
 		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)
 	case entity.StatusRestoringSnapshot:
+		gameInstance.Status = entity.StatusStarting
+		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)
+	case entity.StatusStarting:
 		gameInstance.Status = entity.StatusRunning
 		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)
 	case entity.StatusStopping:

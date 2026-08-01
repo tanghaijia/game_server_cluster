@@ -15,13 +15,15 @@ import (
 )
 
 type ReconcileDispatcher struct {
-	queue            chan *entity.GameInstance
-	instanceRepo     repository.GameInstanceRepository
-	nodeAgnetRepo    repository.NodeAgentRepository
-	nodeRepo         repository.NodeRepository
-	scheduler        Scheduler
-	nodeAgentClients *nodeagent.ClientRegistry
-	assetClient      *assetservice.AssetServiceFaceClient
+	queue                   chan *entity.GameInstance
+	instanceRepo            repository.GameInstanceRepository
+	nodeAgnetRepo           repository.NodeAgentRepository
+	nodeRepo                repository.NodeRepository
+	scheduler               Scheduler
+	nodeAgentClients        *nodeagent.ClientRegistry
+	assetClient             *assetservice.AssetServiceFaceClient
+	gameRepo                repository.GameRepository
+	gameContainerConfigRepo repository.GameContainerConfigRepository
 }
 
 func NewReconcileDispatcher(
@@ -31,15 +33,19 @@ func NewReconcileDispatcher(
 	scheduler Scheduler,
 	nodeAgentClients *nodeagent.ClientRegistry,
 	assetClient *assetservice.AssetServiceFaceClient,
+	gameRepo repository.GameRepository,
+	gameContainerConfigRepo repository.GameContainerConfigRepository,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
-		queue:            make(chan *entity.GameInstance, 100),
-		instanceRepo:     instanceRepo,
-		nodeAgnetRepo:    nodeAgnetRepo,
-		nodeRepo:         nodeRepo,
-		scheduler:        scheduler,
-		nodeAgentClients: nodeAgentClients,
-		assetClient:      assetClient,
+		queue:                   make(chan *entity.GameInstance, 100),
+		instanceRepo:            instanceRepo,
+		nodeAgnetRepo:           nodeAgnetRepo,
+		nodeRepo:                nodeRepo,
+		scheduler:               scheduler,
+		nodeAgentClients:        nodeAgentClients,
+		assetClient:             assetClient,
+		gameRepo:                gameRepo,
+		gameContainerConfigRepo: gameContainerConfigRepo,
 	}
 }
 
@@ -55,6 +61,7 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 		instance.Status == entity.StatusScheduling ||
 		instance.Status == entity.StatusPreparingBuild ||
 		instance.Status == entity.StatusRestoringSnapshot ||
+		instance.Status == entity.StatusStarting ||
 		instance.Status == entity.StatusStopping {
 		d.queue <- instance
 		return nil
@@ -156,8 +163,9 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			slog.Info("[AssetService] instance 无可用 snapshot，视为全新实例",
 				"instanceId", instance.ID,
 			)
-			instance.Status = entity.StatusRunning
+			instance.Status = entity.StatusStarting
 			d.instanceRepo.UpdateStatus(ctx, instance)
+			d.RequestDispatch(ctx, instance)
 			return nil
 		}
 		restoreResp, err := client.RestoreSnapshot(ctx, &nodeagentv1.RestoreSnapshotRequest{
@@ -173,6 +181,70 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			return nil
 		}
 		go d.PollingResult(ctx, restoreResp.Operation.OperationId, instance, client, d.onRestoreSnapshotSucceeded)
+	case entity.StatusStarting:
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil {
+			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil {
+			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		// 从 asset_service 获取该实例对应的 game build
+		buildResp, err := d.assetClient.GetGameBuild(ctx, &assetservicev1.GetGameBuildRequest{
+			BuildId: instance.GameBuildId,
+		})
+		if err != nil {
+			slog.Error("[AssetService] GetGameBuild fail",
+				"instanceId", instance.ID, "GameBuildId", instance.GameBuildId, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		if buildResp.Build == nil || buildResp.Build.Game == nil {
+			slog.Error("[AssetService] GetGameBuild 返回的 build 无效",
+				"instanceId", instance.ID, "GameBuildId", instance.GameBuildId,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		// 通过 Game 找到该实例的容器配置
+		game, err := d.gameRepo.GetByID(ctx, instance.GameID)
+		if err != nil {
+			slog.Error("[DB] gameRepo GetByID fail",
+				"GameId", instance.GameID, "instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		containerConfig, err := d.gameContainerConfigRepo.GetByID(ctx, game.ContainerConfigID)
+		if err != nil {
+			slog.Error("[DB] gameContainerConfigRepo GetByID fail",
+				"ContainerConfigID", game.ContainerConfigID, "instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		runtimeSpec := buildInstanceRuntimeSpec(instance, buildResp.Build, containerConfig)
+		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
+		if err != nil {
+			slog.Error("[NodeAgentClients] StartInstance fail",
+				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
+			)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		go d.PollingResult(ctx, startResp.Operation.OperationId, instance, client, d.onStartInstanceSucceeded)
 	default:
 		slog.Warn("无法被调度的状态", "status", instance.Status, "id", instance.ID)
 		instance.Status = entity.Failed
@@ -245,11 +317,94 @@ func (d *ReconcileDispatcher) onPrepareBuildSucceeded(ctx context.Context, insta
 }
 
 /**
-* RestoreSnapshot 成功后的回调：实例进入运行状态
+* RestoreSnapshot 成功后的回调：进入启动流程（start_instance 由 StatusStarting 分支处理）
 **/
 func (d *ReconcileDispatcher) onRestoreSnapshotSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	instance.Status = entity.StatusStarting
+	d.instanceRepo.UpdateStatus(ctx, instance)
+	d.RequestDispatch(ctx, instance)
+}
+
+/**
+* StartInstance 成功后的回调：实例真正进入运行状态（终态）
+**/
+func (d *ReconcileDispatcher) onStartInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.StatusRunning
 	d.instanceRepo.UpdateStatus(ctx, instance)
+}
+
+/**
+* 构造 start_instance 所需的 InstanceRuntimeSpec
+**/
+func buildInstanceRuntimeSpec(
+	instance *entity.GameInstance,
+	build *assetservicev1.GameBuild,
+	config *entity.GameContainerConfig,
+) *nodeagentv1.InstanceRuntimeSpec {
+	return &nodeagentv1.InstanceRuntimeSpec{
+		InstanceId:          instance.ID,
+		Build:               mapGameBuild(build),
+		ContainerServerPath: config.ContainerServerPath,
+		PortMapping:         mapPortMapping(config),
+		// spec 目前无数据来源，先填占位结构体以满足 nodeagent 的校验
+		Spec: &nodeagentv1.InstanceSpec{
+			Resources: &nodeagentv1.ResourceRequirements{},
+		},
+	}
+}
+
+/**
+* 将 asset_service 的 GameBuild 映射为 nodeagent 的 GameBuild
+**/
+func mapGameBuild(build *assetservicev1.GameBuild) *nodeagentv1.GameBuild {
+	if build == nil {
+		return nil
+	}
+	game := &nodeagentv1.Game{}
+	if build.Game != nil {
+		game = &nodeagentv1.Game{
+			Id:    build.Game.Id,
+			Name:  build.Game.Name,
+			AppId: build.Game.AppId,
+		}
+	}
+	return &nodeagentv1.GameBuild{
+		BuildId:           build.BuildId,
+		Game:              game,
+		Channel:           build.Channel,
+		AdapterVersion:    build.AdapterVersion,
+		UpstreamVersion:   build.UpstreamVersion,
+		ArtifactUri:       build.ArtifactUri,
+		ArtifactImageName: build.ArtifactImageName,
+		ArtifactImageTag:  build.ArtifactImageTag,
+	}
+}
+
+/**
+* 将 GameContainerConfig 的端口映射映射为 nodeagent 的 PortMapping
+**/
+func mapPortMapping(config *entity.GameContainerConfig) *nodeagentv1.PortMapping {
+	pm := &nodeagentv1.PortMapping{}
+	switch config.PortMode {
+	case entity.PORT_MAPPING_MOD_HOST:
+		pm.Mode = nodeagentv1.PortMappingMod_PORT_MAPPING_MOD_HOST
+	default:
+		pm.Mode = nodeagentv1.PortMappingMod_PORT_MAPPING_MOD_NAT
+	}
+	for _, m := range config.PortMapping {
+		entry := &nodeagentv1.PortMapEntry{
+			HostPort:      uint32(m.HostPort),
+			ContainerPort: uint32(m.ContainerPort),
+		}
+		switch m.Protocol {
+		case entity.UDP:
+			entry.Protocol = nodeagentv1.MappingPortProtocol_MAPPING_PORT_PROTOCOL_UDP
+		default:
+			entry.Protocol = nodeagentv1.MappingPortProtocol_MAPPING_PORT_PROTOCOL_TCP
+		}
+		pm.Entries = append(pm.Entries, entry)
+	}
+	return pm
 }
 
 /**

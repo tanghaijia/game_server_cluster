@@ -62,7 +62,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		},
 	}
 
-	rd := NewReconcileDispatcher(repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, nodeagent.NewClientRegistry(), nil)
+	rd := NewReconcileDispatcher(repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, nodeagent.NewClientRegistry(), nil, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

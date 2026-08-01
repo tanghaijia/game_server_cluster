@@ -62,8 +62,7 @@ func main() {
 	gameInstanceRepo := repogorm.NewGameInstanceRepo(db)
 	nodeAgentRepo := repogorm.NewNodeAgentRepo(db)
 	nodeRepo := repogorm.NewNodeRepo(db)
-	// GameContainerConfig 仓储（暂未接入业务层，先注册以便后续使用）
-	_ = repogorm.NewGameContainerConfigRepo(db)
+	gameContainerConfigRepo := repogorm.NewGameContainerConfigRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -99,6 +98,8 @@ func main() {
 		scheduler,
 		nodeAgentClients,
 		assetClient,
+		gameRepo,
+		gameContainerConfigRepo,
 	)
 
 	// ---------------------------------------------------------------
