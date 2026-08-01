@@ -16,15 +16,12 @@ func NewGameInstanceRepo(db *gorm.DB) *GameInstanceRepo {
 }
 
 func (r *GameInstanceRepo) Save(ctx context.Context, instance *entity.GameInstance) error {
-	if instance.Game != nil && instance.GameID == "" {
-		instance.GameID = instance.Game.ID
-	}
-	return r.db.WithContext(ctx).Session(&gorm.Session{FullSaveAssociations: false}).Save(instance).Error
+	return r.db.WithContext(ctx).Save(instance).Error
 }
 
 func (r *GameInstanceRepo) GetByID(ctx context.Context, id string) (*entity.GameInstance, error) {
 	var instance entity.GameInstance
-	err := r.db.WithContext(ctx).Preload("Game").First(&instance, "id = ?", id).Error
+	err := r.db.WithContext(ctx).First(&instance, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}

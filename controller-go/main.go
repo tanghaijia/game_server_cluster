@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,8 +15,10 @@ import (
 	"controller-go/internal/biz"
 	"controller-go/internal/client/assetservice"
 	nodeagentclient "controller-go/internal/client/nodeagent"
+	"controller-go/internal/handler"
 	repogorm "controller-go/internal/repository/gorm"
 
+	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gorm.io/driver/postgres"
@@ -106,7 +110,7 @@ func main() {
 	// 7. Use Cases
 	// ---------------------------------------------------------------
 	_ = biz.NewGameUseCase(gameRepo)
-	_ = biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher)
+	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
 	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
@@ -121,8 +125,21 @@ func main() {
 	slog.Info("ReconcileDispatcher 已启动")
 
 	// ---------------------------------------------------------------
-	// 9. HTTP / 监控 (可选)
+	// 9. HTTP API (gin)
 	// ---------------------------------------------------------------
+	router := gin.Default()
+	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
+
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
+		Handler: router,
+	}
+	go func() {
+		slog.Info("HTTP server 启动", "addr", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("HTTP server 运行失败", "err", err)
+		}
+	}()
 	slog.Info("服务启动完成", "http_port", cfg.HTTPPort)
 	fmt.Printf("Controller-Go 已启动，监听 :%d\n", cfg.HTTPPort)
 
@@ -134,6 +151,12 @@ func main() {
 	sig := <-quit
 	slog.Info("收到退出信号", "signal", sig)
 	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		slog.Error("HTTP server 关闭失败", "err", err)
+	}
 	slog.Info("服务已关闭")
 }
 

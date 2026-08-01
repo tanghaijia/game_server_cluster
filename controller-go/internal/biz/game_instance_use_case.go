@@ -2,10 +2,14 @@ package biz
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
-	"errors"
-	"time"
 )
 
 // GameInstanceUseCase 业务逻辑执行器
@@ -21,14 +25,14 @@ func NewGameInstanceUseCase(instanceRepo repository.GameInstanceRepository, reco
 /**
 * 创建一个GameInstance，状态会被初始化为StatusStopped
 **/
-func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, game *entity.Game) (*entity.GameInstance, error) {
-	if game == nil {
-		return nil, errors.New("game cannot be nil")
+func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID string) (*entity.GameInstance, error) {
+	if gameID == "" {
+		return nil, errors.New("game_id is required")
 	}
 
 	instance := &entity.GameInstance{
-		ID:              "game-instance-1",
-		Game:            game,
+		ID:              newGameInstanceID(),
+		GameID:          gameID,
 		Status:          entity.StatusStopped,
 		LastPendingTime: time.Time{},
 		CreateTime:      time.Now(),
@@ -39,6 +43,15 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, game *ent
 		return nil, err
 	}
 	return instance, nil
+}
+
+// newGameInstanceID 生成唯一实例ID
+func newGameInstanceID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("inst-%d", time.Now().UnixNano())
+	}
+	return "inst-" + hex.EncodeToString(b)
 }
 
 /**
@@ -73,4 +86,11 @@ func (uc *GameInstanceUseCase) StopGameInstance(ctx context.Context, instanceID 
 	}
 	uc.ReconcileDispatcher.RequestDispatch(ctx, instance)
 	return nil
+}
+
+/**
+* 获取一个GameInstance（含当前状态）
+**/
+func (uc *GameInstanceUseCase) GetGameInstance(ctx context.Context, instanceID string) (*entity.GameInstance, error) {
+	return uc.instanceRepo.GetByID(ctx, instanceID)
 }

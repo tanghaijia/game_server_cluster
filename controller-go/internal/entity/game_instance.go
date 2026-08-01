@@ -2,6 +2,7 @@ package entity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -49,10 +50,14 @@ func (s InstanceStatus) String() string {
 	}
 }
 
+// MarshalJSON 让 InstanceStatus 在 JSON 中输出可读的字符串（如 "stopped"）而非数字
+func (s InstanceStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
 type GameInstance struct {
 	ID              string          `gorm:"column:id;primaryKey"`
 	GameID          string          `gorm:"column:game_id"`
-	Game            *Game           `gorm:"foreignKey:GameID"`
 	NodeAgentID     *string         `gorm:"column:node_agent_id"`
 	Status          InstanceStatus  `gorm:"column:status"`
 	LastPendingTime time.Time       `gorm:"column:last_pending_time"`
