@@ -20,8 +20,8 @@ use crate::{
     error::NodeAgentError,
     ports::{
         AssetServiceFace, ContainerClient, ContainerError, DockerInstanceRepository,
-        GameCacheRepository, GameInstanceRepository, NodeHeartbeat, OperationRepository,
-        Snapshot_manager, SystemInfoProvider,
+        GameCacheRepository, GameInstanceRepository, LocalGameBuildRepository, NodeHeartbeat,
+        OperationRepository, Snapshot_manager, SystemInfoProvider,
     },
     service::{SteamService, SteamServiceError},
 };
@@ -632,5 +632,38 @@ impl SteamService for FakeSteamService {
         _branch_name: &String,
     ) -> anyhow::Result<Option<f32>> {
         Ok(Some(100.0))
+    }
+}
+
+// ============================================================
+// InMemoryLocalGameBuildRepository — 用于测试/开发
+// ============================================================
+
+#[derive(Default, Clone)]
+pub struct InMemoryLocalGameBuildRepository {
+    builds: Arc<Mutex<HashMap<String, LocalGameBuild>>>,
+}
+
+#[async_trait]
+impl LocalGameBuildRepository for InMemoryLocalGameBuildRepository {
+    async fn save(&self, local_game_build: &LocalGameBuild) -> Result<(), NodeAgentError> {
+        let mut builds = self.builds.lock().map_err(|_| NodeAgentError::Internal {
+            message: "fake local game build repo lock poisoned".to_string(),
+        })?;
+        // 幂等：已存在则覆盖
+        builds.insert(local_game_build.build_id.clone(), local_game_build.clone());
+        Ok(())
+    }
+
+    async fn get(&self, build_id: String) -> Result<LocalGameBuild, NodeAgentError> {
+        let builds = self.builds.lock().map_err(|_| NodeAgentError::Internal {
+            message: "fake local game build repo lock poisoned".to_string(),
+        })?;
+        builds
+            .get(&build_id)
+            .cloned()
+            .ok_or_else(|| NodeAgentError::DBOperationFail {
+                message: format!("没找到game_build, build id: {}", build_id),
+            })
     }
 }

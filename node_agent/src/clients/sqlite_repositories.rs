@@ -3,10 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use sqlx::SqlitePool;
 
-use crate::domain::{GameCache, GameContainer, GameInstance, NodeOperation, OperationId};
+use crate::domain::{
+    GameCache, GameContainer, GameInstance, LocalGameBuild, NodeOperation, OperationId,
+};
 use crate::error::NodeAgentError;
 use crate::ports::{
-    DockerInstanceRepository, GameCacheRepository, GameInstanceRepository, OperationRepository,
+    DockerInstanceRepository, GameCacheRepository, GameInstanceRepository,
+    LocalGameBuildRepository, OperationRepository,
 };
 
 // ============================================================
@@ -16,6 +19,7 @@ const TABLE_OPERATION: &str = "node_operation_store";
 const TABLE_GAME_INSTANCE: &str = "game_instance_store";
 const TABLE_DOCKER_INSTANCE: &str = "docker_instance_store";
 const TABLE_GAME_CACHE: &str = "game_cache_store";
+const TABLE_LOCAL_GAME_BUILD: &str = "local_game_build_store";
 
 // ============================================================
 // 建表
@@ -27,6 +31,7 @@ async fn ensure_tables(pool: &SqlitePool) -> Result<(), NodeAgentError> {
         TABLE_GAME_INSTANCE,
         TABLE_DOCKER_INSTANCE,
         TABLE_GAME_CACHE,
+        TABLE_LOCAL_GAME_BUILD,
     ] {
         sqlx::query(&format!(
             "CREATE TABLE IF NOT EXISTS {table} (
@@ -317,5 +322,66 @@ impl GameCacheRepository for SqliteGameCacheRepository {
         rows.iter()
             .map(|(json,)| serde_json::from_str::<GameCache>(json).map_err(Into::into))
             .collect()
+    }
+}
+
+// ============================================================
+// SqliteLocalGameBuildRepository
+// ============================================================
+
+pub struct SqliteLocalGameBuildRepository {
+    pool: Arc<SqlitePool>,
+}
+
+impl SqliteLocalGameBuildRepository {
+    pub async fn new(pool: Arc<SqlitePool>) -> Result<Self, NodeAgentError> {
+        ensure_tables(&pool).await?;
+        Ok(Self { pool })
+    }
+}
+
+#[async_trait]
+impl LocalGameBuildRepository for SqliteLocalGameBuildRepository {
+    async fn save(&self, local_game_build: &LocalGameBuild) -> Result<(), NodeAgentError> {
+        let json = serde_json::to_string(local_game_build).map_err(|e| NodeAgentError::Internal {
+            message: format!("serialize local_game_build failed: {e}"),
+        })?;
+        // 幂等：build_id 已存在则覆盖（刷新本地构建状态）
+        sqlx::query(&format!(
+            "INSERT OR REPLACE INTO {TABLE_LOCAL_GAME_BUILD} (key, value) VALUES (?1, ?2)"
+        ))
+        .bind(&local_game_build.build_id)
+        .bind(&json)
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| NodeAgentError::DBOperationFail {
+            message: format!("save local_game_build failed: {e}"),
+        })?;
+        Ok(())
+    }
+
+    async fn get(&self, build_id: String) -> Result<LocalGameBuild, NodeAgentError> {
+        let row: Option<(String,)> = sqlx::query_as(&format!(
+            "SELECT value FROM {TABLE_LOCAL_GAME_BUILD} WHERE key = ?1"
+        ))
+        .bind(&build_id)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| NodeAgentError::DBOperationFail {
+            message: format!("get local_game_build failed: {e}"),
+        })?;
+
+        match row {
+            Some((json,)) => {
+                let local: LocalGameBuild =
+                    serde_json::from_str(&json).map_err(|e| NodeAgentError::Internal {
+                        message: format!("deserialize local_game_build failed: {e}"),
+                    })?;
+                Ok(local)
+            }
+            None => Err(NodeAgentError::DBOperationFail {
+                message: format!("没找到game_build, build id: {}", build_id),
+            }),
+        }
     }
 }

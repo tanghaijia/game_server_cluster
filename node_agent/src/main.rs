@@ -6,14 +6,14 @@ use node_agent::{
     clients::{
         AssetServiceGrpcClient, DockerContainerClient, RealSystemInfoProvider, S3ObjectStore,
         SqliteDockerInstanceRepository, SqliteGameCacheRepository, SqliteGameInstanceRepository,
-        SqliteOperationRepository, SteamServiceClient,
+        SqliteLocalGameBuildRepository, SqliteOperationRepository, SteamServiceClient,
     },
     domain::{ImageRepository, ImageRepositoryCredentials},
     proto::node_agent::node_agent_service_server::NodeAgentServiceServer,
     providers::{
         FakeAssetServiceFace, FakeImageClient, FakeInstanceRuntime, FakeSteamService,
-        FakeSystemInfoProvider, InMemoryGameCacheRepository, InMemoryObjectStore,
-        InMemoryOperationRepository,
+        FakeSystemInfoProvider, InMemoryGameCacheRepository, InMemoryLocalGameBuildRepository,
+        InMemoryObjectStore, InMemoryOperationRepository,
     },
     rpc::GrpcNodeAgentServer,
     service::{
@@ -47,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 3. GameCache + Steam 依赖
         let game_cache_repos = Arc::new(InMemoryGameCacheRepository::default());
         let steam_service = Arc::new(FakeSteamService);
+        let local_game_build_repos = Arc::new(InMemoryLocalGameBuildRepository::default());
 
         // 4. 构造 NodeAgentService（具体泛型）
         let node_agent_service = Arc::new(NodeAgentService::new(
@@ -54,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             concrete_sysinfo.clone(),
             concrete_asset.clone(),
             concrete_image.clone(),
+            local_game_build_repos.clone(),
             directory_service.clone(),
             game_cache_repos.clone(),
             steam_service.clone(),
@@ -151,8 +153,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let object_store = Arc::new(S3ObjectStore::new(s3_client));
         let directory_service = Arc::new(DirectoryUploadDownloadService::new(object_store.clone()));
 
-        // 6. GameCache + Steam 依赖
+        // 6. GameCache + Steam + 本地构建仓库 依赖
         let game_cache_repos = Arc::new(SqliteGameCacheRepository::new(pool_arc.clone()).await?);
+        let local_game_build_repos =
+            Arc::new(SqliteLocalGameBuildRepository::new(pool_arc.clone()).await?);
         let ssc = SteamServiceClient::new(game_cache_repos.clone());
         if let Err(e) = ssc.program_init().await {
             log::error!("SteamServiceClient program_init fail: {e}");
@@ -166,6 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             system_info.clone(),
             asset_client.clone(),
             docker_client.clone(),
+            local_game_build_repos.clone(),
             directory_service.clone(),
             game_cache_repos.clone(),
             steam_service.clone(),

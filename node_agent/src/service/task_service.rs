@@ -8,15 +8,14 @@ use apalis_sqlite::{SqlitePool, SqliteStorage};
 use chrono::Utc;
 use log::error;
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex as AsyncMutex;
 
 use crate::domain::{BuildPreparation, GameInstance, GameInstanceStatus};
 use crate::ports::GameInstanceRepository;
 use crate::service::BackgroundWorker;
 use crate::{
     domain::{
-        InstanceId, LocalGameBuildManager, NodeOperation, OperationId, OperationKind,
-        OperationStatus, SnapshotCaptureRequest, SnapshotRestoreRequest, StartInstanceArgument,
+        InstanceId, NodeOperation, OperationId, OperationKind, OperationStatus,
+        SnapshotCaptureRequest, SnapshotRestoreRequest, StartInstanceArgument,
     },
     error::NodeAgentError,
     ports::{AssetServiceFace, ContainerClient, OperationRepository, Snapshot_manager},
@@ -32,7 +31,6 @@ pub struct TaskContext {
     pub operations: Arc<dyn OperationRepository>,
     pub asset_service: Arc<dyn AssetServiceFace>,
     pub image_client: Arc<dyn ContainerClient>,
-    pub local_game_build_manager: Arc<AsyncMutex<LocalGameBuildManager>>,
 }
 
 impl TaskContext {
@@ -49,7 +47,6 @@ impl TaskContext {
             operations,
             asset_service,
             image_client,
-            local_game_build_manager: Arc::new(AsyncMutex::new(LocalGameBuildManager::new())),
         }
     }
 }

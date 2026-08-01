@@ -10,9 +10,12 @@ use crate::common::{CONTAINER_DATA_PATH, GAME_CACHE_SERVER_ROOT_PATH};
 use crate::domain::{
     ConatinerType, ContainerFilePath, ContainerFilePathMappingHost, GameCache as DomainGameCache,
     GameCacheStatus as DomainGameCacheStatus, GameContainer, GameInstance, HostFilePath,
-    HostSnapShotDataPath, LocalGameBuildManager, NodeId, RemoteImage, RuntimeState,
+    HostSnapShotDataPath, LocalGameBuild, NodeId, RemoteImage, RuntimeState,
 };
-use crate::ports::{ContainerClient, ContainerError, GameCacheRepository, GameInstanceRepository};
+use crate::ports::{
+    ContainerClient, ContainerError, GameCacheRepository, GameInstanceRepository,
+    LocalGameBuildRepository,
+};
 use crate::service::{DirectoryUploadDownloadService, SteamService, freeze_copy, manifest_key};
 use crate::{
     domain::{
@@ -65,7 +68,7 @@ where
     system_info: Arc<S>,
     asset_service: Arc<A>,
     container_client: Arc<IMC>,
-    local_game_build_manager: LocalGameBuildManager,
+    local_game_build_repos: Arc<dyn LocalGameBuildRepository>,
     directory_service: Arc<DirectoryUploadDownloadService>,
     game_cache_repos: Arc<dyn GameCacheRepository>,
     steam_service: Arc<dyn SteamService>,
@@ -83,6 +86,7 @@ where
         system_info: Arc<S>,
         asset_service: Arc<A>,
         container_client: Arc<IMC>,
+        local_game_build_repos: Arc<dyn LocalGameBuildRepository>,
         directory_service: Arc<DirectoryUploadDownloadService>,
         game_cache_repos: Arc<dyn GameCacheRepository>,
         steam_service: Arc<dyn SteamService>,
@@ -92,7 +96,7 @@ where
             system_info,
             asset_service,
             container_client: container_client,
-            local_game_build_manager: LocalGameBuildManager::new(),
+            local_game_build_repos,
             directory_service,
             game_cache_repos,
             steam_service,
@@ -317,9 +321,15 @@ where
                 message: e.to_string(),
             })?;
 
-        // 2. 注册本地构建
-        self.local_game_build_manager
-            .record_game_build_from_image(&build, &image)
+        // 2. 注册本地构建（持久化到表）
+        let local_game_build = LocalGameBuild {
+            build_id: build.build_id.clone(),
+            game: build.game.clone(),
+            image: image.clone(),
+        };
+        self.local_game_build_repos
+            .save(&local_game_build)
+            .await
             .map_err(|e| NodeAgentError::ImageRepositoryRequestFail {
                 message: e.to_string(),
             })?;
@@ -342,7 +352,7 @@ where
         self.game_instance_repos.save(&game_instance).await?;
 
         let local_game_build = self
-            .local_game_build_manager
+            .local_game_build_repos
             .get(argument.build.build_id)
             .await
             .map_err(|err| NodeAgentError::DBOperationFail {
