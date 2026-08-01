@@ -139,9 +139,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let sdk_config = aws_config::load_from_env().await;
         let s3_endpoint = std::env::var("S3_ENDPOINT").ok();
         let s3_client = if let Some(endpoint) = &s3_endpoint {
-            // 使用自定义 endpoint（如 MinIO）
+            // 使用自定义 endpoint（如 MinIO / Cloudflare R2）：这些 S3 兼容服务需要 path-style 寻址
             let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
                 .endpoint_url(endpoint)
+                .force_path_style(true)
                 .build();
             aws_sdk_s3::Client::from_conf(s3_config)
         } else {
