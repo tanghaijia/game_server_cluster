@@ -47,6 +47,8 @@ func main() {
 		&GormNode{},
 		&GormNodeAgent{},
 		&GormGameInstance{},
+		&GormGameContainerConfig{},
+		&GormGameContainerPortMapping{},
 	); err != nil {
 		slog.Error("数据库迁移失败", "err", err)
 		os.Exit(1)
@@ -60,6 +62,8 @@ func main() {
 	gameInstanceRepo := repogorm.NewGameInstanceRepo(db)
 	nodeAgentRepo := repogorm.NewNodeAgentRepo(db)
 	nodeRepo := repogorm.NewNodeRepo(db)
+	// GameContainerConfig 仓储（暂未接入业务层，先注册以便后续使用）
+	_ = repogorm.NewGameContainerConfigRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -176,3 +180,22 @@ type GormGameInstance struct {
 }
 
 func (GormGameInstance) TableName() string { return "game_instances" }
+
+type GormGameContainerConfig struct {
+	ID                  string `gorm:"column:id;primaryKey"`
+	ContainerServerPath string `gorm:"column:container_server_path"`
+	PortMode            int    `gorm:"column:port_mode"`
+	PortMapping         []GormGameContainerPortMapping
+}
+
+func (GormGameContainerConfig) TableName() string { return "game_container_configs" }
+
+type GormGameContainerPortMapping struct {
+	ID                    uint   `gorm:"column:id;primaryKey"`
+	GameContainerConfigID string `gorm:"column:game_container_config_id;index"`
+	HostPort              uint16 `gorm:"column:host_port"`
+	ContainerPort         uint16 `gorm:"column:container_port"`
+	Protocol              int    `gorm:"column:protocol"`
+}
+
+func (GormGameContainerPortMapping) TableName() string { return "game_container_port_mappings" }
