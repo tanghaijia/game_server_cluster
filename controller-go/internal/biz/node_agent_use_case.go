@@ -17,8 +17,9 @@ func NewNodeAgentUseCase(repo repository.NodeAgentRepository, nodeRepo repositor
 
 func (uc *NodeAgentUseCase) CreateNodeAgent(ctx context.Context, name string) (*entity.NodeAgent, error) {
 	agent := &entity.NodeAgent{
-		ID:   name,
-		Port: 9090,
+		ID:     name,
+		Port:   9090,
+		Status: entity.Enabled,
 	}
 	err := uc.repo.Save(ctx, agent)
 	if err != nil {

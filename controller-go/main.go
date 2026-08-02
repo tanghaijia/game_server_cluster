@@ -83,7 +83,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// 5. Scheduler（从 DB 加载 node_agent 列表用于调度）
 	// ---------------------------------------------------------------
-	nodeAgentIDs, err := nodeAgentRepo.ListIDs(context.Background())
+	nodeAgentIDs, err := nodeAgentRepo.ListEnabledIDs(context.Background())
 	if err != nil {
 		slog.Error("加载 node_agent 列表失败", "err", err)
 		os.Exit(1)

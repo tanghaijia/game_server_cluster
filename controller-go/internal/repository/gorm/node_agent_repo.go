@@ -28,9 +28,11 @@ func (r *NodeAgentRepo) GetByID(ctx context.Context, id string) (*entity.NodeAge
 	return &agent, nil
 }
 
-func (r *NodeAgentRepo) ListIDs(ctx context.Context) ([]string, error) {
+func (r *NodeAgentRepo) ListEnabledIDs(ctx context.Context) ([]string, error) {
 	var ids []string
-	err := r.db.WithContext(ctx).Model(&entity.NodeAgent{}).Pluck("id", &ids).Error
+	err := r.db.WithContext(ctx).Model(&entity.NodeAgent{}).
+		Where("status = ?", entity.Enabled).
+		Pluck("id", &ids).Error
 	if err != nil {
 		return nil, err
 	}

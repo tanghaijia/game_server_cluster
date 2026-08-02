@@ -9,5 +9,6 @@ import (
 type NodeAgentRepository interface {
 	Save(ctx context.Context, agent *entity.NodeAgent) error
 	GetByID(ctx context.Context, id string) (*entity.NodeAgent, error)
-	ListIDs(ctx context.Context) ([]string, error)
+	// ListEnabledIDs 返回已启用（Enabled）的 node_agent id 列表
+	ListEnabledIDs(ctx context.Context) ([]string, error)
 }
