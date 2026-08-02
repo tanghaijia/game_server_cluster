@@ -1,11 +1,16 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::domain::{
-    ConatinerType, ContainerStatus, GameContainer, Image, ImageRepository,
-    ImageRepositoryCredentials, ImageStatus, LocalGameBuild, MappingPortType, RemoteImage,
+    ConatinerType, ContainerFilePathMappingHost, ContainerStatus, GameContainer, Image,
+    ImageRepository, ImageRepositoryCredentials, ImageStatus, LocalGameBuild, MappingPortType,
+    RemoteImage,
 };
 use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository};
 use async_trait::async_trait;
+use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
+use bollard::query_parameters::{CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder};
+use bollard::Docker;
 use chrono::Utc;
 use lmrc_docker::{DockerClient, DockerCredentials};
 
@@ -106,7 +111,7 @@ impl ContainerClient for DockerContainerClient {
         port_mapping: Option<crate::domain::ContainerPortMapping>,
         resource_limitation: Option<crate::domain::ContainerResourceLimitation>,
     ) -> Result<GameContainer, ContainerError> {
-        let client = DockerClient::new().map_err(to_io_error)?;
+        let docker = Docker::connect_with_socket_defaults().map_err(bollard_to_io_error)?;
 
         let image_full_name = Self::map_image_full_name(
             &self.image_repository.address,
@@ -114,52 +119,88 @@ impl ContainerClient for DockerContainerClient {
             &game_build.image.tag,
         );
 
-        // 构建容器
-        let mut builder = client
-            .containers()
-            .create(&image_full_name)
-            .name(format!("game-{}-{}", game_build.build_id, container_name))
-            .label("managed-by", "node-agent");
-
-        // 挂载卷
-        if path_mapping.len() > 0 {
-            for mapping in path_mapping.clone() {
-                builder =
-                    builder.volume(&mapping.host_path.path, &mapping.container_file_path.path);
-            }
+        // 卷绑定（挂载卷），带权限模式（mapped_permission）
+        let mut binds = Vec::new();
+        for mapping in &path_mapping {
+            binds.push(Self::format_bind_mapping(mapping));
         }
 
-        // 端口映射
+        // 端口映射 + 暴露端口
+        let mut exposed_ports: HashMap<String, HashMap<(), ()>> = HashMap::new();
+        let mut port_bindings: HashMap<String, Option<Vec<PortBinding>>> = HashMap::new();
         if let Some(ref port_mapping) = port_mapping {
             for port_map in &port_mapping.port_maps {
                 let protocol = match port_map.mapping_port_type {
                     MappingPortType::TCP => "tcp",
                     MappingPortType::UDP => "udp",
                 };
-                builder = builder.port(port_map.host_port, port_map.container_port, protocol);
+                let key = format!("{}/{}", port_map.container_port, protocol);
+                exposed_ports.insert(key.clone(), HashMap::new());
+                port_bindings.insert(
+                    key,
+                    Some(vec![PortBinding {
+                        host_ip: None,
+                        host_port: Some(port_map.host_port.to_string()),
+                    }]),
+                );
             }
         }
 
-        // 资源限制
-        if resource_limitation.is_some() {
-            // ContainerResourceLimitation 当前为空结构体，后续扩展
-        }
+        // 资源限制（当前 ContainerResourceLimitation 为空结构体，后续扩展）
+        let _ = resource_limitation;
 
-        let container_ref = builder.build().await.map_err(to_io_error)?;
-        let container_id = container_ref.id().to_string();
+        let host_config = HostConfig {
+            binds: Some(binds),
+            port_bindings: Some(port_bindings),
+            ..Default::default()
+        };
+
+        let config = ContainerCreateBody {
+            image: Some(image_full_name),
+            // 以宿主机当前用户的 UID/GID 运行容器进程，解决挂载卷权限问题
+            user: current_user_id_gid(),
+            labels: Some(HashMap::from([(
+                "managed-by".to_string(),
+                "node-agent".to_string(),
+            )])),
+            exposed_ports: Some(exposed_ports),
+            host_config: Some(host_config),
+            ..Default::default()
+        };
+
+        let options = Some(
+            CreateContainerOptionsBuilder::default()
+                .name(&format!("game-{}-{}", game_build.build_id, container_name))
+                .build(),
+        );
+
+        let response = docker
+            .create_container(options, config)
+            .await
+            .map_err(bollard_to_io_error)?;
+        let container_id = response.id;
 
         // 启动容器；失败则清理并返回错误
-        if let Err(err) = container_ref.start().await {
+        if let Err(err) = docker
+            .start_container(
+                &container_id,
+                None::<bollard::query_parameters::StartContainerOptions>,
+            )
+            .await
+        {
             log::error!("container {} start error, remove it: {}", container_id, err);
             // 容器刚创建、尚未写入 repo，直接通过 Docker 删除做清理
-            if let Ok(client) = DockerClient::new() {
-                let _ = client
-                    .containers()
-                    .get(&container_id)
-                    .remove(true, false)
-                    .await;
-            }
-            return Err(to_io_error(err));
+            let _ = docker
+                .remove_container(
+                    &container_id,
+                    Some(
+                        RemoveContainerOptionsBuilder::default()
+                            .force(true)
+                            .build(),
+                    ),
+                )
+                .await;
+            return Err(bollard_to_io_error(err));
         }
 
         println!(
@@ -341,10 +382,86 @@ impl DockerContainerClient {
     fn map_image_full_name(register_address: &str, image_name: &str, tag: &str) -> String {
         format!("{}/{}:{}", register_address, image_name, tag)
     }
+
+    /// 生成 bind 挂载串 `host:container:mode`。
+    ///
+    /// `mapped_permission` 映射到 Docker 挂载模式：`"r"` → `ro`，其余（`rw`/`rwx`）→ `rw`。
+    fn format_bind_mapping(mapping: &ContainerFilePathMappingHost) -> String {
+        let mode = match mapping.mapped_permission.as_str() {
+            "r" => "ro",
+            _ => "rw",
+        };
+        format!(
+            "{}:{}:{}",
+            mapping.host_path.path, mapping.container_file_path.path, mode
+        )
+    }
 }
 
 fn to_io_error(e: lmrc_docker::DockerError) -> ContainerError {
     ContainerError::IOError {
         source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+    }
+}
+
+fn bollard_to_io_error(e: bollard::errors::Error) -> ContainerError {
+    ContainerError::IOError {
+        source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+    }
+}
+
+/// 当前宿主机用户的 "UID:GID"。非 unix（如 Windows 开发环境）返回 None，不设置容器 user。
+#[cfg(unix)]
+fn current_user_id_gid() -> Option<String> {
+    // SAFETY: getuid/getgid 是无副作用的 libc 调用
+    let uid = unsafe { libc::getuid() };
+    let gid = unsafe { libc::getgid() };
+    Some(format!("{}:{}", uid, gid))
+}
+
+#[cfg(not(unix))]
+fn current_user_id_gid() -> Option<String> {
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{ContainerFilePath, HostFilePath};
+
+    fn mapping(host: &str, container: &str, permission: &str) -> ContainerFilePathMappingHost {
+        ContainerFilePathMappingHost {
+            host_path: HostFilePath {
+                path: host.to_string(),
+            },
+            container_file_path: ContainerFilePath {
+                path: container.to_string(),
+            },
+            mapped_permission: permission.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_format_bind_mapping_permissions() {
+        // "r" → ro
+        assert_eq!(
+            DockerContainerClient::format_bind_mapping(&mapping("/data/inst/1", "/server", "r")),
+            "/data/inst/1:/server:ro"
+        );
+        // "rwx" → rw
+        assert_eq!(
+            DockerContainerClient::format_bind_mapping(&mapping("/data/inst/1", "/data", "rwx")),
+            "/data/inst/1:/data:rw"
+        );
+        // "rw" → rw
+        assert_eq!(
+            DockerContainerClient::format_bind_mapping(&mapping("/data/inst/1", "/data", "rw")),
+            "/data/inst/1:/data:rw"
+        );
+        // 空 → 默认 rw
+        assert_eq!(
+            DockerContainerClient::format_bind_mapping(&mapping("/x", "/y", "")),
+            "/x:/y:rw"
+        );
     }
 }
