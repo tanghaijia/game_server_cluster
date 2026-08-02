@@ -375,6 +375,29 @@ async fn handle_clean_instance(
 // 启动 Worker（每个 job 类型一个独立 worker）
 // ============================================================
 
+/// 创建带轮询退避上限的 SqliteStorage。
+///
+/// apalis 默认空闲时轮询间隔会指数退避到最多 60s，导致空闲一阵后新任务要等几秒才被拉到。
+/// 这里把退避上限压到 1s（初始 100ms、×2、上限 1s），空闲时最慢 1s 拉到任务，负载仍可控。
+/// 队列名沿用 `std::any::type_name::<$ty>`，与 `SqliteStorage::new` 默认一致。
+macro_rules! sqlite_storage_fast_poll {
+    ($pool:expr, $ty:ty) => {{
+        let config = apalis_sqlite::Config::new(std::any::type_name::<$ty>()).with_poll_interval(
+            apalis_core::backend::poll_strategy::StrategyBuilder::new()
+                .apply(
+                    apalis_core::backend::poll_strategy::IntervalStrategy::new(
+                        std::time::Duration::from_millis(100),
+                    )
+                    .with_backoff(apalis_core::backend::poll_strategy::BackoffConfig::new(
+                        std::time::Duration::from_secs(1),
+                    )),
+                )
+                .build(),
+        );
+        apalis_sqlite::SqliteStorage::new_with_config($pool, &config)
+    }};
+}
+
 /// 启动所有后台任务 worker。
 ///
 /// 每个 worker 对应一种 job 类型，共享同一个 context。
@@ -387,7 +410,7 @@ pub fn start_all_workers(
 
     // --- PrepareBuild Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, PrepareBuildJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("prepare-build-worker")
@@ -402,7 +425,7 @@ pub fn start_all_workers(
 
     // --- StartInstance Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, StartInstanceJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("start-instance-worker")
@@ -417,7 +440,7 @@ pub fn start_all_workers(
 
     // --- StopInstance Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, StopInstanceJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("stop-instance-worker")
@@ -432,7 +455,7 @@ pub fn start_all_workers(
 
     // --- RestartInstance Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, RestartInstanceJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("restart-instance-worker")
@@ -447,7 +470,7 @@ pub fn start_all_workers(
 
     // --- CreateSnapshot Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, CreateSnapshotJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("create-snapshot-worker")
@@ -462,7 +485,7 @@ pub fn start_all_workers(
 
     // --- RestoreSnapshot Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, RestoreSnapshotJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("restore-snapshot-worker")
@@ -477,7 +500,7 @@ pub fn start_all_workers(
 
     // --- CleanInstance Worker ---
     {
-        let storage = SqliteStorage::new(&pool);
+        let storage = sqlite_storage_fast_poll!(&pool, CleanInstanceJob);
         let ctx = Arc::clone(&task_ctx);
         handles.push(tokio::spawn(async move {
             WorkerBuilder::new("clean-instance-worker")
