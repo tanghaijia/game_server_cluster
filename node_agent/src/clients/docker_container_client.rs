@@ -148,10 +148,24 @@ impl ContainerClient for DockerContainerClient {
         let container_ref = builder.build().await.map_err(to_io_error)?;
         let container_id = container_ref.id().to_string();
 
-        // 启动容器
-        container_ref.start().await.map_err(to_io_error)?;
+        // 启动容器；失败则清理并返回错误
+        if let Err(err) = container_ref.start().await {
+            log::error!("container {} start error, remove it: {}", container_id, err);
+            // 容器刚创建、尚未写入 repo，直接通过 Docker 删除做清理
+            if let Ok(client) = DockerClient::new() {
+                let _ = client
+                    .containers()
+                    .get(&container_id)
+                    .remove(true, false)
+                    .await;
+            }
+            return Err(to_io_error(err));
+        }
 
-        println!("容器创建并启动成功: {}", container_id);
+        println!(
+            "[DockerContainerClient] 容器创建并启动成功: {}",
+            container_id
+        );
 
         let container = GameContainer {
             id: container_id,
