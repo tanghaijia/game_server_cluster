@@ -92,13 +92,22 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		node_agent_id, err := d.scheduler.Schedule(instance)
 		if err != nil {
 			instance.Status = entity.Failed
+			d.instanceRepo.UpdateStatus(ctx, instance)
 		} else {
 			instance.Status = entity.StatusPreparingBuild
 			instance.NodeAgentID = &node_agent_id
+			// 用 Save 全字段持久化，确保 node_agent_id 也落库
+			// （UpdateStatus 只更新 status，会把 node_agent_id 丢在内存里，
+			//   导致 stop 等从 DB 重新加载实例的路径拿到 nil 而 panic）
+			d.instanceRepo.Save(ctx, instance)
 			d.RequestDispatch(ctx, instance)
 		}
-		d.instanceRepo.UpdateStatus(ctx, instance)
 	case entity.StatusPreparingBuild:
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
 		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
@@ -131,6 +140,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		}
 		go d.PollingResult(ctx, resp.Operation.OperationId, instance, client, d.onPrepareBuildSucceeded)
 	case entity.StatusRestoringSnapshot:
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
 		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
@@ -183,6 +197,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		}
 		go d.PollingResult(ctx, restoreResp.Operation.OperationId, instance, client, d.onRestoreSnapshotSucceeded)
 	case entity.StatusStarting:
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
 		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
@@ -247,6 +266,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		}
 		go d.PollingResult(ctx, startResp.Operation.OperationId, instance, client, d.onStartInstanceSucceeded)
 	case entity.StatusStopping:
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
 		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
@@ -277,6 +301,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		}
 		go d.PollingResult(ctx, stopResp.Operation.OperationId, instance, client, d.onStopInstanceSucceeded)
 	case entity.StatusCleaning:
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
 		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
 		if err != nil {
 			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
