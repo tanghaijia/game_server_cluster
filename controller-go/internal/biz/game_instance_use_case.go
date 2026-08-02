@@ -62,6 +62,12 @@ func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID
 	if err != nil {
 		return err
 	}
+	if instance.Status != entity.StatusStopped &&
+		instance.Status != entity.Failed {
+		return fmt.Errorf("invalid instance status：%s",
+			instance.Status)
+	}
+
 	instance.Status = entity.StatusPending
 	err = uc.instanceRepo.UpdateStatus(ctx, instance)
 	if err != nil {
@@ -79,6 +85,12 @@ func (uc *GameInstanceUseCase) StopGameInstance(ctx context.Context, instanceID 
 	if err != nil {
 		return err
 	}
+	if instance.Status != entity.StatusRunning &&
+		instance.Status != entity.Failed {
+		return fmt.Errorf("invalid instance status：%s",
+			instance.Status)
+	}
+
 	instance.Status = entity.StatusStopping
 	err = uc.instanceRepo.UpdateStatus(ctx, instance)
 	if err != nil {
