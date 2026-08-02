@@ -34,6 +34,9 @@ func (m *mockNodeAgentRepo) Save(ctx context.Context, agent *entity.NodeAgent) e
 func (m *mockNodeAgentRepo) GetByID(ctx context.Context, id string) (*entity.NodeAgent, error) {
 	return &entity.NodeAgent{ID: id, NodeId: "1", Port: 9090}, nil
 }
+func (m *mockNodeAgentRepo) ListIDs(ctx context.Context) ([]string, error) {
+	return []string{"node-agent-1"}, nil
+}
 
 var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
 

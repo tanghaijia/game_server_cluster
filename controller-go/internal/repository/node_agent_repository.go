@@ -9,4 +9,5 @@ import (
 type NodeAgentRepository interface {
 	Save(ctx context.Context, agent *entity.NodeAgent) error
 	GetByID(ctx context.Context, id string) (*entity.NodeAgent, error)
+	ListIDs(ctx context.Context) ([]string, error)
 }

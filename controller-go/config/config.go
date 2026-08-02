@@ -14,6 +14,7 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBName     string
+	DBSchema   string
 
 	// gRPC
 	AssetServiceAddr string
@@ -30,6 +31,7 @@ func Load() *Config {
 		DBUser:           getEnv("DB_USER", "postgres"),
 		DBPassword:       getEnv("DB_PASSWORD", "postgres"),
 		DBName:           getEnv("DB_NAME", "game_server"),
+		DBSchema:         getEnv("DB_SCHEMA", "public"),
 		AssetServiceAddr: getEnv("ASSET_SERVICE_ADDR", "localhost:9091"),
 		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
 	}
@@ -38,8 +40,8 @@ func Load() *Config {
 // DSN 返回 PostgreSQL 连接字符串
 func (c *Config) DSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		c.DBHost, c.DBPort, c.DBUser, c.DBPassword, c.DBName,
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable search_path=%s",
+		c.DBHost, c.DBPort, c.DBUser, c.DBPassword, c.DBName, c.DBSchema,
 	)
 }
 

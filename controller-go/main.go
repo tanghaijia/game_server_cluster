@@ -45,15 +45,8 @@ func main() {
 	}
 	slog.Info("数据库连接成功")
 
-	// 自动建表
-	if err := db.AutoMigrate(
-		&GormGame{},
-		&GormNode{},
-		&GormNodeAgent{},
-		&GormGameInstance{},
-		&GormGameContainerConfig{},
-		&GormGameContainerPortMapping{},
-	); err != nil {
+	// 版本化迁移
+	if err := runMigrations(db); err != nil {
 		slog.Error("数据库迁移失败", "err", err)
 		os.Exit(1)
 	}
@@ -88,9 +81,15 @@ func main() {
 	defer nodeAgentClients.CloseAll()
 
 	// ---------------------------------------------------------------
-	// 5. Scheduler
+	// 5. Scheduler（从 DB 加载 node_agent 列表用于调度）
 	// ---------------------------------------------------------------
-	scheduler := biz.NewSimpleScheduler(nil)
+	nodeAgentIDs, err := nodeAgentRepo.ListIDs(context.Background())
+	if err != nil {
+		slog.Error("加载 node_agent 列表失败", "err", err)
+		os.Exit(1)
+	}
+	scheduler := biz.NewSimpleScheduler(nodeAgentIDs)
+	slog.Info("Scheduler 就绪", "node_agent_ids", nodeAgentIDs)
 
 	// ---------------------------------------------------------------
 	// 6. ReconcileDispatcher
@@ -159,67 +158,3 @@ func main() {
 	}
 	slog.Info("服务已关闭")
 }
-
-// ---------------------------------------------------------------
-// GORM 模型（避免与 entity 耦合）
-// ---------------------------------------------------------------
-
-type GormGame struct {
-	ID   string `gorm:"column:id;primaryKey"`
-	Name string `gorm:"column:name"`
-}
-
-func (GormGame) TableName() string { return "games" }
-
-type GormNode struct {
-	Id              int64   `gorm:"column:id;primaryKey;autoIncrement"`
-	Ip              string  `gorm:"column:ip"`
-	CoreNum         int     `gorm:"column:core_num"`
-	CoreFrequency   float64 `gorm:"column:core_frequency"`
-	MemorySize      int64   `gorm:"column:memory_size"`
-	StorageSize     int64   `gorm:"column:storage_size"`
-	Location        string  `gorm:"column:location"`
-	ServiceProvider string  `gorm:"column:service_provider"`
-}
-
-func (GormNode) TableName() string { return "nodes" }
-
-type GormNodeAgent struct {
-	ID     string `gorm:"column:id;primaryKey"`
-	NodeId string `gorm:"column:node_id"`
-	Port   int32  `gorm:"column:port"`
-}
-
-func (GormNodeAgent) TableName() string { return "node_agents" }
-
-type GormGameInstance struct {
-	ID              string    `gorm:"column:id;primaryKey"`
-	GameID          string    `gorm:"column:game_id"`
-	NodeAgentID     *string   `gorm:"column:node_agent_id"`
-	Status          int       `gorm:"column:status"`
-	LastPendingTime time.Time `gorm:"column:last_pending_time"`
-	CreateTime      time.Time `gorm:"column:create_time"`
-	UpdateTime      time.Time `gorm:"column:update_time"`
-	GameBuildId     string    `gorm:"column:game_build_id"`
-}
-
-func (GormGameInstance) TableName() string { return "game_instances" }
-
-type GormGameContainerConfig struct {
-	ID                  string `gorm:"column:id;primaryKey"`
-	ContainerServerPath string `gorm:"column:container_server_path"`
-	PortMode            int    `gorm:"column:port_mode"`
-	PortMapping         []GormGameContainerPortMapping
-}
-
-func (GormGameContainerConfig) TableName() string { return "game_container_configs" }
-
-type GormGameContainerPortMapping struct {
-	ID                    uint   `gorm:"column:id;primaryKey"`
-	GameContainerConfigID string `gorm:"column:game_container_config_id;index"`
-	HostPort              uint16 `gorm:"column:host_port"`
-	ContainerPort         uint16 `gorm:"column:container_port"`
-	Protocol              int    `gorm:"column:protocol"`
-}
-
-func (GormGameContainerPortMapping) TableName() string { return "game_container_port_mappings" }
