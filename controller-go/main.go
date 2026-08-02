@@ -123,6 +123,11 @@ func main() {
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
 
+	// 恢复上次未完成的实例调度
+	if err := dispatcher.Recover(ctx); err != nil {
+		slog.Error("恢复实例调度失败", "err", err)
+	}
+
 	// ---------------------------------------------------------------
 	// 9. HTTP API (gin)
 	// ---------------------------------------------------------------

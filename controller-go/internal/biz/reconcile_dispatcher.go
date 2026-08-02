@@ -49,6 +49,27 @@ func NewReconcileDispatcher(
 	}
 }
 
+// dispatchableStatuses 是需要持续调度的中间态（未完成生命周期的实例）
+var dispatchableStatuses = []entity.InstanceStatus{
+	entity.StatusPending,
+	entity.StatusScheduling,
+	entity.StatusPreparingBuild,
+	entity.StatusRestoringSnapshot,
+	entity.StatusStarting,
+	entity.StatusStopping,
+	entity.StatusCleaning,
+}
+
+// isDispatchableStatus 判断实例状态是否处于需要调度的中间态
+func isDispatchableStatus(status entity.InstanceStatus) bool {
+	for _, s := range dispatchableStatuses {
+		if status == s {
+			return true
+		}
+	}
+	return false
+}
+
 /**
 * 请求对一个GameInstance进行派遣
 **/
@@ -57,13 +78,7 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 		return errors.New("instance cannot be nil")
 	}
 
-	if instance.Status == entity.StatusPending ||
-		instance.Status == entity.StatusScheduling ||
-		instance.Status == entity.StatusPreparingBuild ||
-		instance.Status == entity.StatusRestoringSnapshot ||
-		instance.Status == entity.StatusStarting ||
-		instance.Status == entity.StatusStopping ||
-		instance.Status == entity.StatusCleaning {
+	if isDispatchableStatus(instance.Status) {
 		d.queue <- instance
 		return nil
 	}
@@ -437,6 +452,7 @@ func (d *ReconcileDispatcher) onStopInstanceSucceeded(ctx context.Context, insta
 **/
 func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.StatusStopped
+	instance.NodeAgentID = nil
 	d.instanceRepo.UpdateStatus(ctx, instance)
 }
 
@@ -524,4 +540,21 @@ func (d *ReconcileDispatcher) Start(ctx context.Context) {
 			d.NextDispatch(ctx)
 		}
 	}()
+}
+
+/**
+* 恢复调度：程序重启后，把处于中间态（未完成生命周期）的实例重新加入调度队列
+**/
+func (d *ReconcileDispatcher) Recover(ctx context.Context) error {
+	instances, err := d.instanceRepo.ListByStatuses(ctx, dispatchableStatuses...)
+	if err != nil {
+		return fmt.Errorf("recover: list dispatchable instances: %w", err)
+	}
+	for _, inst := range instances {
+		if err := d.RequestDispatch(ctx, inst); err != nil {
+			slog.Warn("[Recover] 实例入队失败", "instanceId", inst.ID, "status", inst.Status, "err", err)
+		}
+	}
+	slog.Info("[Recover] 恢复待调度实例", "count", len(instances))
+	return nil
 }

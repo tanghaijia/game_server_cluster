@@ -33,3 +33,14 @@ func (r *GameInstanceRepo) UpdateStatus(ctx context.Context, instance *entity.Ga
 		Where("id = ?", instance.ID).
 		Update("status", instance.Status).Error
 }
+
+func (r *GameInstanceRepo) ListByStatuses(ctx context.Context, statuses ...entity.InstanceStatus) ([]*entity.GameInstance, error) {
+	var instances []*entity.GameInstance
+	err := r.db.WithContext(ctx).
+		Where("status IN ?", statuses).
+		Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+	return instances, nil
+}

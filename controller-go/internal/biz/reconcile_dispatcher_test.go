@@ -25,6 +25,10 @@ func (m *mockInstanceRepo) UpdateStatus(ctx context.Context, inst *entity.GameIn
 	return m.saveFunc(ctx, inst)
 }
 
+func (m *mockInstanceRepo) ListByStatuses(ctx context.Context, statuses ...entity.InstanceStatus) ([]*entity.GameInstance, error) {
+	return nil, nil
+}
+
 // Ensure mockInstanceRepo implements repository.GameInstanceRepository
 var _ repository.GameInstanceRepository = (*mockInstanceRepo)(nil)
 
