@@ -199,6 +199,7 @@ where
 
         enqueue_restore_snapshot(
             &self.pool,
+            &self.operations,
             request.instance_id.as_str(),
             request.snapshot_id.as_str(),
             operation.clone(),

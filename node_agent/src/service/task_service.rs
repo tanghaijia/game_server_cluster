@@ -657,10 +657,13 @@ pub async fn enqueue_create_snapshot(pool: &SqlitePool, instance_id: &str, snaps
 
 pub async fn enqueue_restore_snapshot(
     pool: &SqlitePool,
+    ops: &Arc<dyn OperationRepository>,
     instance_id: &str,
     snapshot_id: &str,
     operation: NodeOperation,
 ) {
+    // 入队时先持久化 Pending operation，保证 get_operation 能立刻查到
+    let _ = ops.save(&operation).await;
     let mut storage = SqliteStorage::new(pool);
     let _ = storage
         .push(RestoreSnapshotJob {
