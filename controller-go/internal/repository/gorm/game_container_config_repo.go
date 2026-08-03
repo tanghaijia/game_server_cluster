@@ -21,7 +21,7 @@ func (r *GameContainerConfigRepo) Save(ctx context.Context, config *entity.GameC
 
 func (r *GameContainerConfigRepo) GetByID(ctx context.Context, id string) (*entity.GameContainerConfig, error) {
 	var config entity.GameContainerConfig
-	err := r.db.WithContext(ctx).Preload("PortMapping").First(&config, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("PortExcerpt").First(&config, "id = ?", id).Error
 	if err != nil {
 		return nil, err
 	}

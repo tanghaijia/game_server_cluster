@@ -45,13 +45,30 @@ CREATE TABLE IF NOT EXISTS game_container_configs (
     port_mode             INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS game_container_port_mappings (
+-- 容器端口片段：描述游戏所需的一段连续容器端口（NAT 模式下动态映射到宿主机端口）
+CREATE TABLE IF NOT EXISTS game_container_port_excerpts (
     id                       BIGSERIAL PRIMARY KEY,
     game_container_config_id TEXT,
-    host_port                INTEGER,
-    container_port           INTEGER,
-    protocol                 INTEGER
+    protocol                 INTEGER,
+    begin_port               INTEGER,
+    excerpt_length           INTEGER
 );
 
-CREATE INDEX IF NOT EXISTS idx_game_container_port_mappings_config_id
-    ON game_container_port_mappings (game_container_config_id);
+CREATE INDEX IF NOT EXISTS idx_game_container_port_excerpts_config_id
+    ON game_container_port_excerpts (game_container_config_id);
+
+-- 实例级运行时端口映射：调度阶段为 instance 在 node_agent 上动态分配的宿主端口
+CREATE TABLE IF NOT EXISTS game_container_port_mappings (
+    id             TEXT PRIMARY KEY,
+    instance_id    TEXT,
+    node_agent_id  TEXT,
+    host_port      INTEGER,
+    container_port INTEGER,
+    protocol       INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_game_container_port_mappings_instance_id
+    ON game_container_port_mappings (instance_id);
+
+CREATE INDEX IF NOT EXISTS idx_game_container_port_mappings_node_agent_id
+    ON game_container_port_mappings (node_agent_id);

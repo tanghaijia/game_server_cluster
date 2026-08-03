@@ -7,15 +7,13 @@ INSERT INTO game_container_configs (id, container_server_path, port_mode)
 VALUES ('cfg-dst-demo', '/server', 0)
 ON CONFLICT (id) DO NOTHING;
 
--- 端口映射（protocol: 0=TCP, 1=UDP；host_port=container_port 演示 NAT 同端口）
-INSERT INTO game_container_port_mappings (game_container_config_id, host_port, container_port, protocol)
+-- 端口片段（protocol: 0=TCP, 1=UDP；begin_port + excerpt_length 描述一段连续容器端口）
+INSERT INTO game_container_port_excerpts (game_container_config_id, protocol, begin_port, excerpt_length)
 VALUES
-    ('cfg-dst-demo', 10999, 10999, 1),
-    ('cfg-dst-demo', 11000,  11000,  1),
-    ('cfg-dst-demo', 8768,  8768,  1),
-    ('cfg-dst-demo', 8769,  8769,  1),
-    ('cfg-dst-demo', 27018,  27018,  1),
-    ('cfg-dst-demo', 27019,  27019,  1);
+    ('cfg-dst-demo', 1, 10999, 2),
+    ('cfg-dst-demo', 1, 8768,  2),
+    ('cfg-dst-demo', 1, 27018, 2)
+ON CONFLICT DO NOTHING;
 
 -- demo game（沿用 asset_service 的 DST 343050）
 INSERT INTO games (id, name, container_config_id)

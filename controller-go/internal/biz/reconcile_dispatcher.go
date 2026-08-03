@@ -27,6 +27,7 @@ type ReconcileDispatcher struct {
 	assetClient             *assetservice.AssetServiceFaceClient
 	gameRepo                repository.GameRepository
 	gameContainerConfigRepo repository.GameContainerConfigRepository
+	gameContainerPortMapper GameContainerPortMapper
 
 	// 自动重试计数(进程内):instanceID -> 连续重试次数,成功后清零
 	retryMu              sync.Mutex
@@ -42,6 +43,7 @@ func NewReconcileDispatcher(
 	assetClient *assetservice.AssetServiceFaceClient,
 	gameRepo repository.GameRepository,
 	gameContainerConfigRepo repository.GameContainerConfigRepository,
+	gameContainerPortMapper GameContainerPortMapper,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
 		queue:                   make(chan *entity.GameInstance, 100),
@@ -53,6 +55,7 @@ func NewReconcileDispatcher(
 		assetClient:             assetClient,
 		gameRepo:                gameRepo,
 		gameContainerConfigRepo: gameContainerConfigRepo,
+		gameContainerPortMapper: gameContainerPortMapper,
 		operationRetryCounts:    make(map[string]int),
 	}
 }
@@ -117,8 +120,15 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			instance.Status = entity.Failed
 			d.instanceRepo.UpdateStatus(ctx, instance)
 		} else {
-			instance.Status = entity.StatusPreparingBuild
 			instance.NodeAgentID = &node_agent_id
+			// 在目标 node_agent 上为该实例分配端口映射
+			if err := d.assignPorts(ctx, instance); err != nil {
+				slog.Error("[PortMapper] 分配端口失败",
+					"instanceId", instance.ID, "nodeAgentId", node_agent_id, "err", err)
+				d.FailedInstance(ctx, instance)
+				return nil
+			}
+			instance.Status = entity.StatusPreparingBuild
 			// 用 Save 全字段持久化，确保 node_agent_id 也落库
 			// （UpdateStatus 只更新 status，会把 node_agent_id 丢在内存里，
 			//   导致 stop 等从 DB 重新加载实例的路径拿到 nil 而 panic）
@@ -270,7 +280,15 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.FailedInstance(ctx, instance)
 			return nil
 		}
-		runtimeSpec := buildInstanceRuntimeSpec(instance, buildResp.Build, containerConfig)
+		// 查询调度阶段为该实例分配的端口映射
+		portMappings, err := d.gameContainerPortMapper.GetMapPortByInstanceId(ctx, instance.ID)
+		if err != nil {
+			slog.Error("[PortMapper] GetMapPortByInstanceId fail",
+				"instanceId", instance.ID, "err", err)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		runtimeSpec := buildInstanceRuntimeSpec(instance, buildResp.Build, containerConfig, portMappings)
 		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "StartInstance")
@@ -352,6 +370,27 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.Failed
 	d.instanceRepo.UpdateStatus(ctx, instance)
+}
+
+/**
+* 在目标 node_agent 上为实例分配端口映射（调度阶段调用）
+**/
+func (d *ReconcileDispatcher) assignPorts(ctx context.Context, instance *entity.GameInstance) error {
+	if instance.NodeAgentID == nil {
+		return errors.New("node_agent_id is nil")
+	}
+	nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+	if err != nil {
+		return fmt.Errorf("load node agent: %w", err)
+	}
+	game, err := d.gameRepo.GetByID(ctx, instance.GameID)
+	if err != nil {
+		return fmt.Errorf("load game: %w", err)
+	}
+	if _, err := d.gameContainerPortMapper.MapPort(ctx, nodeAgent, game, instance); err != nil {
+		return err
+	}
+	return nil
 }
 
 /**
@@ -538,6 +577,10 @@ func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, inst
 	instance.Status = entity.StatusStopped
 	instance.NodeAgentID = nil
 	d.instanceRepo.UpdateStatus(ctx, instance)
+	if _, err := d.gameContainerPortMapper.ReleaseMapPortByInstanceId(ctx, instance.ID); err != nil {
+		slog.Error("[PortMapper] ReleaseMapPortByInstanceId fail",
+			"instanceId", instance.ID, "err", err)
+	}
 }
 
 /**
@@ -547,12 +590,13 @@ func buildInstanceRuntimeSpec(
 	instance *entity.GameInstance,
 	build *assetservicev1.GameBuild,
 	config *entity.GameContainerConfig,
+	portMappings []entity.ContainerPortMapping,
 ) *nodeagentv1.InstanceRuntimeSpec {
 	return &nodeagentv1.InstanceRuntimeSpec{
 		InstanceId:          instance.ID,
 		Build:               mapGameBuild(build),
 		ContainerServerPath: config.ContainerServerPath,
-		PortMapping:         mapPortMapping(config),
+		PortMapping:         mapPortMapping(config, portMappings),
 		// spec 目前无数据来源，先填占位结构体以满足 nodeagent 的校验
 		Spec: &nodeagentv1.InstanceSpec{
 			Resources: &nodeagentv1.ResourceRequirements{},
@@ -588,9 +632,9 @@ func mapGameBuild(build *assetservicev1.GameBuild) *nodeagentv1.GameBuild {
 }
 
 /**
-* 将 GameContainerConfig 的端口映射映射为 nodeagent 的 PortMapping
+* 将实例已分配的端口映射映射为 nodeagent 的 PortMapping
 **/
-func mapPortMapping(config *entity.GameContainerConfig) *nodeagentv1.PortMapping {
+func mapPortMapping(config *entity.GameContainerConfig, mappings []entity.ContainerPortMapping) *nodeagentv1.PortMapping {
 	pm := &nodeagentv1.PortMapping{}
 	switch config.PortMode {
 	case entity.PORT_MAPPING_MOD_HOST:
@@ -598,7 +642,7 @@ func mapPortMapping(config *entity.GameContainerConfig) *nodeagentv1.PortMapping
 	default:
 		pm.Mode = nodeagentv1.PortMappingMod_PORT_MAPPING_MOD_NAT
 	}
-	for _, m := range config.PortMapping {
+	for _, m := range mappings {
 		entry := &nodeagentv1.PortMapEntry{
 			HostPort:      uint32(m.HostPort),
 			ContainerPort: uint32(m.ContainerPort),

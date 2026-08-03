@@ -60,6 +60,7 @@ func main() {
 	nodeAgentRepo := repogorm.NewNodeAgentRepo(db)
 	nodeRepo := repogorm.NewNodeRepo(db)
 	gameContainerConfigRepo := repogorm.NewGameContainerConfigRepo(db)
+	containerPortMappingRepo := repogorm.NewContainerPortMappingRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -94,6 +95,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// 6. ReconcileDispatcher
 	// ---------------------------------------------------------------
+	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
 	dispatcher := biz.NewReconcileDispatcher(
 		gameInstanceRepo,
 		nodeAgentRepo,
@@ -103,6 +105,7 @@ func main() {
 		assetClient,
 		gameRepo,
 		gameContainerConfigRepo,
+		*gameContainerPortMapper,
 	)
 
 	// ---------------------------------------------------------------

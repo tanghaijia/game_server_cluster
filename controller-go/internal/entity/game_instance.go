@@ -56,14 +56,14 @@ func (s InstanceStatus) MarshalJSON() ([]byte, error) {
 }
 
 type GameInstance struct {
-	ID              string          `gorm:"column:id;primaryKey"`
-	GameID          string          `gorm:"column:game_id"`
-	NodeAgentID     *string         `gorm:"column:node_agent_id"`
-	Status          InstanceStatus  `gorm:"column:status"`
-	LastPendingTime time.Time       `gorm:"column:last_pending_time"`
-	CreateTime      time.Time       `gorm:"column:create_time"`
-	UpdateTime      time.Time       `gorm:"column:update_time"`
-	GameBuildId     string          `gorm:"column:game_build_id"`
+	ID              string         `gorm:"column:id;primaryKey"`
+	GameID          string         `gorm:"column:game_id"`
+	NodeAgentID     *string        `gorm:"column:node_agent_id"`
+	Status          InstanceStatus `gorm:"column:status"`
+	LastPendingTime time.Time      `gorm:"column:last_pending_time"`
+	CreateTime      time.Time      `gorm:"column:create_time"`
+	UpdateTime      time.Time      `gorm:"column:update_time"`
+	GameBuildId     string         `gorm:"column:game_build_id"`
 }
 
 func (GameInstance) TableName() string {
