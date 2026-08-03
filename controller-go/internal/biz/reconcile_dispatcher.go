@@ -11,7 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
+
+	"google.golang.org/grpc/status"
 )
 
 type ReconcileDispatcher struct {
@@ -24,6 +27,10 @@ type ReconcileDispatcher struct {
 	assetClient             *assetservice.AssetServiceFaceClient
 	gameRepo                repository.GameRepository
 	gameContainerConfigRepo repository.GameContainerConfigRepository
+
+	// 自动重试计数(进程内):instanceID -> 连续重试次数,成功后清零
+	retryMu              sync.Mutex
+	operationRetryCounts map[string]int
 }
 
 func NewReconcileDispatcher(
@@ -46,6 +53,7 @@ func NewReconcileDispatcher(
 		assetClient:             assetClient,
 		gameRepo:                gameRepo,
 		gameContainerConfigRepo: gameContainerConfigRepo,
+		operationRetryCounts:    make(map[string]int),
 	}
 }
 
@@ -146,11 +154,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		}
 		resp, err := client.PrepareGameBuild(ctx, req)
 		if err != nil {
-			slog.Error("[NodeAgentClients] PrepareGameBuild fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
-				"GameBuildId", instance.GameBuildId, "err", err,
-			)
-			d.FailedInstance(ctx, instance)
+			d.handleDispatchError(ctx, instance, err, "PrepareGameBuild")
 			return nil
 		}
 		go d.PollingResult(ctx, resp.Operation.OperationId, instance, client, d.onPrepareBuildSucceeded)
@@ -203,11 +207,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			SnapshotId: snapshotResp.Snapshot.SnapshotId,
 		})
 		if err != nil {
-			slog.Error("[NodeAgentClients] RestoreSnapshot fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
-				"SnapshotId", snapshotResp.Snapshot.SnapshotId, "err", err,
-			)
-			d.FailedInstance(ctx, instance)
+			d.handleDispatchError(ctx, instance, err, "RestoreSnapshot")
 			return nil
 		}
 		go d.PollingResult(ctx, restoreResp.Operation.OperationId, instance, client, d.onRestoreSnapshotSucceeded)
@@ -273,10 +273,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		runtimeSpec := buildInstanceRuntimeSpec(instance, buildResp.Build, containerConfig)
 		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
 		if err != nil {
-			slog.Error("[NodeAgentClients] StartInstance fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
-			)
-			d.FailedInstance(ctx, instance)
+			d.handleDispatchError(ctx, instance, err, "StartInstance")
 			return nil
 		}
 		go d.PollingResult(ctx, startResp.Operation.OperationId, instance, client, d.onStartInstanceSucceeded)
@@ -308,10 +305,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			InstanceId: instance.ID,
 		})
 		if err != nil {
-			slog.Error("[NodeAgentClients] StopInstance fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
-			)
-			d.FailedInstance(ctx, instance)
+			d.handleDispatchError(ctx, instance, err, "StopInstance")
 			return nil
 		}
 		go d.PollingResult(ctx, stopResp.Operation.OperationId, instance, client, d.onStopInstanceSucceeded)
@@ -343,10 +337,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			InstanceId: instance.ID,
 		})
 		if err != nil {
-			slog.Error("[NodeAgentClients] CleanInstance fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
-			)
-			d.FailedInstance(ctx, instance)
+			d.handleDispatchError(ctx, instance, err, "CleanInstance")
 			return nil
 		}
 		go d.PollingResult(ctx, cleanResp.Operation.OperationId, instance, client, d.onCleanInstanceSucceeded)
@@ -361,6 +352,77 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.Failed
 	d.instanceRepo.UpdateStatus(ctx, instance)
+}
+
+/**
+* 从 gRPC 错误中解析业务错误详情(nodeagent.v1.ErrorDetail,rich error model)
+**/
+func extractErrorDetail(err error) *nodeagentv1.ErrorDetail {
+	if err == nil {
+		return nil
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return nil
+	}
+	for _, d := range st.Details() {
+		if ed, ok := d.(*nodeagentv1.ErrorDetail); ok {
+			return ed
+		}
+	}
+	return nil
+}
+
+/**
+* 自动重试计数:返回 false 表示已达重试上限,不应再重试。
+* 计数按实例累积,成功时由 clearRetryCount 清零。
+**/
+func (d *ReconcileDispatcher) retryOperation(ctx context.Context, instance *entity.GameInstance) bool {
+	d.retryMu.Lock()
+	defer d.retryMu.Unlock()
+	count := d.operationRetryCounts[instance.ID] + 1
+	if count > OPERATION_RETRY_MAX {
+		delete(d.operationRetryCounts, instance.ID)
+		return false
+	}
+	d.operationRetryCounts[instance.ID] = count
+	slog.Warn("[ReconcileDispatcher] 操作失败,触发自动重试",
+		"instanceId", instance.ID, "retry", count, "max", OPERATION_RETRY_MAX)
+	return true
+}
+
+func (d *ReconcileDispatcher) clearRetryCount(instanceID string) {
+	d.retryMu.Lock()
+	defer d.retryMu.Unlock()
+	delete(d.operationRetryCounts, instanceID)
+}
+
+/**
+* 统一处理派发阶段的同步 RPC 失败:记录结构化错误;可重试错误重新入队,否则标记失败。
+* opName 用于日志标识(如 "PrepareGameBuild")。
+**/
+func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance *entity.GameInstance, err error, opName string) {
+	detail := extractErrorDetail(err)
+	if detail != nil {
+		slog.Error("[NodeAgentClients] "+opName+" fail",
+			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+			"ErrorCode", detail.GetCode().String(), "Category", detail.GetCategory().String(),
+			"Retryable", detail.GetRetryable(), "Params", detail.GetParams(),
+			"Message", detail.GetMessage(),
+		)
+		if detail.GetRetryable() && d.retryOperation(ctx, instance) {
+			slog.Warn("[NodeAgentClients] "+opName+" 失败可重试,重新入队调度",
+				"instanceId", instance.ID, "Status", instance.Status,
+			)
+			if err := d.RequestDispatch(ctx, instance); err == nil {
+				return
+			}
+		}
+	} else {
+		slog.Error("[NodeAgentClients] "+opName+" fail",
+			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err)
+	}
+	d.FailedInstance(ctx, instance)
 }
 
 /**
@@ -386,15 +448,37 @@ func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 			return
 		}
 		if resp.Operation.Status == nodeagentv1.OperationStatus_OPERATION_STATUS_FAILED {
-			slog.Error("[NodeAgentClients] GetOperation fail",
-				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
-				"OperationId", operation_id,
-				"Message", resp.Operation.Message,
-			)
+			detail := resp.Operation.GetError()
+			if detail != nil {
+				slog.Error("[NodeAgentClients] GetOperation fail",
+					"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+					"OperationId", operation_id,
+					"ErrorCode", detail.GetCode().String(), "Category", detail.GetCategory().String(),
+					"Retryable", detail.GetRetryable(), "Params", detail.GetParams(),
+					"Message", detail.GetMessage(),
+				)
+				// 可重试错误:实例状态保持可调度,重新入队执行本阶段
+				if detail.GetRetryable() && d.retryOperation(ctx, instance) {
+					slog.Warn("[NodeAgentClients] GetOperation 失败可重试,重新入队调度",
+						"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+						"OperationId", operation_id, "Status", instance.Status,
+					)
+					if err := d.RequestDispatch(ctx, instance); err == nil {
+						return
+					}
+				}
+			} else {
+				slog.Error("[NodeAgentClients] GetOperation fail",
+					"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+					"OperationId", operation_id,
+					"Message", resp.Operation.Message,
+				)
+			}
 			d.FailedInstance(ctx, instance)
 			return
 		}
 		if resp.Operation.Status == nodeagentv1.OperationStatus_OPERATION_STATUS_SUCCEEDED {
+			d.clearRetryCount(instance.ID)
 			slog.Info("[NodeAgentClients] GetOperation success",
 				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
 				"OperationId", operation_id,

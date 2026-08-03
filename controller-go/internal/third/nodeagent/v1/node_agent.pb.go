@@ -2122,15 +2122,17 @@ func (x *InstanceRuntimeRecord) GetUpdatedAt() string {
 }
 
 type NodeOperation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OperationId   string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
-	Kind          OperationKind          `protobuf:"varint,2,opt,name=kind,proto3,enum=nodeagent.v1.OperationKind" json:"kind,omitempty"`
-	Status        OperationStatus        `protobuf:"varint,3,opt,name=status,proto3,enum=nodeagent.v1.OperationStatus" json:"status,omitempty"`
-	InstanceId    *string                `protobuf:"bytes,4,opt,name=instance_id,json=instanceId,proto3,oneof" json:"instance_id,omitempty"`
-	BuildId       *string                `protobuf:"bytes,5,opt,name=build_id,json=buildId,proto3,oneof" json:"build_id,omitempty"`
-	Message       *string                `protobuf:"bytes,6,opt,name=message,proto3,oneof" json:"message,omitempty"`
-	StartedAt     string                 `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	FinishedAt    *string                `protobuf:"bytes,8,opt,name=finished_at,json=finishedAt,proto3,oneof" json:"finished_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	OperationId string                 `protobuf:"bytes,1,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	Kind        OperationKind          `protobuf:"varint,2,opt,name=kind,proto3,enum=nodeagent.v1.OperationKind" json:"kind,omitempty"`
+	Status      OperationStatus        `protobuf:"varint,3,opt,name=status,proto3,enum=nodeagent.v1.OperationStatus" json:"status,omitempty"`
+	InstanceId  *string                `protobuf:"bytes,4,opt,name=instance_id,json=instanceId,proto3,oneof" json:"instance_id,omitempty"`
+	BuildId     *string                `protobuf:"bytes,5,opt,name=build_id,json=buildId,proto3,oneof" json:"build_id,omitempty"`
+	Message     *string                `protobuf:"bytes,6,opt,name=message,proto3,oneof" json:"message,omitempty"`
+	StartedAt   string                 `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	FinishedAt  *string                `protobuf:"bytes,8,opt,name=finished_at,json=finishedAt,proto3,oneof" json:"finished_at,omitempty"`
+	// 结构化业务错误:status == OPERATION_STATUS_FAILED 时填充,message 保留作为兜底文本
+	Error         *ErrorDetail `protobuf:"bytes,9,opt,name=error,proto3,oneof" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2219,6 +2221,13 @@ func (x *NodeOperation) GetFinishedAt() string {
 		return *x.FinishedAt
 	}
 	return ""
+}
+
+func (x *NodeOperation) GetError() *ErrorDetail {
+	if x != nil {
+		return x.Error
+	}
+	return nil
 }
 
 type NodeHeartbeat struct {
@@ -2361,7 +2370,7 @@ var File_nodeagent_v1_node_agent_proto protoreflect.FileDescriptor
 
 const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnodeagent/v1/node_agent.proto\x12\fnodeagent.v1\x1a\x1dnodeagent/v1/game_cache.proto\x1a\x1bnodeagent/v1/instance.proto\x1a\x1fnodeagent/v1/port_mapping.proto\"\x15\n" +
+	"\x1dnodeagent/v1/node_agent.proto\x12\fnodeagent.v1\x1a\x1dnodeagent/v1/game_cache.proto\x1a\x1bnodeagent/v1/instance.proto\x1a\x1fnodeagent/v1/port_mapping.proto\x1a\x18nodeagent/v1/error.proto\"\x15\n" +
 	"\x13GetInstancesRequest\"Y\n" +
 	"\x14GetInstancesResponse\x12A\n" +
 	"\tinstances\x18\x01 \x03(\v2#.nodeagent.v1.NodeAgentGameInstanceR\tinstances\"7\n" +
@@ -2520,7 +2529,7 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"updated_at\x18\x06 \x01(\tR\tupdatedAtB\v\n" +
 	"\t_endpointB\n" +
 	"\n" +
-	"\b_failure\"\xfd\x02\n" +
+	"\b_failure\"\xbd\x03\n" +
 	"\rNodeOperation\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12/\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1b.nodeagent.v1.OperationKindR\x04kind\x125\n" +
@@ -2532,12 +2541,14 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\a \x01(\tR\tstartedAt\x12$\n" +
 	"\vfinished_at\x18\b \x01(\tH\x03R\n" +
-	"finishedAt\x88\x01\x01B\x0e\n" +
+	"finishedAt\x88\x01\x01\x124\n" +
+	"\x05error\x18\t \x01(\v2\x19.nodeagent.v1.ErrorDetailH\x04R\x05error\x88\x01\x01B\x0e\n" +
 	"\f_instance_idB\v\n" +
 	"\t_build_idB\n" +
 	"\n" +
 	"\b_messageB\x0e\n" +
-	"\f_finished_at\"\xc9\x01\n" +
+	"\f_finished_atB\b\n" +
+	"\x06_error\"\xc9\x01\n" +
 	"\rNodeHeartbeat\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\"\n" +
 	"\rcpu_usage_pct\x18\x02 \x01(\x02R\vcpuUsagePct\x12(\n" +
@@ -2657,6 +2668,7 @@ var file_nodeagent_v1_node_agent_proto_goTypes = []any{
 	(*NodeAgentGameInstance)(nil),    // 41: nodeagent.v1.NodeAgentGameInstance
 	(*GameCache)(nil),                // 42: nodeagent.v1.GameCache
 	(*PortMapping)(nil),              // 43: nodeagent.v1.PortMapping
+	(*ErrorDetail)(nil),              // 44: nodeagent.v1.ErrorDetail
 }
 var file_nodeagent_v1_node_agent_proto_depIdxs = []int32{
 	41, // 0: nodeagent.v1.GetInstancesResponse.instances:type_name -> nodeagent.v1.NodeAgentGameInstance
@@ -2687,39 +2699,40 @@ var file_nodeagent_v1_node_agent_proto_depIdxs = []int32{
 	36, // 25: nodeagent.v1.InstanceRuntimeRecord.failure:type_name -> nodeagent.v1.FailureInfo
 	2,  // 26: nodeagent.v1.NodeOperation.kind:type_name -> nodeagent.v1.OperationKind
 	3,  // 27: nodeagent.v1.NodeOperation.status:type_name -> nodeagent.v1.OperationStatus
-	10, // 28: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
-	12, // 29: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
-	14, // 30: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
-	16, // 31: nodeagent.v1.NodeAgentService.RestartInstance:input_type -> nodeagent.v1.RestartInstanceRequest
-	18, // 32: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
-	20, // 33: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
-	22, // 34: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
-	26, // 35: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
-	4,  // 36: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
-	24, // 37: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
-	6,  // 38: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
-	24, // 39: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
-	8,  // 40: nodeagent.v1.NodeAgentService.CacheGame:input_type -> nodeagent.v1.CacheGameRequest
-	8,  // 41: nodeagent.v1.NodeAgentService.GetCacheGame:input_type -> nodeagent.v1.CacheGameRequest
-	11, // 42: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
-	13, // 43: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
-	15, // 44: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
-	17, // 45: nodeagent.v1.NodeAgentService.RestartInstance:output_type -> nodeagent.v1.RestartInstanceResponse
-	19, // 46: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
-	21, // 47: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
-	23, // 48: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
-	27, // 49: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
-	5,  // 50: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
-	25, // 51: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
-	7,  // 52: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
-	25, // 53: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
-	9,  // 54: nodeagent.v1.NodeAgentService.CacheGame:output_type -> nodeagent.v1.CacheGameResponse
-	9,  // 55: nodeagent.v1.NodeAgentService.GetCacheGame:output_type -> nodeagent.v1.CacheGameResponse
-	42, // [42:56] is the sub-list for method output_type
-	28, // [28:42] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	44, // 28: nodeagent.v1.NodeOperation.error:type_name -> nodeagent.v1.ErrorDetail
+	10, // 29: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
+	12, // 30: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
+	14, // 31: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
+	16, // 32: nodeagent.v1.NodeAgentService.RestartInstance:input_type -> nodeagent.v1.RestartInstanceRequest
+	18, // 33: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
+	20, // 34: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
+	22, // 35: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
+	26, // 36: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
+	4,  // 37: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
+	24, // 38: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
+	6,  // 39: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
+	24, // 40: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
+	8,  // 41: nodeagent.v1.NodeAgentService.CacheGame:input_type -> nodeagent.v1.CacheGameRequest
+	8,  // 42: nodeagent.v1.NodeAgentService.GetCacheGame:input_type -> nodeagent.v1.CacheGameRequest
+	11, // 43: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
+	13, // 44: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
+	15, // 45: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
+	17, // 46: nodeagent.v1.NodeAgentService.RestartInstance:output_type -> nodeagent.v1.RestartInstanceResponse
+	19, // 47: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
+	21, // 48: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
+	23, // 49: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
+	27, // 50: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
+	5,  // 51: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
+	25, // 52: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
+	7,  // 53: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
+	25, // 54: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
+	9,  // 55: nodeagent.v1.NodeAgentService.CacheGame:output_type -> nodeagent.v1.CacheGameResponse
+	9,  // 56: nodeagent.v1.NodeAgentService.GetCacheGame:output_type -> nodeagent.v1.CacheGameResponse
+	43, // [43:57] is the sub-list for method output_type
+	29, // [29:43] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_nodeagent_v1_node_agent_proto_init() }
@@ -2730,6 +2743,7 @@ func file_nodeagent_v1_node_agent_proto_init() {
 	file_nodeagent_v1_game_cache_proto_init()
 	file_nodeagent_v1_instance_proto_init()
 	file_nodeagent_v1_port_mapping_proto_init()
+	file_nodeagent_v1_error_proto_init()
 	file_nodeagent_v1_node_agent_proto_msgTypes[24].OneofWrappers = []any{}
 	file_nodeagent_v1_node_agent_proto_msgTypes[26].OneofWrappers = []any{}
 	file_nodeagent_v1_node_agent_proto_msgTypes[27].OneofWrappers = []any{}
