@@ -118,6 +118,7 @@ async fn create_operation(
         message: Some(message.to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     ops.save(&op).await?;
     Ok(op)
@@ -130,10 +131,11 @@ async fn succeed_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOpera
     let _ = ops.save(&op).await;
 }
 
-async fn fail_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperation, err: &str) {
+async fn fail_operation(ops: &Arc<dyn OperationRepository>, mut op: NodeOperation, err: &NodeAgentError) {
     op.status = OperationStatus::Failed;
     op.finished_at = Some(Utc::now());
     op.message = Some(err.to_string());
+    op.error = Some(err.to_operation_error());
     let _ = ops.save(&op).await;
 }
 
@@ -174,7 +176,7 @@ async fn handle_prepare_build(
             "prepare game build service fail, operation id: {}, error: {}.",
             op_id.0, err
         );
-        fail_operation(&ctx.operations, op, &err.to_string()).await;
+        fail_operation(&ctx.operations, op, &err).await;
     } else {
         succeed_operation(
             &ctx.operations,
@@ -202,7 +204,7 @@ async fn handle_start_instance(
     running_operation(&ctx.operations, op.clone()).await;
     if let Err(err) = ctx.node_agent_service.start_instance(job.spec).await {
         error!("start game instance fail, operation id: {}, error: {}.", op_id.0, err);
-        fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+        fail_operation(&ctx.operations, op.clone(), &err).await;
 
         // 将 GameInstance 状态标记为 Failed
         let Ok(mut game_instance) = ctx.game_instance_repos.get(instance_id.clone()).await else {
@@ -259,7 +261,7 @@ async fn handle_stop_instance(
             .await;
         }
         Err(err) => {
-            fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+            fail_operation(&ctx.operations, op.clone(), &err).await;
         }
     };
 
@@ -298,7 +300,7 @@ async fn handle_restart_instance(
             .await;
         }
         Err(err) => {
-            fail_operation(&ctx.operations, op.clone(), &err.to_string()).await;
+            fail_operation(&ctx.operations, op.clone(), &err).await;
         }
     };
 
@@ -332,7 +334,7 @@ async fn handle_restore_snapshot(
             succeed_operation(&ctx.operations, operation, "snapshot restored").await;
         }
         Err(e) => {
-            fail_operation(&ctx.operations, operation, &e.to_string()).await;
+            fail_operation(&ctx.operations, operation, &e).await;
             return Err(e.into());
         }
     }
@@ -363,7 +365,7 @@ async fn handle_clean_instance(
             succeed_operation(&ctx.operations, op, "clean instance finish").await;
         }
         Err(e) => {
-            fail_operation(&ctx.operations, op, &e.to_string()).await;
+            fail_operation(&ctx.operations, op, &e).await;
             return Err(e.into());
         }
     }
@@ -554,6 +556,7 @@ pub async fn enqueue_prepare_build(
         message: Some("build preparation queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     let _ = ops.save(&op).await;
 
@@ -584,6 +587,7 @@ pub async fn enqueue_start_instance(
         message: Some("instance start queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     let _ = ops.save(&op).await;
 
@@ -594,7 +598,7 @@ pub async fn enqueue_start_instance(
         argument.build.build_id.clone(),
     );
     if let Err(err) = game_instance_repository.save(&game_instance).await {
-        fail_operation(ops, op.clone(), &err.to_string().as_str()).await;
+        fail_operation(ops, op.clone(), &err).await;
         return op;
     }
 
@@ -624,6 +628,7 @@ pub async fn enqueue_stop_instance(
         message: Some("instance stop queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     let _ = ops.save(&op).await;
 
@@ -653,6 +658,7 @@ pub async fn enqueue_restart_instance(
         message: Some("instance restart queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     let _ = ops.save(&op).await;
 
@@ -711,6 +717,7 @@ pub async fn enqueue_clean_instance(
         message: Some("instance clean queued".to_string()),
         started_at: Utc::now(),
         finished_at: None,
+        error: None,
     };
     let _ = ops.save(&op).await;
 

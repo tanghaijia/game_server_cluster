@@ -2,6 +2,7 @@ use super::{ContainerPortMapping, InstanceId, NodeId, OperationId};
 use crate::domain::game_build::GameBuild;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// 从 asset_service 获取的快照恢复计划。
 #[derive(Debug, Clone)]
@@ -83,6 +84,17 @@ pub struct FailureInfo {
     pub retryable: bool,
 }
 
+/// 结构化业务错误详情(对应 proto 的 nodeagent.v1.ErrorDetail)。
+/// 数值字段与 error.proto 中的 BusinessErrorCode / ErrorCategory 保持一致。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OperationError {
+    pub code: i32,
+    pub category: i32,
+    pub message: String,
+    pub retryable: bool,
+    pub params: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildPreparation {
     pub build_id: String,
@@ -134,6 +146,7 @@ pub struct NodeOperation {
     pub message: Option<String>,
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
+    pub error: Option<OperationError>,
 }
 
 pub fn instance_data_path(instance_id: &InstanceId) -> String {

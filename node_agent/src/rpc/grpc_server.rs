@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -5,6 +6,7 @@ use std::time::Duration;
 use apalis_sqlite::SqlitePool;
 use chrono::Utc;
 use log::error;
+use prost::Message;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 use tonic::{Request, Response, Status};
 
@@ -15,7 +17,8 @@ use crate::{
         BuildPreparation, BuildPreparationResult, ContainerPortMapping, ContainerPortMappingMod,
         Endpoint, FailureInfo, GameBuild, GameInstance, GameInstanceStatus,
         InstanceId, InstanceRuntimeRecord, InstanceSpec, LocalGameBuild,
-        MappingPortType, NodeOperation, OperationId, OperationKind, OperationStatus, PortMap,
+        MappingPortType, NodeOperation, OperationError, OperationId, OperationKind,
+        OperationStatus, PortMap,
         ResourceRequirements, RuntimeState, SnapshotCaptureRequest,
         SnapshotRestoreResult, StartInstanceArgument,
         GameCache as DomainGameCache, GameCacheStatus as DomainGameCacheStatus,
@@ -28,9 +31,10 @@ use crate::{
     proto::{
         asset_service::Node,
         node_agent::{
-            self, BuildPreparationResult as ProtoBuildPreparationResult, CacheGameRequest,
-            CacheGameResponse, CleanInstanceRequest, CleanInstanceResponse,
-            CreateSnapshotRequest, CreateSnapshotResponse, FailureInfo as ProtoFailureInfo,
+            self, BusinessErrorCode, BuildPreparationResult as ProtoBuildPreparationResult,
+            CacheGameRequest, CacheGameResponse, CleanInstanceRequest, CleanInstanceResponse,
+            CreateSnapshotRequest, CreateSnapshotResponse, ErrorCategory,
+            ErrorDetail as ProtoErrorDetail, FailureInfo as ProtoFailureInfo,
             GameBuild as ProtoGameBuild, GetHeartbeatRequest, GetHeartbeatResponse,
             GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
             GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
@@ -195,6 +199,7 @@ where
             message: None,
             started_at: Utc::now(),
             finished_at: None,
+            error: None,
         };
 
         enqueue_restore_snapshot(
@@ -222,8 +227,19 @@ where
             .operations
             .get(&OperationId(request.operation_id))
             .await
-            .map_err(|e| Status::internal(e.to_string()))?
-            .ok_or_else(|| Status::not_found(format!("operation {} was not found", op_id)))?;
+            .map_err(|e| map_error(NodeAgentError::Internal { message: e.to_string() }))?
+            .ok_or_else(|| {
+                status_from_operation_error(
+                    tonic::Code::NotFound,
+                    OperationError {
+                        code: BusinessErrorCode::OperationNotFound as i32,
+                        category: ErrorCategory::NotFound as i32,
+                        message: format!("operation {} was not found", op_id),
+                        retryable: false,
+                        params: HashMap::new(),
+                    },
+                )
+            })?;
         Ok(Response::new(GetOperationResponse {
             operation: Some(map_operation(operation)),
         }))
@@ -392,20 +408,37 @@ where
 }
 
 fn map_error(error: NodeAgentError) -> Status {
-    match error {
-        NodeAgentError::InvalidRequest { message } => Status::invalid_argument(message),
-        NodeAgentError::InstanceNotFound { instance_id } => Status::not_found(instance_id),
-        NodeAgentError::BuildPreparationFailed { message }
-        | NodeAgentError::InstanceRuntimeFailed { message }
-        | NodeAgentError::Internal { message }
-        | NodeAgentError::ImageRepositoryRequestFail { message }
-        | NodeAgentError::DBOperationFail { message }
-        | NodeAgentError::EmptySnapShotFail { message }
-        | NodeAgentError::S3DownloadFail { message }
-        | NodeAgentError::S3UploadFail { message } => Status::internal(message),
-        NodeAgentError::ConatinerFail { .. } => Status::internal("container error".to_string()),
-        NodeAgentError::PathError { message } => Status::internal(message),
-        NodeAgentError::GameBuildError { message } => Status::internal(message),
+    let code = match &error {
+        NodeAgentError::InvalidRequest { .. } => tonic::Code::InvalidArgument,
+        NodeAgentError::InstanceNotFound { .. } => tonic::Code::NotFound,
+        _ => tonic::Code::Internal,
+    };
+    status_from_operation_error(code, error.to_operation_error())
+}
+
+/// 将业务错误详情打包进 gRPC Status 的 details(rich error model)。
+/// 客户端可用 google.rpc.Status.details 反序列化出 nodeagent.v1.ErrorDetail。
+fn status_from_operation_error(code: tonic::Code, detail: OperationError) -> Status {
+    let proto_detail = map_operation_error(detail);
+    let rpc_status = crate::proto::google::rpc::Status {
+        code: code as i32,
+        message: proto_detail.message.clone(),
+        details: vec![prost_types::Any {
+            type_url: "type.googleapis.com/nodeagent.v1.ErrorDetail".to_string(),
+            value: proto_detail.encode_to_vec(),
+        }],
+    };
+    Status::with_details(code, proto_detail.message, rpc_status.encode_to_vec().into())
+}
+
+/// 将 domain 层 OperationError 映射为 proto 的 ErrorDetail。
+fn map_operation_error(value: OperationError) -> ProtoErrorDetail {
+    ProtoErrorDetail {
+        code: value.code,
+        category: value.category,
+        message: value.message,
+        retryable: value.retryable,
+        params: value.params,
     }
 }
 
@@ -521,6 +554,7 @@ fn map_operation(value: NodeOperation) -> ProtoNodeOperation {
         message: value.message,
         started_at: value.started_at.to_rfc3339(),
         finished_at: value.finished_at.map(|v| v.to_rfc3339()),
+        error: value.error.map(map_operation_error),
     }
 }
 

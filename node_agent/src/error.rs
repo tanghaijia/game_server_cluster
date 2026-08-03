@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 
+use crate::domain::OperationError;
 use crate::ports::ContainerError;
+use crate::proto::node_agent::{BusinessErrorCode, ErrorCategory};
 
 #[derive(Debug, Error)]
 pub enum NodeAgentError {
@@ -33,4 +37,110 @@ pub enum NodeAgentError {
     PathError { message: String },
     #[error("Game Build error: {message}")]
     GameBuildError { message: String },
+}
+
+impl NodeAgentError {
+    /// 将领域错误映射为结构化业务错误详情(OperationError)。
+    ///
+    /// 数值字段与 error.proto 的 BusinessErrorCode / ErrorCategory 严格对应。
+    /// `retryable` 决定调用方是否可自动重试:基础设施/超时类可重试,参数/资源缺失类不可重试。
+    pub fn to_operation_error(&self) -> OperationError {
+        let (code, category, retryable) = match self {
+            NodeAgentError::InvalidRequest { .. } => (
+                BusinessErrorCode::InvalidArgument,
+                ErrorCategory::InvalidRequest,
+                false,
+            ),
+            NodeAgentError::InstanceNotFound { .. } => (
+                BusinessErrorCode::InstanceNotFound,
+                ErrorCategory::NotFound,
+                false,
+            ),
+            NodeAgentError::BuildPreparationFailed { .. } => (
+                BusinessErrorCode::BuildPrepareFailed,
+                ErrorCategory::Internal,
+                false,
+            ),
+            NodeAgentError::InstanceRuntimeFailed { .. } => (
+                BusinessErrorCode::InstanceRuntimeFailed,
+                ErrorCategory::Internal,
+                false,
+            ),
+            NodeAgentError::Internal { .. } => (
+                BusinessErrorCode::InternalError,
+                ErrorCategory::Internal,
+                false,
+            ),
+            NodeAgentError::ImageRepositoryRequestFail { .. } => (
+                BusinessErrorCode::ImagePullFailed,
+                ErrorCategory::Infrastructure,
+                true,
+            ),
+            NodeAgentError::DBOperationFail { .. } => (
+                BusinessErrorCode::DbOperationFailed,
+                ErrorCategory::Internal,
+                true,
+            ),
+            NodeAgentError::EmptySnapShotFail { .. } => (
+                BusinessErrorCode::SnapshotEmpty,
+                ErrorCategory::NotFound,
+                false,
+            ),
+            NodeAgentError::S3DownloadFail { .. } => (
+                BusinessErrorCode::S3DownloadFailed,
+                ErrorCategory::Infrastructure,
+                true,
+            ),
+            NodeAgentError::S3UploadFail { .. } => (
+                BusinessErrorCode::S3UploadFailed,
+                ErrorCategory::Infrastructure,
+                true,
+            ),
+            NodeAgentError::ConatinerFail { source } => match source {
+                ContainerError::NotFound(_) => (
+                    BusinessErrorCode::ContainerError,
+                    ErrorCategory::NotFound,
+                    false,
+                ),
+                ContainerError::InsufficientResources => (
+                    BusinessErrorCode::ResourceInsufficient,
+                    ErrorCategory::Infrastructure,
+                    true,
+                ),
+                ContainerError::IOError { .. } => (
+                    BusinessErrorCode::ContainerError,
+                    ErrorCategory::Infrastructure,
+                    true,
+                ),
+                ContainerError::Unknown => (
+                    BusinessErrorCode::ContainerError,
+                    ErrorCategory::Internal,
+                    false,
+                ),
+            },
+            NodeAgentError::PathError { .. } => (
+                BusinessErrorCode::InternalError,
+                ErrorCategory::Internal,
+                false,
+            ),
+            NodeAgentError::GameBuildError { .. } => (
+                BusinessErrorCode::BuildPrepareFailed,
+                ErrorCategory::Internal,
+                false,
+            ),
+        };
+
+        let mut params = HashMap::new();
+        if let NodeAgentError::InstanceNotFound { instance_id } = self {
+            params.insert("instance_id".to_string(), instance_id.clone());
+        }
+
+        OperationError {
+            code: code as i32,
+            category: category as i32,
+            message: self.to_string(),
+            retryable,
+            params,
+        }
+    }
 }

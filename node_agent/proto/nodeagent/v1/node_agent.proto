@@ -4,6 +4,7 @@ package nodeagent.v1;
 import "nodeagent/v1/game_cache.proto";
 import "nodeagent/v1/instance.proto";
 import "nodeagent/v1/port_mapping.proto";
+import "nodeagent/v1/error.proto";
 
 service NodeAgentService {
   rpc PrepareGameBuild(PrepareGameBuildRequest) returns (PrepareGameBuildResponse);
@@ -228,6 +229,8 @@ message NodeOperation {
   optional string message = 6;
   string started_at = 7;
   optional string finished_at = 8;
+  // 结构化业务错误:status == OPERATION_STATUS_FAILED 时填充,message 保留作为兜底文本
+  optional ErrorDetail error = 9;
 }
 
 message NodeHeartbeat {
