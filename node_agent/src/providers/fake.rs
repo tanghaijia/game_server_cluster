@@ -13,7 +13,8 @@ use crate::{
         ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation,
         ContainerStatus, Endpoint, Game, GameBuild, GameCache, GameCacheStatus, GameContainer,
         GameInstance, GameInstanceStatus, Image, InstanceId, InstanceRuntimeRecord, LocalGameBuild,
-        ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId, RemoteImage, RuntimeState,
+        ModManifest, NodeAgentInfo, NodeId, NodeOperation, OperationId, OperationKind,
+        OperationStatus, RemoteImage, RuntimeState,
         SnapshotCaptureRequest, SnapshotRecord, SnapshotRestorePlan, SnapshotRestoreRequest,
         SnapshotRestoreResult, StartInstanceArgument, instance_data_path,
     },
@@ -134,6 +135,33 @@ impl OperationRepository for InMemoryOperationRepository {
                 message: "operation repository lock poisoned".to_string(),
             })?;
         Ok(operations.get(&operation_id.0).cloned())
+    }
+
+    async fn find_active(
+        &self,
+        kind: OperationKind,
+        key: &str,
+    ) -> Result<Option<NodeOperation>, NodeAgentError> {
+        let operations = self
+            .operations
+            .lock()
+            .map_err(|_| NodeAgentError::Internal {
+                message: "operation repository lock poisoned".to_string(),
+            })?;
+        for op in operations.values() {
+            if op.kind != kind
+                || op.status == OperationStatus::Succeeded
+                || op.status == OperationStatus::Failed
+            {
+                continue;
+            }
+            let matches = op.instance_id.as_ref().is_some_and(|id| id.0 == key)
+                || op.build_id.as_ref().is_some_and(|b| b == key);
+            if matches {
+                return Ok(Some(op.clone()));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -614,6 +642,20 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
             .lock()
             .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
         Ok(store.values().cloned().collect())
+    }
+
+    async fn insert_if_absent(&self, game_cache: &GameCache) -> anyhow::Result<bool> {
+        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        if store.contains_key(&key) {
+            Ok(false)
+        } else {
+            store.insert(key, game_cache.clone());
+            Ok(true)
+        }
     }
 }
 

@@ -189,6 +189,19 @@ where
     ) -> Result<Response<RestoreSnapshotResponse>, Status> {
         let request = request.into_inner();
 
+        // 幂等:同实例已有进行中的 restore 操作则复用,不重复入队
+        if let Some(existing) = self
+            .operations
+            .find_active(OperationKind::RestoreSnapshot, &request.instance_id)
+            .await
+            .map_err(|e| map_error(NodeAgentError::Internal { message: e.to_string() }))?
+        {
+            return Ok(Response::new(RestoreSnapshotResponse {
+                operation: Some(map_operation(existing)),
+                result: None,
+            }));
+        }
+
         // 生成operation
         let operation = NodeOperation {
             operation_id: OperationId::new(),

@@ -547,6 +547,14 @@ pub async fn enqueue_prepare_build(
     ops: &Arc<dyn OperationRepository>,
     prep: BuildPreparation,
 ) -> NodeOperation {
+    // 幂等:同 build 已有进行中的 prepare 操作则复用,不重复入队
+    if let Ok(Some(existing)) = ops
+        .find_active(OperationKind::PrepareBuild, &prep.build_id)
+        .await
+    {
+        return existing;
+    }
+
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::PrepareBuild,
@@ -578,6 +586,14 @@ pub async fn enqueue_start_instance(
     game_instance_repository: &Arc<dyn GameInstanceRepository>,
     argument: StartInstanceArgument,
 ) -> NodeOperation {
+    // 幂等:同实例已有进行中的 start 操作则复用,不重复入队
+    if let Ok(Some(existing)) = ops
+        .find_active(OperationKind::StartInstance, &argument.instance_id.0)
+        .await
+    {
+        return existing;
+    }
+
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::StartInstance,
@@ -619,6 +635,11 @@ pub async fn enqueue_stop_instance(
     ops: &Arc<dyn OperationRepository>,
     instance_id: &str,
 ) -> NodeOperation {
+    // 幂等:同实例已有进行中的 stop 操作则复用,不重复入队
+    if let Ok(Some(existing)) = ops.find_active(OperationKind::StopInstance, instance_id).await {
+        return existing;
+    }
+
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::StopInstance,
@@ -649,6 +670,14 @@ pub async fn enqueue_restart_instance(
     ops: &Arc<dyn OperationRepository>,
     instance_id: &str,
 ) -> NodeOperation {
+    // 幂等:同实例已有进行中的 restart 操作则复用,不重复入队
+    if let Ok(Some(existing)) = ops
+        .find_active(OperationKind::RestartInstance, instance_id)
+        .await
+    {
+        return existing;
+    }
+
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::RestartInstance,
@@ -708,6 +737,14 @@ pub async fn enqueue_clean_instance(
     ops: &Arc<dyn OperationRepository>,
     instance_id: &str,
 ) -> NodeOperation {
+    // 幂等:同实例已有进行中的 clean 操作则复用,不重复入队
+    if let Ok(Some(existing)) = ops
+        .find_active(OperationKind::CleanInstance, instance_id)
+        .await
+    {
+        return existing;
+    }
+
     let op = NodeOperation {
         operation_id: OperationId::new(),
         kind: OperationKind::CleanInstance,

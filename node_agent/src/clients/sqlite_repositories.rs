@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 
 use crate::domain::{
     GameCache, GameContainer, GameInstance, LocalGameBuild, NodeOperation, OperationId,
+    OperationKind, OperationStatus,
 };
 use crate::error::NodeAgentError;
 use crate::ports::{
@@ -106,6 +107,44 @@ impl OperationRepository for SqliteOperationRepository {
             }
             None => Ok(None),
         }
+    }
+
+    async fn find_active(
+        &self,
+        kind: OperationKind,
+        key: &str,
+    ) -> Result<Option<NodeOperation>, NodeAgentError> {
+        let rows: Vec<(String,)> = sqlx::query_as(&format!(
+            "SELECT value FROM {TABLE_OPERATION}"
+        ))
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| NodeAgentError::DBOperationFail {
+            message: format!("find active operation failed: {e}"),
+        })?;
+
+        for (json,) in rows {
+            let op: NodeOperation = match serde_json::from_str(&json) {
+                Ok(op) => op,
+                Err(e) => {
+                    log::error!("deserialize operation failed: {e}");
+                    continue;
+                }
+            };
+            // 仅匹配进行中(PENDING/RUNNING)的同类操作
+            if op.kind != kind
+                || op.status == OperationStatus::Succeeded
+                || op.status == OperationStatus::Failed
+            {
+                continue;
+            }
+            let matches = op.instance_id.as_ref().is_some_and(|id| id.0 == key)
+                || op.build_id.as_ref().is_some_and(|b| b == key);
+            if matches {
+                return Ok(Some(op));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -322,6 +361,20 @@ impl GameCacheRepository for SqliteGameCacheRepository {
         rows.iter()
             .map(|(json,)| serde_json::from_str::<GameCache>(json).map_err(Into::into))
             .collect()
+    }
+
+    async fn insert_if_absent(&self, game_cache: &GameCache) -> anyhow::Result<bool> {
+        let json = serde_json::to_string(game_cache)?;
+        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let result = sqlx::query(&format!(
+            "INSERT OR IGNORE INTO {TABLE_GAME_CACHE} (key, value) VALUES (?1, ?2)"
+        ))
+        .bind(&key)
+        .bind(&json)
+        .execute(&*self.pool)
+        .await?;
+        // rows_affected == 1 表示本次真正插入(key 原本不存在);0 表示 key 已存在
+        Ok(result.rows_affected() == 1)
     }
 }
 

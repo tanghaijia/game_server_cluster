@@ -213,49 +213,70 @@ where
     ) -> Result<DomainGameCache, NodeAgentError> {
         let now = Utc::now();
 
-        match self
+        // 1) 已有可用/下载中的缓存,直接返回(幂等)
+        if let Ok(Some(c)) = self
             .game_cache_repos
             .get(&game_id.to_string(), &branch_name.to_string())
             .await
         {
-            Ok(Some(c))
-                if matches!(
-                    c.status,
-                    DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
-                ) =>
-            {
-                Ok(c)
+            if matches!(
+                c.status,
+                DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
+            ) {
+                return Ok(c);
             }
-            _ => {
-                let game = self.asset_service.get_game(game_id).await?;
+        }
 
-                let mut path = PathBuf::from(GAME_CACHE_SERVER_ROOT_PATH);
-                path.push(game.id);
-                path.push(branch_name);
-                let path_str = path.to_str().ok_or_else(|| {
-                    let error = format!("{} {} path error.", game.name, branch_name);
-                    log::error!("{}", error);
-                    NodeAgentError::Internal { message: error }
-                })?;
+        let game = self.asset_service.get_game(game_id).await?;
 
-                let cache = DomainGameCache {
-                    game_id: game_id.to_string(),
-                    branch_name: branch_name.to_string(),
-                    status: DomainGameCacheStatus::Downloading,
-                    path: Some(path_str.to_string()),
-                    download_progress: None,
-                    create_time: now,
-                    update_time: now,
-                };
-                self.game_cache_repos
-                    .save(&cache)
-                    .await
-                    .map_err(|e| NodeAgentError::Internal {
-                        message: format!("save game_cache failed: {e}"),
-                    })?;
+        let mut path = PathBuf::from(GAME_CACHE_SERVER_ROOT_PATH);
+        path.push(game.id);
+        path.push(branch_name);
+        let path_str = path.to_str().ok_or_else(|| {
+            let error = format!("{} {} path error.", game.name, branch_name);
+            log::error!("{}", error);
+            NodeAgentError::Internal { message: error }
+        })?;
+
+        let cache = DomainGameCache {
+            game_id: game_id.to_string(),
+            branch_name: branch_name.to_string(),
+            status: DomainGameCacheStatus::Downloading,
+            path: Some(path_str.to_string()),
+            download_progress: None,
+            create_time: now,
+            update_time: now,
+        };
+
+        // 2) 原子 get-or-create:仅"首个"插入者负责启动下载,防并发双下载
+        match self.game_cache_repos.insert_if_absent(&cache).await {
+            Ok(true) => {
                 self.steam_service.start_download(cache.clone()).await;
                 Ok(cache)
             }
+            Ok(false) => {
+                // 已存在:可能是并发刚插入,或残留 Removed/Unavailable
+                if let Ok(Some(existing)) = self
+                    .game_cache_repos
+                    .get(&game_id.to_string(), &branch_name.to_string())
+                    .await
+                {
+                    if matches!(
+                        existing.status,
+                        DomainGameCacheStatus::Removed | DomainGameCacheStatus::Unavailable
+                    ) {
+                        // 残留清理态:覆盖为 Downloading 重新下载(竞态窗口极小)
+                        let _ = self.game_cache_repos.save(&cache).await;
+                        self.steam_service.start_download(cache.clone()).await;
+                        return Ok(cache);
+                    }
+                    return Ok(existing);
+                }
+                Ok(cache)
+            }
+            Err(e) => Err(NodeAgentError::Internal {
+                message: format!("save game_cache failed: {e}"),
+            }),
         }
     }
 
