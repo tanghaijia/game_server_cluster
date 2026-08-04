@@ -437,6 +437,7 @@ type CacheGameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
 	BranchName    string                 `protobuf:"bytes,2,opt,name=branch_name,json=branchName,proto3" json:"branch_name,omitempty"`
+	BuildId       string                 `protobuf:"bytes,3,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -481,6 +482,13 @@ func (x *CacheGameRequest) GetGameId() string {
 func (x *CacheGameRequest) GetBranchName() string {
 	if x != nil {
 		return x.BranchName
+	}
+	return ""
+}
+
+func (x *CacheGameRequest) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
 	}
 	return ""
 }
@@ -2378,11 +2386,12 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\"R\n" +
 	"\x15CleanInstanceResponse\x129\n" +
-	"\toperation\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeOperationR\toperation\"L\n" +
+	"\toperation\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeOperationR\toperation\"g\n" +
 	"\x10CacheGameRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1f\n" +
 	"\vbranch_name\x18\x02 \x01(\tR\n" +
-	"branchName\"K\n" +
+	"branchName\x12\x19\n" +
+	"\bbuild_id\x18\x03 \x01(\tR\abuildId\"K\n" +
 	"\x11CacheGameResponse\x126\n" +
 	"\n" +
 	"game_cache\x18\x01 \x01(\v2\x17.nodeagent.v1.GameCacheR\tgameCache\"4\n" +

@@ -210,20 +210,27 @@ where
         &self,
         game_id: &str,
         branch_name: &str,
+        build_id: &str,
     ) -> Result<DomainGameCache, NodeAgentError> {
         let now = Utc::now();
 
-        // 1) 已有可用/下载中的缓存,直接返回(幂等)
-        if let Ok(Some(c)) = self
+        // 1) 查询现有缓存记录
+        let existing = self
             .game_cache_repos
             .get(&game_id.to_string(), &branch_name.to_string())
             .await
-        {
-            if matches!(
-                c.status,
-                DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
-            ) {
-                return Ok(c);
+            .ok()
+            .flatten();
+
+        // 1.1) 已存在且 build_id 相同,并且处于可用/下载中 → 幂等返回,无需重新下载
+        if let Some(c) = &existing {
+            if c.build_id == build_id
+                && matches!(
+                    c.status,
+                    DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
+                )
+            {
+                return Ok(c.clone());
             }
         }
 
@@ -241,6 +248,7 @@ where
         let cache = DomainGameCache {
             game_id: game_id.to_string(),
             branch_name: branch_name.to_string(),
+            build_id: build_id.to_string(),
             status: DomainGameCacheStatus::Downloading,
             path: Some(path_str.to_string()),
             download_progress: None,
@@ -255,22 +263,27 @@ where
                 Ok(cache)
             }
             Ok(false) => {
-                // 已存在:可能是并发刚插入,或残留 Removed/Unavailable
+                // 已存在:可能是并发刚插入同一 build,或残留旧版本/清理态
                 if let Ok(Some(existing)) = self
                     .game_cache_repos
                     .get(&game_id.to_string(), &branch_name.to_string())
                     .await
                 {
-                    if matches!(
-                        existing.status,
-                        DomainGameCacheStatus::Removed | DomainGameCacheStatus::Unavailable
-                    ) {
-                        // 残留清理态:覆盖为 Downloading 重新下载(竞态窗口极小)
-                        let _ = self.game_cache_repos.save(&cache).await;
-                        self.steam_service.start_download(cache.clone()).await;
-                        return Ok(cache);
+                    // 并发方已插入相同 build 且可用/下载中 → 幂等返回
+                    if existing.build_id == build_id
+                        && matches!(
+                            existing.status,
+                            DomainGameCacheStatus::Available
+                                | DomainGameCacheStatus::Downloading
+                        )
+                    {
+                        return Ok(existing);
                     }
-                    return Ok(existing);
+                    // build_id 不同(新版本)或残留清理态:覆盖为 Downloading 重新下载
+                    // steamcmd 会以 force_install_dir + validate 覆盖旧文件,无需手动清理
+                    let _ = self.game_cache_repos.save(&cache).await;
+                    self.steam_service.start_download(cache.clone()).await;
+                    return Ok(cache);
                 }
                 Ok(cache)
             }

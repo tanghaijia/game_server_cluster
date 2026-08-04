@@ -394,7 +394,7 @@ where
         let req = request.into_inner();
         let cache = self
             .service
-            .cache_game(&req.game_id, &req.branch_name)
+            .cache_game(&req.game_id, &req.branch_name, &req.build_id)
             .await
             .map_err(map_error)?;
 
@@ -661,6 +661,7 @@ fn map_domain_cache_to_proto(cache: DomainGameCache) -> node_agent::GameCache {
     node_agent::GameCache {
         game_id: cache.game_id,
         branch_name: cache.branch_name,
+        build_id: cache.build_id,
         status: map_domain_cache_status_to_proto(cache.status),
         path: cache.path,
         download_progress: cache.download_progress,

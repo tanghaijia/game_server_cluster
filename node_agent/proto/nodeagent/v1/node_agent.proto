@@ -48,6 +48,7 @@ message CleanInstanceResponse {
 message CacheGameRequest {
     string game_id = 1;
     string branch_name = 2;
+    string build_id = 3;
 }
 
 message CacheGameResponse {

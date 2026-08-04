@@ -78,6 +78,7 @@ type GameCache struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	GameId           string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
 	BranchName       string                 `protobuf:"bytes,2,opt,name=branch_name,json=branchName,proto3" json:"branch_name,omitempty"`
+	BuildId          string                 `protobuf:"bytes,8,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	Status           GameCacheStatus        `protobuf:"varint,3,opt,name=status,proto3,enum=nodeagent.v1.GameCacheStatus" json:"status,omitempty"`
 	Path             *string                `protobuf:"bytes,4,opt,name=path,proto3,oneof" json:"path,omitempty"`
 	DownloadProgress *float32               `protobuf:"fixed32,5,opt,name=download_progress,json=downloadProgress,proto3,oneof" json:"download_progress,omitempty"`
@@ -131,6 +132,13 @@ func (x *GameCache) GetBranchName() string {
 	return ""
 }
 
+func (x *GameCache) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
+	}
+	return ""
+}
+
 func (x *GameCache) GetStatus() GameCacheStatus {
 	if x != nil {
 		return x.Status
@@ -170,11 +178,12 @@ var File_nodeagent_v1_game_cache_proto protoreflect.FileDescriptor
 
 const file_nodeagent_v1_game_cache_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnodeagent/v1/game_cache.proto\x12\fnodeagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\x02\n" +
+	"\x1dnodeagent/v1/game_cache.proto\x12\fnodeagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfb\x02\n" +
 	"\tGameCache\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1f\n" +
 	"\vbranch_name\x18\x02 \x01(\tR\n" +
-	"branchName\x125\n" +
+	"branchName\x12\x19\n" +
+	"\bbuild_id\x18\b \x01(\tR\abuildId\x125\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1d.nodeagent.v1.GameCacheStatusR\x06status\x12\x17\n" +
 	"\x04path\x18\x04 \x01(\tH\x00R\x04path\x88\x01\x01\x120\n" +
 	"\x11download_progress\x18\x05 \x01(\x02H\x01R\x10downloadProgress\x88\x01\x01\x12;\n" +
