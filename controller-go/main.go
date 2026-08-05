@@ -61,6 +61,7 @@ func main() {
 	nodeRepo := repogorm.NewNodeRepo(db)
 	gameContainerConfigRepo := repogorm.NewGameContainerConfigRepo(db)
 	containerPortMappingRepo := repogorm.NewContainerPortMappingRepo(db)
+	steamBranchRepo := repogorm.NewSteamBranchRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -75,6 +76,7 @@ func main() {
 	}
 	defer assetConn.Close()
 	assetClient := assetservice.NewAssetServiceFaceClient(assetConn)
+	businessClient := assetservice.NewBusinessServiceFaceClient(assetConn)
 	slog.Info("AssetService 客户端创建成功", "addr", cfg.AssetServiceAddr)
 
 	// NodeAgent (按需懒加载，通过 ClientRegistry 管理)
@@ -116,6 +118,7 @@ func main() {
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
 	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
+	_ = biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo)
 
 	// ---------------------------------------------------------------
 	// 8. 启动 dispatcher
