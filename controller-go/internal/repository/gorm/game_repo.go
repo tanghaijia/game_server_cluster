@@ -27,3 +27,12 @@ func (r *GameRepo) GetByID(ctx context.Context, id string) (*entity.Game, error)
 	}
 	return &game, nil
 }
+
+func (r *GameRepo) ListAll(ctx context.Context) ([]*entity.Game, error) {
+	var games []*entity.Game
+	err := r.db.WithContext(ctx).Find(&games).Error
+	if err != nil {
+		return nil, err
+	}
+	return games, nil
+}

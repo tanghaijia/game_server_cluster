@@ -21,6 +21,9 @@ type Config struct {
 
 	// HTTP
 	HTTPPort int
+
+	// GameCache 后台循环（秒）
+	GameCacheReconcileInterval int
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -34,6 +37,8 @@ func Load() *Config {
 		DBSchema:         getEnv("DB_SCHEMA", "public"),
 		AssetServiceAddr: getEnv("ASSET_SERVICE_ADDR", "localhost:9091"),
 		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
+		// 默认 60 秒执行一轮分支同步 + 缓存检查
+		GameCacheReconcileInterval: getEnvInt("GAME_CACHE_RECONCILE_INTERVAL", 60),
 	}
 }
 

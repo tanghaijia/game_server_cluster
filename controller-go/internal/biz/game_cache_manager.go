@@ -25,6 +25,7 @@ type GameCacheManager struct {
 	steamBranchRepo  repository.SteamBranchRepository
 	nodeAgentRepo    repository.NodeAgentRepository
 	nodeRepo         repository.NodeRepository
+	gameRepo         repository.GameRepository
 }
 
 func NewGameCacheManager(
@@ -34,6 +35,7 @@ func NewGameCacheManager(
 	steamBranchRepo repository.SteamBranchRepository,
 	nodeAgentRepo repository.NodeAgentRepository,
 	nodeRepo repository.NodeRepository,
+	gameRepo repository.GameRepository,
 ) *GameCacheManager {
 	return &GameCacheManager{
 		nodeAgentClients: nodeAgentClients,
@@ -42,6 +44,7 @@ func NewGameCacheManager(
 		steamBranchRepo:  steamBranchRepo,
 		nodeAgentRepo:    nodeAgentRepo,
 		nodeRepo:         nodeRepo,
+		gameRepo:         gameRepo,
 	}
 }
 
@@ -174,7 +177,11 @@ func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
 		BranchName: branchName,
 	})
 	if err != nil {
-		return fmt.Errorf("get cache game from node_agent %s: %w", nodeAgentId, err)
+		// 缓存不存在 → 直接启动下载；其他错误原样返回
+		if !isGameCacheNotFound(extractErrorDetail(err)) {
+			return fmt.Errorf("get cache game from node_agent %s: %w", nodeAgentId, err)
+		}
+		return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
 	}
 	if resp == nil || resp.GameCache == nil {
 		return errors.New("node_agent returned empty game cache")
@@ -222,6 +229,12 @@ func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
 	}
 
 	// 5. 调用 cachegame 启动下载
+	return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
+}
+
+// triggerDownload 调用 NodeAgent 的 CacheGame 启动下载
+func (g *GameCacheManager) triggerDownload(ctx context.Context, client *nodeagent.NodeAgentFaceClient,
+	nodeAgentId, gameId, branchName string, lastBuildId uint64) error {
 	if _, err := client.CacheGame(ctx, &nodeagentv1.CacheGameRequest{
 		GameId:     gameId,
 		BranchName: branchName,
@@ -234,4 +247,83 @@ func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
 		"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
 		"buildId", lastBuildId)
 	return nil
+}
+
+// isGameCacheNotFound 判断 NodeAgent 返回的错误是否为“游戏缓存不存在”
+// （node_agent 对缺失缓存返回 code=BUILD_CACHE_MISS + category=NOT_FOUND）
+func isGameCacheNotFound(detail *nodeagentv1.ErrorDetail) bool {
+	if detail == nil {
+		return false
+	}
+	return detail.GetCategory() == nodeagentv1.ErrorCategory_ERROR_CATEGORY_NOT_FOUND ||
+		detail.GetCode() == nodeagentv1.BusinessErrorCode_BUSINESS_ERROR_CODE_BUILD_CACHE_MISS
+}
+
+// Start 启动后台循环：周期性执行分支同步 + Enable 分支缓存检查/更新。
+// interval 每轮间隔；启动后立即执行一轮追平存量。
+func (g *GameCacheManager) Start(ctx context.Context, interval time.Duration) {
+	slog.Info("[GameCacheManager] 后台循环已启动", "interval", interval.String())
+	go g.loop(ctx, interval)
+}
+
+func (g *GameCacheManager) loop(ctx context.Context, interval time.Duration) {
+	g.reconcileOnce(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("[GameCacheManager] 后台循环退出")
+			return
+		case <-ticker.C:
+			g.reconcileOnce(ctx)
+		}
+	}
+}
+
+// reconcileOnce 执行一轮完整对账：
+// 1) 同步分支（SyncAndRecordBranch）
+// 2) 对每个 Enable 分支，把最新版本下载/更新到所有已启用节点（CheckAndUpdate）
+// 单个 game 或单个（分支, 节点）失败只记日志，不中断整轮。
+func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
+	nodeAgentIDs, err := g.nodeAgentRepo.ListEnabledIDs(ctx)
+	if err != nil {
+		slog.Error("[GameCacheManager] 查询已启用节点失败", "err", err)
+		return
+	}
+	if len(nodeAgentIDs) == 0 {
+		slog.Info("[GameCacheManager] 无已启用节点，跳过本轮")
+		return
+	}
+
+	games, err := g.gameRepo.ListAll(ctx)
+	if err != nil {
+		slog.Error("[GameCacheManager] 查询游戏列表失败", "err", err)
+		return
+	}
+
+	for _, game := range games {
+		if err := g.SyncAndRecordBranch(ctx, game.ID); err != nil {
+			slog.Error("[GameCacheManager] 分支同步失败", "gameId", game.ID, "err", err)
+			continue
+		}
+		branches, err := g.steamBranchRepo.ListByGame(ctx, game.ID)
+		if err != nil {
+			slog.Error("[GameCacheManager] 查询分支失败", "gameId", game.ID, "err", err)
+			continue
+		}
+		for _, branch := range branches {
+			if branch.Status != entity.Enable {
+				continue
+			}
+			for _, nodeAgentId := range nodeAgentIDs {
+				if err := g.CheckAndUpdate(ctx, game.ID, branch.BranchName, branch.LastBuildId, nodeAgentId); err != nil {
+					slog.Warn("[GameCacheManager] 缓存检查/更新失败",
+						"gameId", game.ID, "branchName", branch.BranchName,
+						"nodeAgentId", nodeAgentId, "err", err)
+					continue
+				}
+			}
+		}
+	}
 }

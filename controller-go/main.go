@@ -118,7 +118,7 @@ func main() {
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
 	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
-	_ = biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo)
+	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
 
 	// ---------------------------------------------------------------
 	// 8. 启动 dispatcher
@@ -128,6 +128,9 @@ func main() {
 
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
+
+	// 启动 GameCache 后台循环（分支同步 + Enable 分支缓存下载/更新）
+	gameCacheManager.Start(ctx, time.Duration(cfg.GameCacheReconcileInterval)*time.Second)
 
 	// 恢复上次未完成的实例调度
 	if err := dispatcher.Recover(ctx); err != nil {

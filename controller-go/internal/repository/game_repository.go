@@ -9,4 +9,5 @@ import (
 type GameRepository interface {
 	Save(ctx context.Context, instance *entity.Game) error
 	GetByID(ctx context.Context, id string) (*entity.Game, error)
+	ListAll(ctx context.Context) ([]*entity.Game, error)
 }

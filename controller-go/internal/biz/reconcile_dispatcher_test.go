@@ -66,6 +66,10 @@ func (m *mockGameRepo) GetByID(ctx context.Context, id string) (*entity.Game, er
 	return &entity.Game{ID: id, ContainerConfigID: "cfg-1"}, nil
 }
 
+func (m *mockGameRepo) ListAll(ctx context.Context) ([]*entity.Game, error) {
+	return nil, nil
+}
+
 var _ repository.GameRepository = (*mockGameRepo)(nil)
 
 type mockGameContainerConfigRepo struct{}
