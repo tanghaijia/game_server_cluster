@@ -188,21 +188,33 @@ func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
 	}
 	gc := resp.GameCache
 
-	// 3. 解析 NodeAgent 上的 build_id 用于版本比较
-	nodeBuildId, err := strconv.ParseUint(gc.GetBuildId(), 10, 64)
-	if err != nil {
-		return fmt.Errorf("parse node build_id %q: %w", gc.GetBuildId(), err)
-	}
-
-	// 4. 按状态 + 版本判断是否需要启动下载
-	shouldDownload := false
+	// 3. 先按状态判断：下载中幂等成功、不可用报错（无需比较版本）
 	switch gc.GetStatus() {
 	case nodeagentv1.GameCacheStatus_DOWNLOADING:
-		// 已在下载中 → 幂等成功
+		slog.Info("[GameCacheManager] GameCache 下载中",
+			"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+			"status", gc.GetStatus().String())
+		return nil
+	case nodeagentv1.GameCacheStatus_UNAVAILABLE:
+		return errors.New("node game cache is unavailable")
+	}
+
+	// 4. 解析 NodeAgent 上的 build_id 用于版本比较。
+	//    为空/非数字（如旧版本遗留的无 build_id 记录）→ 视为版本未知，触发下载修正
+	nodeBuildId, err := strconv.ParseUint(gc.GetBuildId(), 10, 64)
+	if err != nil {
+		slog.Warn("[GameCacheManager] 节点 GameCache build_id 为空或非法，触发重新下载",
+			"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+			"buildId", gc.GetBuildId(), "status", gc.GetStatus().String())
+		return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
+	}
+
+	// 5. 按版本判断是否需要启动下载（至此仅剩 AVAILABLE / REMOVED）
+	switch gc.GetStatus() {
 	case nodeagentv1.GameCacheStatus_AVAILABLE:
 		switch {
 		case nodeBuildId < lastBuildId:
-			shouldDownload = true
+			return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
 		case nodeBuildId == lastBuildId:
 			// 已是最新且可用
 		default:
@@ -211,25 +223,16 @@ func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
 	case nodeagentv1.GameCacheStatus_REMOVED:
 		switch {
 		case nodeBuildId <= lastBuildId:
-			shouldDownload = true
+			return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
 		default:
 			return fmt.Errorf("node game cache build_id %d is newer than latest %d", nodeBuildId, lastBuildId)
 		}
-	case nodeagentv1.GameCacheStatus_UNAVAILABLE:
-		return errors.New("node game cache is unavailable")
-	default:
-		return fmt.Errorf("unexpected node game cache status %s", gc.GetStatus().String())
 	}
 
-	if !shouldDownload {
-		slog.Info("[GameCacheManager] GameCache 已就绪，无需下载",
-			"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
-			"buildId", gc.GetBuildId(), "status", gc.GetStatus().String())
-		return nil
-	}
-
-	// 5. 调用 cachegame 启动下载
-	return g.triggerDownload(ctx, client, nodeAgentId, gameId, branchName, lastBuildId)
+	slog.Info("[GameCacheManager] GameCache 已就绪，无需下载",
+		"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+		"buildId", gc.GetBuildId(), "status", gc.GetStatus().String())
+	return nil
 }
 
 // triggerDownload 调用 NodeAgent 的 CacheGame 启动下载
