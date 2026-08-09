@@ -449,6 +449,15 @@ where
                 .map_err(|e| NodeAgentError::PathError {
                     message: e.to_string(),
                 })?;
+
+        // 预创建实例数据目录：全新实例没有快照时宿主目录不存在，
+        // 若交给 Docker 自动创建会以 root 所有，导致容器（以 node_agent 用户运行）无法写入 /data。
+        // 容器 user 与 node_agent 同 uid:gid，因此此处以 node_agent 身份创建的目录容器即可写。
+        tokio::fs::create_dir_all(&data_host_path)
+            .await
+            .map_err(|e| NodeAgentError::PathError {
+                message: format!("create instance data dir {} failed: {}", data_host_path, e),
+            })?;
         let path_mapping = ContainerFilePathMappingHost {
             host_path: HostFilePath {
                 path: data_host_path,
