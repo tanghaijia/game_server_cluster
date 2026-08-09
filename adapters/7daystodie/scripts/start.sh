@@ -12,6 +12,12 @@ USER_DATA="${SDTD_USER_DATA:-/data/7DaysToDie}"
 TELNET_PORT="${SDTD_TELNET_PORT:-8081}"
 BIN="${SDTD_BIN:-}"
 
+# Unity/7DTD 需要可写的 HOME：
+# 容器以 node_agent 的非 root uid 运行，/etc/passwd 无对应条目时 Docker 不会设置 HOME，
+# Unity PlayerPrefs 与 EOS DeviceId 凭据会落到只读的 /.config，导致 EOS 创建 DeviceId 失败 → NoLoginTicket。
+# 指向 /data（可写、持久化），EOS DeviceId 也能跨重启保存。
+export HOME="${SDTD_HOME:-${DATA_ROOT}}"
+
 SERVER_PID=""
 
 log() {

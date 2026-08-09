@@ -39,6 +39,7 @@
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `SDTD_DATA_ROOT` | `/data` | 持久化数据根目录 |
+| `SDTD_HOME` | `${SDTD_DATA_ROOT}` | 容器 HOME（Unity PlayerPrefs / EOS DeviceId 凭据目录，必须可写） |
 | `SDTD_SERVER_ROOT` | `/server` | 只读游戏安装目录 |
 | `SDTD_CONFIG_FILE` | `/data/serverconfig.xml` | `-configfile` 指向的配置路径 |
 | `SDTD_USER_DATA` | `/data/7DaysToDie` | 对应 XML 中 `UserDataFolder` |
