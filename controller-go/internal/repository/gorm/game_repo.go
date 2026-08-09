@@ -36,3 +36,7 @@ func (r *GameRepo) ListAll(ctx context.Context) ([]*entity.Game, error) {
 	}
 	return games, nil
 }
+
+func (r *GameRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&entity.Game{}, "id = ?", id).Error
+}

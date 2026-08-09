@@ -113,7 +113,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// 7. Use Cases
 	// ---------------------------------------------------------------
-	_ = biz.NewGameUseCase(gameRepo)
+	gameUseCase := biz.NewGameUseCase(gameRepo, businessClient)
 	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher, assetClient)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
@@ -142,6 +142,7 @@ func main() {
 	// ---------------------------------------------------------------
 	router := gin.Default()
 	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
+	handler.NewGameHandler(gameUseCase).RegisterRoutes(router)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

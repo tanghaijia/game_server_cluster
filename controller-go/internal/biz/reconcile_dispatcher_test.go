@@ -70,6 +70,10 @@ func (m *mockGameRepo) ListAll(ctx context.Context) ([]*entity.Game, error) {
 	return nil, nil
 }
 
+func (m *mockGameRepo) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
 var _ repository.GameRepository = (*mockGameRepo)(nil)
 
 type mockGameContainerConfigRepo struct{}

@@ -23,6 +23,50 @@ func NewBusinessServiceFaceClient(cc grpc.ClientConnInterface) *BusinessServiceF
 }
 
 // ---------------------------------------------------------------------------
+// Game 领域
+// ---------------------------------------------------------------------------
+
+func (c *BusinessServiceFaceClient) CreateGame(ctx context.Context, in *assetservicev1.CreateGameRequest, opts ...grpc.CallOption) (*assetservicev1.CreateGameResponse, error) {
+	out, err := c.client.CreateGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create game: %w", err)
+	}
+	return out, nil
+}
+
+func (c *BusinessServiceFaceClient) GetGame(ctx context.Context, in *assetservicev1.GetGameRequest, opts ...grpc.CallOption) (*assetservicev1.GetGameResponse, error) {
+	out, err := c.client.GetGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("get game: %w", err)
+	}
+	return out, nil
+}
+
+func (c *BusinessServiceFaceClient) UpdateGame(ctx context.Context, in *assetservicev1.UpdateGameRequest, opts ...grpc.CallOption) (*assetservicev1.UpdateGameResponse, error) {
+	out, err := c.client.UpdateGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("update game: %w", err)
+	}
+	return out, nil
+}
+
+func (c *BusinessServiceFaceClient) DeleteGame(ctx context.Context, in *assetservicev1.DeleteGameRequest, opts ...grpc.CallOption) (*assetservicev1.DeleteGameResponse, error) {
+	out, err := c.client.DeleteGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("delete game: %w", err)
+	}
+	return out, nil
+}
+
+func (c *BusinessServiceFaceClient) ListGames(ctx context.Context, in *assetservicev1.ListGamesRequest, opts ...grpc.CallOption) (*assetservicev1.ListGamesResponse, error) {
+	out, err := c.client.ListGames(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("list games: %w", err)
+	}
+	return out, nil
+}
+
+// ---------------------------------------------------------------------------
 // SteamBranch 领域
 // ---------------------------------------------------------------------------
 
