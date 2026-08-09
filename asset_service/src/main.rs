@@ -181,5 +181,35 @@ async fn seed_demo_builds(
             },
         })
         .await?;
+
+    // 7 Days to Die 专用服务器（AppID 294420）
+    let game_id_7dtd = "294420".to_string();
+    game_repository
+        .save(&Game {
+            id: game_id_7dtd.clone(),
+            name: "7 Days to Die".to_string(),
+            app_id: "294420".to_string(),
+        })
+        .await?;
+    service
+        .register_game_build(RegisterBuildRequest {
+            build: GameBuild {
+                build_id: BuildId("7dtd-public-demo-build".to_string()),
+                game_id: game_id_7dtd,
+                channel: Some("public".to_string()),
+                adapter_id: AdapterId("7daystodie".to_string()),
+                adapter_version: AdapterVersion::new(0, 1, 0),
+                upstream_version: Some("demo-upstream".to_string()),
+                artifact_uri: Some("ccr.ccs.tencentyun.com/cluster_game_server".to_string()),
+                artifact_image_name: Some("7daystodie-adapter".to_string()),
+                artifact_image_tag: Some("0.1.0".to_string()),
+                status: BuildStatus::Available,
+                pinned: true,
+                resolved_at: now,
+                created_at: now,
+                updated_at: now,
+            },
+        })
+        .await?;
     Ok(())
 }

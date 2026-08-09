@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- 管理员/用户/组权限配置文件。
+     默认空配置；首次启动复制到 /data/7DaysToDie/Saves/serveradmin.xml 后可编辑。
+     添加管理员示例：
+       <admin name="PlayerName" steamID="76561198000000000" permission_level="0" />
+     permission_level 越小权限越高（0 = 最高）。 -->
+<adminTools>
+	<admins />
+	<users />
+	<groups />
+</adminTools>
