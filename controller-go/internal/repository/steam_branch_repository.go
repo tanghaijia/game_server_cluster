@@ -13,4 +13,6 @@ type SteamBranchRepository interface {
 	GetByGameAndBranch(ctx context.Context, gameId, branchName string) (*entity.SteamBranch, error)
 	// ListByGame 查询某 game 的全部分支
 	ListByGame(ctx context.Context, gameId string) ([]*entity.SteamBranch, error)
+	// DeleteByGame 删除某 game 的全部分支（删除 game 时级联清理）
+	DeleteByGame(ctx context.Context, gameId string) error
 }

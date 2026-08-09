@@ -19,11 +19,16 @@ import (
 // 读操作以本地库为准（controller 是游戏管理的权威入口，本地表驱动实例调度）。
 type GameUseCase struct {
 	gamerepo       repository.GameRepository
+	steamBranchRepo repository.SteamBranchRepository
 	businessClient *assetservice.BusinessServiceFaceClient
 }
 
-func NewGameUseCase(gamerepo repository.GameRepository, businessClient *assetservice.BusinessServiceFaceClient) *GameUseCase {
-	return &GameUseCase{gamerepo: gamerepo, businessClient: businessClient}
+func NewGameUseCase(
+	gamerepo repository.GameRepository,
+	steamBranchRepo repository.SteamBranchRepository,
+	businessClient *assetservice.BusinessServiceFaceClient,
+) *GameUseCase {
+	return &GameUseCase{gamerepo: gamerepo, steamBranchRepo: steamBranchRepo, businessClient: businessClient}
 }
 
 // CreateGame 创建一个 Game：controller 生成 id，先同步到 asset_service，再落本地库。
@@ -32,7 +37,7 @@ func (uc *GameUseCase) CreateGame(ctx context.Context, name, appID string) (*ent
 		return nil, errors.New("name is required")
 	}
 	game := &entity.Game{
-		ID:    newGameID(),
+		ID:    appID,
 		Name:  name,
 		AppId: appID,
 	}
@@ -89,13 +94,17 @@ func (uc *GameUseCase) UpdateGame(ctx context.Context, id, name, appID string) (
 	return existing, nil
 }
 
-// DeleteGame 删除 Game：先同步到 asset_service（须存在），再删本地库。
+// DeleteGame 删除 Game：先同步到 asset_service（须存在），再删本地库，
+// 同时级联删除该 game 同步下来的 steam_branches 分支记录。
 func (uc *GameUseCase) DeleteGame(ctx context.Context, id string) error {
 	if id == "" {
 		return errors.New("id is required")
 	}
 	if _, err := uc.businessClient.DeleteGame(ctx, &assetservicev1.DeleteGameRequest{Id: id}); err != nil {
 		return err
+	}
+	if err := uc.steamBranchRepo.DeleteByGame(ctx, id); err != nil {
+		return fmt.Errorf("delete steam branches locally: %w", err)
 	}
 	if err := uc.gamerepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete game locally: %w", err)

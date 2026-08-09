@@ -40,3 +40,9 @@ func (r *SteamBranchRepo) ListByGame(ctx context.Context, gameId string) ([]*ent
 	}
 	return branches, nil
 }
+
+func (r *SteamBranchRepo) DeleteByGame(ctx context.Context, gameId string) error {
+	return r.db.WithContext(ctx).
+		Where("game_id = ?", gameId).
+		Delete(&entity.SteamBranch{}).Error
+}
