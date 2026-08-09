@@ -16,6 +16,8 @@ pub enum NodeAgentError {
     InstanceRuntimeFailed { message: String },
     #[error("instance {instance_id} was not found")]
     InstanceNotFound { instance_id: String },
+    #[error("game cache {game_id}:{branch_name} was not found")]
+    GameCacheNotFound { game_id: String, branch_name: String },
     #[error("internal error: {message}")]
     Internal { message: String },
     #[error("image repository request fail error: {message}")]
@@ -53,6 +55,11 @@ impl NodeAgentError {
             ),
             NodeAgentError::InstanceNotFound { .. } => (
                 BusinessErrorCode::InstanceNotFound,
+                ErrorCategory::NotFound,
+                false,
+            ),
+            NodeAgentError::GameCacheNotFound { .. } => (
+                BusinessErrorCode::BuildCacheMiss,
                 ErrorCategory::NotFound,
                 false,
             ),
@@ -133,6 +140,14 @@ impl NodeAgentError {
         let mut params = HashMap::new();
         if let NodeAgentError::InstanceNotFound { instance_id } = self {
             params.insert("instance_id".to_string(), instance_id.clone());
+        }
+        if let NodeAgentError::GameCacheNotFound {
+            game_id,
+            branch_name,
+        } = self
+        {
+            params.insert("game_id".to_string(), game_id.clone());
+            params.insert("branch_name".to_string(), branch_name.clone());
         }
 
         OperationError {

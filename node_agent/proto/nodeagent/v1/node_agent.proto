@@ -28,7 +28,7 @@ service NodeAgentService {
 
   rpc CacheGame (CacheGameRequest) returns (CacheGameResponse);
 
-  rpc GetCacheGame (CacheGameRequest) returns (CacheGameResponse);
+  rpc GetCacheGame (GetCacheGameRequest) returns (CacheGameResponse);
 }
 
 message GetInstancesRequest {}
@@ -49,6 +49,11 @@ message CacheGameRequest {
     string game_id = 1;
     string branch_name = 2;
     string build_id = 3;
+}
+
+message GetCacheGameRequest {
+    string game_id = 1;
+    string branch_name = 2;
 }
 
 message CacheGameResponse {

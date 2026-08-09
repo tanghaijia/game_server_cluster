@@ -304,8 +304,9 @@ where
             .map_err(|e| NodeAgentError::Internal {
                 message: format!("get game_cache failed: {e}"),
             })?
-            .ok_or_else(|| NodeAgentError::Internal {
-                message: format!("game cache not found: {}:{}", game_id, branch_name),
+            .ok_or_else(|| NodeAgentError::GameCacheNotFound {
+                game_id: game_id.to_string(),
+                branch_name: branch_name.to_string(),
             })
     }
 

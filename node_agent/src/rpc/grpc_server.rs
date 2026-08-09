@@ -35,9 +35,10 @@ use crate::{
             CacheGameRequest, CacheGameResponse, CleanInstanceRequest, CleanInstanceResponse,
             CreateSnapshotRequest, CreateSnapshotResponse, ErrorCategory,
             ErrorDetail as ProtoErrorDetail, FailureInfo as ProtoFailureInfo,
-            GameBuild as ProtoGameBuild, GetHeartbeatRequest, GetHeartbeatResponse,
-            GetInstancesRequest, GetInstancesResponse, GetOperationRequest,
-            GetOperationResponse, InspectInstanceRequest, InspectInstanceResponse,
+            GameBuild as ProtoGameBuild, GetCacheGameRequest, GetHeartbeatRequest,
+            GetHeartbeatResponse, GetInstancesRequest, GetInstancesResponse,
+            GetOperationRequest, GetOperationResponse, InspectInstanceRequest,
+            InspectInstanceResponse,
             InstanceRuntimeRecord as ProtoInstanceRuntimeRecord,
             InstanceRuntimeSpec as ProtoInstanceRuntimeSpec, InstanceSpec as ProtoInstanceSpec,
             MappingPortProtocol, NodeAgentGameInstance, NodeAgentGameInstanceStatus,
@@ -405,7 +406,7 @@ where
 
     async fn get_cache_game(
         &self,
-        request: Request<CacheGameRequest>,
+        request: Request<GetCacheGameRequest>,
     ) -> Result<Response<CacheGameResponse>, Status> {
         let req = request.into_inner();
         let cache = self
@@ -424,6 +425,7 @@ fn map_error(error: NodeAgentError) -> Status {
     let code = match &error {
         NodeAgentError::InvalidRequest { .. } => tonic::Code::InvalidArgument,
         NodeAgentError::InstanceNotFound { .. } => tonic::Code::NotFound,
+        NodeAgentError::GameCacheNotFound { .. } => tonic::Code::NotFound,
         _ => tonic::Code::Internal,
     };
     status_from_operation_error(code, error.to_operation_error())
