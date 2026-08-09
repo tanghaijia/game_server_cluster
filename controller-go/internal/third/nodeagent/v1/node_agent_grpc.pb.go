@@ -54,7 +54,7 @@ type NodeAgentServiceClient interface {
 	CleanInstance(ctx context.Context, in *CleanInstanceRequest, opts ...grpc.CallOption) (*CleanInstanceResponse, error)
 	InspectInstanceStream(ctx context.Context, in *InspectInstanceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InspectInstanceResponse], error)
 	CacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error)
-	GetCacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error)
+	GetCacheGame(ctx context.Context, in *GetCacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error)
 }
 
 type nodeAgentServiceClient struct {
@@ -204,7 +204,7 @@ func (c *nodeAgentServiceClient) CacheGame(ctx context.Context, in *CacheGameReq
 	return out, nil
 }
 
-func (c *nodeAgentServiceClient) GetCacheGame(ctx context.Context, in *CacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error) {
+func (c *nodeAgentServiceClient) GetCacheGame(ctx context.Context, in *GetCacheGameRequest, opts ...grpc.CallOption) (*CacheGameResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CacheGameResponse)
 	err := c.cc.Invoke(ctx, NodeAgentService_GetCacheGame_FullMethodName, in, out, cOpts...)
@@ -233,7 +233,7 @@ type NodeAgentServiceServer interface {
 	CleanInstance(context.Context, *CleanInstanceRequest) (*CleanInstanceResponse, error)
 	InspectInstanceStream(*InspectInstanceRequest, grpc.ServerStreamingServer[InspectInstanceResponse]) error
 	CacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error)
-	GetCacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error)
+	GetCacheGame(context.Context, *GetCacheGameRequest) (*CacheGameResponse, error)
 	mustEmbedUnimplementedNodeAgentServiceServer()
 }
 
@@ -283,7 +283,7 @@ func (UnimplementedNodeAgentServiceServer) InspectInstanceStream(*InspectInstanc
 func (UnimplementedNodeAgentServiceServer) CacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CacheGame not implemented")
 }
-func (UnimplementedNodeAgentServiceServer) GetCacheGame(context.Context, *CacheGameRequest) (*CacheGameResponse, error) {
+func (UnimplementedNodeAgentServiceServer) GetCacheGame(context.Context, *GetCacheGameRequest) (*CacheGameResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCacheGame not implemented")
 }
 func (UnimplementedNodeAgentServiceServer) mustEmbedUnimplementedNodeAgentServiceServer() {}
@@ -535,7 +535,7 @@ func _NodeAgentService_CacheGame_Handler(srv interface{}, ctx context.Context, d
 }
 
 func _NodeAgentService_GetCacheGame_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CacheGameRequest)
+	in := new(GetCacheGameRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -547,7 +547,7 @@ func _NodeAgentService_GetCacheGame_Handler(srv interface{}, ctx context.Context
 		FullMethod: NodeAgentService_GetCacheGame_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(NodeAgentServiceServer).GetCacheGame(ctx, req.(*CacheGameRequest))
+		return srv.(NodeAgentServiceServer).GetCacheGame(ctx, req.(*GetCacheGameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -118,7 +118,7 @@ func main() {
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
 	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
-	_ = biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo)
+	_ = biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo)
 
 	// ---------------------------------------------------------------
 	// 8. 启动 dispatcher

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"controller-go/internal/client/assetservice"
@@ -12,6 +13,7 @@ import (
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 	assetservicev1 "controller-go/internal/third/assetservice/v1"
+	nodeagentv1 "controller-go/internal/third/nodeagent/v1"
 
 	"gorm.io/gorm"
 )
@@ -21,6 +23,8 @@ type GameCacheManager struct {
 	assetClient      *assetservice.AssetServiceFaceClient
 	businessClient   *assetservice.BusinessServiceFaceClient
 	steamBranchRepo  repository.SteamBranchRepository
+	nodeAgentRepo    repository.NodeAgentRepository
+	nodeRepo         repository.NodeRepository
 }
 
 func NewGameCacheManager(
@@ -28,12 +32,16 @@ func NewGameCacheManager(
 	assetClient *assetservice.AssetServiceFaceClient,
 	businessClient *assetservice.BusinessServiceFaceClient,
 	steamBranchRepo repository.SteamBranchRepository,
+	nodeAgentRepo repository.NodeAgentRepository,
+	nodeRepo repository.NodeRepository,
 ) *GameCacheManager {
 	return &GameCacheManager{
 		nodeAgentClients: nodeAgentClients,
 		assetClient:      assetClient,
 		businessClient:   businessClient,
 		steamBranchRepo:  steamBranchRepo,
+		nodeAgentRepo:    nodeAgentRepo,
+		nodeRepo:         nodeRepo,
 	}
 }
 
@@ -126,5 +134,104 @@ func (g *GameCacheManager) SyncAndRecordBranch(ctx context.Context, gameId strin
 
 	slog.Info("[GameCacheManager] 分支同步完成",
 		"gameId", gameId, "remote", len(resp.Branches), "local", len(localBranches))
+	return nil
+}
+
+/*
+ * 检查NodeAgent的GameCache版本，若小于最新版本(lastBuildId)，且状态是Available或Removed，调用cachegame启动下载，返回成功
+ * 若版本是最新版本且状态Removed，启动下载，返回成功，
+ * 若版本是最新版本且状态Available，返回成功，
+ * 若状态是Downloading，返回成功，
+ * 其他情况，返回错误
+ */
+func (g *GameCacheManager) CheckAndUpdate(ctx context.Context,
+	gameId string, branchName string, lastBuildId uint64, nodeAgentId string) error {
+
+	if gameId == "" || branchName == "" {
+		return errors.New("game_id and branch_name are required")
+	}
+	if nodeAgentId == "" {
+		return errors.New("node_agent_id is required")
+	}
+
+	// 1. 解析 NodeAgent 地址并获取客户端
+	nodeAgent, err := g.nodeAgentRepo.GetByID(ctx, nodeAgentId)
+	if err != nil {
+		return fmt.Errorf("get node_agent %s: %w", nodeAgentId, err)
+	}
+	node, err := g.nodeRepo.GetByID(nodeAgent.NodeId)
+	if err != nil {
+		return fmt.Errorf("get node %s: %w", nodeAgent.NodeId, err)
+	}
+	client, err := g.nodeAgentClients.Get(ctx, nodeAgentId, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+	if err != nil {
+		return fmt.Errorf("get node_agent client %s: %w", nodeAgentId, err)
+	}
+
+	// 2. 查询 NodeAgent 当前的 GameCache
+	resp, err := client.GetCacheGame(ctx, &nodeagentv1.GetCacheGameRequest{
+		GameId:     gameId,
+		BranchName: branchName,
+	})
+	if err != nil {
+		return fmt.Errorf("get cache game from node_agent %s: %w", nodeAgentId, err)
+	}
+	if resp == nil || resp.GameCache == nil {
+		return errors.New("node_agent returned empty game cache")
+	}
+	gc := resp.GameCache
+
+	// 3. 解析 NodeAgent 上的 build_id 用于版本比较
+	nodeBuildId, err := strconv.ParseUint(gc.GetBuildId(), 10, 64)
+	if err != nil {
+		return fmt.Errorf("parse node build_id %q: %w", gc.GetBuildId(), err)
+	}
+
+	// 4. 按状态 + 版本判断是否需要启动下载
+	shouldDownload := false
+	switch gc.GetStatus() {
+	case nodeagentv1.GameCacheStatus_DOWNLOADING:
+		// 已在下载中 → 幂等成功
+	case nodeagentv1.GameCacheStatus_AVAILABLE:
+		switch {
+		case nodeBuildId < lastBuildId:
+			shouldDownload = true
+		case nodeBuildId == lastBuildId:
+			// 已是最新且可用
+		default:
+			return fmt.Errorf("node game cache build_id %d is newer than latest %d", nodeBuildId, lastBuildId)
+		}
+	case nodeagentv1.GameCacheStatus_REMOVED:
+		switch {
+		case nodeBuildId <= lastBuildId:
+			shouldDownload = true
+		default:
+			return fmt.Errorf("node game cache build_id %d is newer than latest %d", nodeBuildId, lastBuildId)
+		}
+	case nodeagentv1.GameCacheStatus_UNAVAILABLE:
+		return errors.New("node game cache is unavailable")
+	default:
+		return fmt.Errorf("unexpected node game cache status %s", gc.GetStatus().String())
+	}
+
+	if !shouldDownload {
+		slog.Info("[GameCacheManager] GameCache 已就绪，无需下载",
+			"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+			"buildId", gc.GetBuildId(), "status", gc.GetStatus().String())
+		return nil
+	}
+
+	// 5. 调用 cachegame 启动下载
+	if _, err := client.CacheGame(ctx, &nodeagentv1.CacheGameRequest{
+		GameId:     gameId,
+		BranchName: branchName,
+		BuildId:    strconv.FormatUint(lastBuildId, 10),
+	}); err != nil {
+		return fmt.Errorf("cache game on node_agent %s: %w", nodeAgentId, err)
+	}
+
+	slog.Info("[GameCacheManager] 启动游戏缓存下载",
+		"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+		"buildId", lastBuildId)
 	return nil
 }

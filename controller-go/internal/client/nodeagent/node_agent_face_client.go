@@ -190,3 +190,23 @@ func (c *NodeAgentFaceClient) GetInstances(ctx context.Context, in *nodeagentv1.
 	}
 	return out, nil
 }
+
+// ---------------------------------------------------------------------------
+// 游戏缓存
+// ---------------------------------------------------------------------------
+
+func (c *NodeAgentFaceClient) CacheGame(ctx context.Context, in *nodeagentv1.CacheGameRequest, opts ...grpc.CallOption) (*nodeagentv1.CacheGameResponse, error) {
+	out, err := c.client.CacheGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("cache game: %w", err)
+	}
+	return out, nil
+}
+
+func (c *NodeAgentFaceClient) GetCacheGame(ctx context.Context, in *nodeagentv1.GetCacheGameRequest, opts ...grpc.CallOption) (*nodeagentv1.CacheGameResponse, error) {
+	out, err := c.client.GetCacheGame(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("get cache game: %w", err)
+	}
+	return out, nil
+}
