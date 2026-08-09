@@ -29,10 +29,12 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 type createGameInstanceRequest struct {
-	GameID string `json:"game_id"`
+	GameID      string `json:"game_id"`
+	GameBuildID string `json:"game_build_id"`
 }
 
-// CreateGameInstance 新建 game_instance，初始状态为 StatusStopped
+// CreateGameInstance 新建 game_instance，初始状态为 StatusStopped。
+// game_build_id 可选；未传时以 "public" channel 解析最新可用构建。
 func (h *GameInstanceHandler) CreateGameInstance(c *gin.Context) {
 	var req createGameInstanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -44,7 +46,7 @@ func (h *GameInstanceHandler) CreateGameInstance(c *gin.Context) {
 		return
 	}
 
-	instance, err := h.gameInstanceUseCase.CreateGameInstance(c.Request.Context(), req.GameID)
+	instance, err := h.gameInstanceUseCase.CreateGameInstance(c.Request.Context(), req.GameID, req.GameBuildID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

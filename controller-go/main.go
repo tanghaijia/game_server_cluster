@@ -114,7 +114,7 @@ func main() {
 	// 7. Use Cases
 	// ---------------------------------------------------------------
 	_ = biz.NewGameUseCase(gameRepo)
-	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher)
+	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher, assetClient)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	_ = biz.NewNodeUseCase(nodeRepo)
 	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
