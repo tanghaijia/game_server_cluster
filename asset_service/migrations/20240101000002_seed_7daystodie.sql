@@ -13,11 +13,11 @@ INSERT INTO t_asset_service_game_builds (
     status, pinned, resolved_at, created_at, updated_at
 )
 SELECT
-    '7dtd-public-demo-build', '294420', 'public',
+    '294420-public-0.1.0', '294420', 'public',
     '7daystodie', 0, 1, 0,
     'demo-upstream', 'ccr.ccs.tencentyun.com/cluster_game_server',
     '7daystodie-adapter', '0.1.0',
     'available', true, NOW(), NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM t_asset_service_game_builds WHERE build_id = '7dtd-public-demo-build'
+    SELECT 1 FROM t_asset_service_game_builds WHERE build_id = '294420-public-0.1.0'
 );

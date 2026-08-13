@@ -164,7 +164,7 @@ async fn seed_demo_builds(
     service
         .register_game_build(RegisterBuildRequest {
             build: GameBuild {
-                build_id: BuildId("dst-public-demo-build".to_string()),
+                build_id: BuildId("343050-public-0.2.2".to_string()),
                 game_id,
                 channel: Some("public".to_string()),
                 adapter_id: AdapterId("dst".to_string()),
@@ -194,7 +194,7 @@ async fn seed_demo_builds(
     service
         .register_game_build(RegisterBuildRequest {
             build: GameBuild {
-                build_id: BuildId("7dtd-public-demo-build".to_string()),
+                build_id: BuildId("294420-public-0.1.0".to_string()),
                 game_id: game_id_7dtd,
                 channel: Some("public".to_string()),
                 adapter_id: AdapterId("7daystodie".to_string()),

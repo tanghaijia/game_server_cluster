@@ -92,7 +92,7 @@ async fn seed_demo_builds(
     service
         .register_game_build(RegisterBuildRequest {
             build: GameBuild {
-                build_id: BuildId("dst-public-demo-build".to_string()),
+                build_id: BuildId("dst-public-0.2.2".to_string()),
                 game_id: game_id,
                 channel: Some("public".to_string()),
                 adapter_id: AdapterId("dst".to_string()),

@@ -119,11 +119,11 @@ INSERT INTO t_asset_service_game_builds (
     status, pinned, resolved_at, created_at, updated_at
 )
 SELECT
-    'dst-public-demo-build', '343050', 'public',
+    '343050-public-0.2.2', '343050', 'public',
     'dst', 0, 1, 0,
     'demo-upstream', 'ccr.ccs.tencentyun.com/cluster_game_server',
     'dst-adapter', '0.2.2',
     'available', true, NOW(), NOW(), NOW()
 WHERE NOT EXISTS (
-    SELECT 1 FROM t_asset_service_game_builds WHERE build_id = 'dst-public-demo-build'
+    SELECT 1 FROM t_asset_service_game_builds WHERE build_id = '343050-public-0.2.2'
 );
