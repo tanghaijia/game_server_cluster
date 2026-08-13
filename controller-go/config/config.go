@@ -36,7 +36,7 @@ func Load() *Config {
 		DBName:           getEnv("DB_NAME", "game_server"),
 		DBSchema:         getEnv("DB_SCHEMA", "public"),
 		AssetServiceAddr: getEnv("ASSET_SERVICE_ADDR", "localhost:9091"),
-		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
+		HTTPPort:         getEnvInt("HTTP_PORT", 8090),
 		// 默认 60 秒执行一轮分支同步 + 缓存检查
 		GameCacheReconcileInterval: getEnvInt("GAME_CACHE_RECONCILE_INTERVAL", 60),
 	}

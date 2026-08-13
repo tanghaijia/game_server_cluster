@@ -74,7 +74,7 @@ async function onSubmit() {
       await register(form)
     }
     const resp = await login(form)
-    auth.setToken(resp.access_token)
+    auth.setAuth(resp.access_token, resp.user)
     router.push({ name: 'dashboard' })
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '操作失败'

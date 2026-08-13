@@ -23,6 +23,13 @@ type Config struct {
 	JWTSecret         string
 	JWTAccessTTLMin   int
 	JWTRefreshTTLHour int
+
+	// controller-go 地址（ADR-0001：编排实例）
+	ControllerAddr string
+
+	// 管理员播种（方案1）：启动时若不存在则创建
+	AdminUsername string
+	AdminPassword string
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -39,6 +46,11 @@ func Load() *Config {
 		JWTSecret:         getEnv("JWT_SECRET", "dev-secret-change-me"),
 		JWTAccessTTLMin:   getEnvInt("JWT_ACCESS_TTL_MIN", 30),
 		JWTRefreshTTLHour: getEnvInt("JWT_REFRESH_TTL_HOUR", 168),
+
+		ControllerAddr: getEnv("CONTROLLER_ADDR", "http://127.0.0.1:8088"),
+
+		AdminUsername: getEnv("ADMIN_USERNAME", ""),
+		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
 	}
 }
 

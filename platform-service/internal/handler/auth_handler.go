@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strings"
 
 	"platform-service/internal/auth"
 	"platform-service/internal/biz"
@@ -61,23 +60,4 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
-// AuthRequired 校验 Bearer access token 的中间件（ADR-0004）
-func AuthRequired(tokens *auth.TokenManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
-			return
-		}
-
-		claims, err := tokens.Parse(strings.TrimPrefix(header, "Bearer "))
-		if err != nil || claims.TokenType != auth.TokenTypeAccess {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-			return
-		}
-
-		c.Set("user_id", claims.UserID)
-		c.Set("user_role", claims.Role)
-		c.Next()
-	}
-}
+// （AuthRequired / RequireAdmin 已移至 middleware.go）

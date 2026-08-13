@@ -14,6 +14,7 @@ import (
 	"platform-service/config"
 	"platform-service/internal/auth"
 	"platform-service/internal/biz"
+	"platform-service/internal/client/controller"
 	"platform-service/internal/handler"
 	repogorm "platform-service/internal/repository/gorm"
 
@@ -59,7 +60,27 @@ func main() {
 	// 4. Use Cases
 	// ---------------------------------------------------------------
 	userUseCase := biz.NewUserUseCase(userRepo)
-	orderUseCase := biz.NewOrderUseCase(orderRepo)
+
+	// controller-go 客户端（ADR-0001）
+	controllerClient := controller.NewClient(cfg.ControllerAddr)
+	orderUseCase := biz.NewOrderUseCase(orderRepo, controllerClient)
+
+	// 管理员播种（ADR 方案1）：ADMIN_USERNAME/ADMIN_PASSWORD 已设置且用户不存在时创建
+	if cfg.AdminUsername != "" {
+		_, err := userUseCase.GetUserByName(context.Background(), cfg.AdminUsername)
+		switch {
+		case err == nil:
+			slog.Info("管理员已存在，跳过播种", "username", cfg.AdminUsername)
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			if _, createErr := userUseCase.CreateAdmin(context.Background(), cfg.AdminUsername, cfg.AdminPassword); createErr != nil {
+				slog.Error("创建管理员失败", "username", cfg.AdminUsername, "err", createErr)
+			} else {
+				slog.Info("管理员已创建", "username", cfg.AdminUsername)
+			}
+		default:
+			slog.Error("查询管理员失败", "username", cfg.AdminUsername, "err", err)
+		}
+	}
 
 	// JWT 令牌管理（ADR-0004）
 	tokenManager := auth.NewTokenManager(
@@ -77,6 +98,7 @@ func main() {
 	handler.NewAuthHandler(userUseCase, tokenManager).RegisterRoutes(router)
 	handler.NewUserHandler(userUseCase).RegisterRoutes(router, authMiddleware)
 	handler.NewOrderHandler(orderUseCase).RegisterRoutes(router, authMiddleware)
+	handler.NewAdminHandler(controllerClient).RegisterRoutes(router, authMiddleware)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

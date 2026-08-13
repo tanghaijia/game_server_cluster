@@ -8,7 +8,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string
   refresh_token?: string
-  user?: {
+  user: {
     id: string
     username: string
     role: number

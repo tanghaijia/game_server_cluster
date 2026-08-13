@@ -57,6 +57,36 @@ func (uc *UserUseCase) CreateUser(ctx context.Context, username, password string
 	return user, nil
 }
 
+// GetUserByName 按用户名查询用户（用于管理员播种等）
+func (uc *UserUseCase) GetUserByName(ctx context.Context, username string) (*entity.User, error) {
+	return uc.repo.GetByUsername(ctx, username)
+}
+
+// CreateAdmin 创建管理员（播种用）；密码缺失时使用默认值
+func (uc *UserUseCase) CreateAdmin(ctx context.Context, username, password string) (*entity.User, error) {
+	if password == "" {
+		password = "admin123"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	now := time.Now()
+	admin := &entity.User{
+		ID:           newEntityID("user"),
+		Username:     username,
+		PasswordHash: string(hash),
+		Role:         entity.RoleAdmin,
+		Status:       entity.UserStatusActive,
+		CreateTime:   now,
+		UpdateTime:   now,
+	}
+	if err := uc.repo.Save(ctx, admin); err != nil {
+		return nil, err
+	}
+	return admin, nil
+}
+
 // GetUser 按 id 查询用户
 func (uc *UserUseCase) GetUser(ctx context.Context, id string) (*entity.User, error) {
 	if id == "" {
@@ -68,6 +98,34 @@ func (uc *UserUseCase) GetUser(ctx context.Context, id string) (*entity.User, er
 // ListUsers 列出全部用户
 func (uc *UserUseCase) ListUsers(ctx context.Context) ([]*entity.User, error) {
 	return uc.repo.ListAll(ctx)
+}
+
+// SetRole 修改用户角色（仅管理员调用）
+func (uc *UserUseCase) SetRole(ctx context.Context, id string, role entity.UserRole) (*entity.User, error) {
+	user, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	user.Role = role
+	user.UpdateTime = time.Now()
+	if err := uc.repo.Save(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// SetStatus 启用/禁用用户（仅管理员调用）
+func (uc *UserUseCase) SetStatus(ctx context.Context, id string, status entity.UserStatus) (*entity.User, error) {
+	user, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	user.Status = status
+	user.UpdateTime = time.Now()
+	if err := uc.repo.Save(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // VerifyPassword 校验用户名密码（供后续登录接口使用）

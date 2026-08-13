@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"platform-service/internal/biz"
+	"platform-service/internal/entity"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -19,22 +20,30 @@ func NewOrderHandler(uc *biz.OrderUseCase) *OrderHandler {
 	return &OrderHandler{orderUseCase: uc}
 }
 
-// RegisterRoutes 注册订单路由（全部需要登录）
+// RegisterRoutes 注册订单路由（全部需登录）
 func (h *OrderHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) {
 	group := router.Group("/api/orders")
 	group.Use(auth)
 	group.POST("", h.CreateOrder)
 	group.GET("", h.ListOrders)
 	group.GET("/:id", h.GetOrder)
+	group.POST("/:id/pay", h.PayOrder)
+	group.POST("/:id/provision", auth, RequireAdmin(), h.ProvisionOrder)
+	group.POST("/:id/instance/start", h.StartInstance)
+	group.POST("/:id/instance/stop", h.StopInstance)
+
+	// 用户侧实例视图
+	router.GET("/api/me/instances", auth, h.MyInstances)
+	router.GET("/api/instances", auth, RequireAdmin(), h.AllInstances)
 }
 
 type createOrderRequest struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id"` // 仅管理员可指定；普通用户忽略，取自 token
 	GameID string `json:"game_id"`
 	Amount int64  `json:"amount"` // 单位：分
 }
 
-// CreateOrder 创建订单
+// CreateOrder 创建订单（user_id 强制取自 token，普通用户不可伪造）
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var req createOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,7 +51,12 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.orderUseCase.CreateOrder(c.Request.Context(), req.UserID, req.GameID, req.Amount)
+	userID := CurrentUserID(c)
+	if isAdmin(c) && req.UserID != "" {
+		userID = req.UserID
+	}
+
+	order, err := h.orderUseCase.CreateOrder(c.Request.Context(), userID, req.GameID, req.Amount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -50,9 +64,16 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	c.JSON(http.StatusCreated, order)
 }
 
-// ListOrders 列出订单；?user_id= 过滤指定用户
+// ListOrders 列出订单：普通用户只看自己的；管理员看全部（可用 ?user_id= 过滤）
 func (h *OrderHandler) ListOrders(c *gin.Context) {
-	orders, err := h.orderUseCase.ListOrders(c.Request.Context(), c.Query("user_id"))
+	userID := ""
+	if isAdmin(c) {
+		userID = c.Query("user_id")
+	} else {
+		userID = CurrentUserID(c)
+	}
+
+	orders, err := h.orderUseCase.ListOrders(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -60,9 +81,10 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
 }
 
-// GetOrder 按 id 查询订单
+// GetOrder 查询订单（本人或管理员）
 func (h *OrderHandler) GetOrder(c *gin.Context) {
-	order, err := h.orderUseCase.GetOrder(c.Request.Context(), c.Param("id"))
+	id := c.Param("id")
+	order, err := h.orderUseCase.GetOrder(c.Request.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
@@ -71,5 +93,113 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	if !isAdmin(c) && order.UserID != CurrentUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot view other users orders"})
+		return
+	}
 	c.JSON(http.StatusOK, order)
+}
+
+// PayOrder 支付订单（本人或管理员）并编排实例：controller 创建 + 启动
+func (h *OrderHandler) PayOrder(c *gin.Context) {
+	id := c.Param("id")
+	order, err := h.orderUseCase.GetOrder(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !isAdmin(c) && order.UserID != CurrentUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot pay other users orders"})
+		return
+	}
+
+	updated, err := h.orderUseCase.PayOrder(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// StartInstance 启动订单关联实例（本人或管理员）
+func (h *OrderHandler) StartInstance(c *gin.Context) {
+	order, ok := h.loadOwnOrder(c)
+	if !ok {
+		return
+	}
+	if _, err := h.orderUseCase.StartInstance(c.Request.Context(), order.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "starting"})
+}
+
+// StopInstance 停止订单关联实例（本人或管理员）
+func (h *OrderHandler) StopInstance(c *gin.Context) {
+	order, ok := h.loadOwnOrder(c)
+	if !ok {
+		return
+	}
+	if _, err := h.orderUseCase.StopInstance(c.Request.Context(), order.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "stopping"})
+}
+
+// loadOwnOrder 加载订单并校验归属（本人或管理员），校验失败时已写响应并返回 ok=false
+func (h *OrderHandler) loadOwnOrder(c *gin.Context) (*entity.Order, bool) {
+	order, err := h.orderUseCase.GetOrder(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return nil, false
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return nil, false
+	}
+	if !isAdmin(c) && order.UserID != CurrentUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot operate other users orders"})
+		return nil, false
+	}
+	return order, true
+}
+
+// ProvisionOrder 管理员免支付直接开服（ADR：支付与开服解耦）
+func (h *OrderHandler) ProvisionOrder(c *gin.Context) {
+	id := c.Param("id")
+	updated, err := h.orderUseCase.ProvisionOrder(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+// MyInstances 当前用户的实例列表
+func (h *OrderHandler) MyInstances(c *gin.Context) {
+	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), CurrentUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"instances": instances})
+}
+
+// AllInstances 全部实例（管理员）
+func (h *OrderHandler) AllInstances(c *gin.Context) {
+	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), "")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"instances": instances})
 }

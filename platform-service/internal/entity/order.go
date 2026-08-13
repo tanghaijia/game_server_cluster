@@ -9,6 +9,7 @@ const (
 	OrderStatusPaid
 	OrderStatusCancelled
 	OrderStatusRefunded
+	OrderStatusProvisioned // 管理员免支付直接开服
 )
 
 // Order 游戏服务器购买订单。Amount 单位为分（整数，避免浮点误差）。

@@ -40,6 +40,11 @@ func NewClientRegistry() *ClientRegistry {
 
 // Get 获取指定 nodeId 的客户端。如果尚未连接，则自动建立连接。
 // addr 格式为 "host:port"，例如 "192.168.1.10:9090"。
+//
+// 注意：连接是异步建立的（不阻塞）。若 node_agent 不可达，后续 RPC 会立即返回
+// Unavailable 错误并走调用方的失败/重试流程，而不是让 Dial 永久阻塞——
+// 否则实例会卡死在中间态（如 preparing_build），且调度 worker 是单 goroutine，
+// 一次阻塞会冻结整个调度队列。
 func (r *ClientRegistry) Get(ctx context.Context, nodeId, addr string) (*NodeAgentFaceClient, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -48,9 +53,8 @@ func (r *ClientRegistry) Get(ctx context.Context, nodeId, addr string) (*NodeAge
 		return c, nil
 	}
 
-	conn, err := grpc.DialContext(ctx, addr,
+	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), // 等待连接建立
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to node %s at %s: %w", nodeId, addr, err)

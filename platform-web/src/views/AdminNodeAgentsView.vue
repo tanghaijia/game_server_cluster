@@ -1,0 +1,118 @@
+<template>
+  <div class="space-y-6">
+    <div>
+      <h1 class="text-2xl font-semibold">NodeAgent 管理</h1>
+      <p class="text-sm text-muted-foreground">节点代理：只有 Enabled 的 agent 参与实例调度与缓存循环。</p>
+    </div>
+
+    <form class="flex max-w-2xl items-end gap-3 rounded-lg border p-4" @submit.prevent="onCreate">
+      <div class="flex-1">
+        <label class="mb-1 block text-sm font-medium">名称</label>
+        <input v-model="form.name" type="text" placeholder="如 node-agent-1" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <div class="w-40">
+        <label class="mb-1 block text-sm font-medium">节点 ID</label>
+        <input v-model="form.nodeId" type="text" placeholder="对应节点 Id" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <div class="w-32">
+        <label class="mb-1 block text-sm font-medium">端口</label>
+        <input v-model.number="form.port" type="number" placeholder="9090" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">新增</button>
+    </form>
+
+    <div class="rounded-lg border">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b text-left text-muted-foreground">
+            <th class="px-4 py-3">ID</th>
+            <th class="px-4 py-3">节点 ID</th>
+            <th class="px-4 py-3">端口</th>
+            <th class="px-4 py-3">状态</th>
+            <th class="px-4 py-3">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in agents" :key="a.ID" class="border-b last:border-0">
+            <td class="px-4 py-3 font-mono text-xs">{{ a.ID }}</td>
+            <td class="px-4 py-3">{{ a.NodeId || '-' }}</td>
+            <td class="px-4 py-3">{{ a.Port }}</td>
+            <td class="px-4 py-3">
+              <span class="rounded px-2 py-0.5 text-xs" :class="a.Status === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'">
+                {{ a.Status === 1 ? 'Enabled' : 'Disabled' }}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <button
+                v-if="a.Status === 1"
+                class="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+                @click="onToggle(a, false)"
+              >
+                停用
+              </button>
+              <button
+                v-else
+                class="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:opacity-90"
+                @click="onToggle(a, true)"
+              >
+                启用
+              </button>
+            </td>
+          </tr>
+          <tr v-if="!agents.length">
+            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">暂无 node_agent</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+
+import { createNodeAgent, listNodeAgents, setNodeAgentEnabled, type NodeAgent } from '@/api/admin'
+
+const agents = ref<NodeAgent[]>([])
+const error = ref('')
+const form = reactive({ name: '', nodeId: '', port: 9090 })
+
+async function load() {
+  error.value = ''
+  try {
+    agents.value = await listNodeAgents()
+  } catch (e: any) {
+    error.value = e.response?.data?.error ?? '加载失败（controller 是否已启动？）'
+  }
+}
+
+async function onCreate() {
+  error.value = ''
+  if (!form.name) {
+    error.value = '请填写名称'
+    return
+  }
+  try {
+    await createNodeAgent({ name: form.name, node_id: form.nodeId || undefined, port: form.port || undefined })
+    form.name = ''
+    form.nodeId = ''
+    form.port = 9090
+    await load()
+  } catch (e: any) {
+    error.value = e.response?.data?.error ?? '新增失败'
+  }
+}
+
+async function onToggle(a: NodeAgent, enabled: boolean) {
+  error.value = ''
+  try {
+    await setNodeAgentEnabled(a.ID, enabled)
+    await load()
+  } catch (e: any) {
+    error.value = e.response?.data?.error ?? '操作失败'
+  }
+}
+
+onMounted(load)
+</script>
