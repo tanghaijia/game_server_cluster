@@ -13,3 +13,8 @@ debug.json
 *.bkp
 *.dtmp
 .vscode
+*/.gocache
+/.gocache
+/.gomodcache
+/platform-web/node_modules
+/platform-web/dist

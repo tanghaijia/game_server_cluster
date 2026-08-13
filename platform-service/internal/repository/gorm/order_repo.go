@@ -1,0 +1,48 @@
+package gorm
+
+import (
+	"context"
+
+	"platform-service/internal/entity"
+
+	"gorm.io/gorm"
+)
+
+type OrderRepo struct {
+	db *gorm.DB
+}
+
+func NewOrderRepo(db *gorm.DB) *OrderRepo {
+	return &OrderRepo{db: db}
+}
+
+func (r *OrderRepo) Save(ctx context.Context, order *entity.Order) error {
+	return r.db.WithContext(ctx).Save(order).Error
+}
+
+func (r *OrderRepo) GetByID(ctx context.Context, id string) (*entity.Order, error) {
+	var order entity.Order
+	err := r.db.WithContext(ctx).First(&order, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+func (r *OrderRepo) ListByUser(ctx context.Context, userID string) ([]*entity.Order, error) {
+	var orders []*entity.Order
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("create_time").Find(&orders).Error
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+func (r *OrderRepo) ListAll(ctx context.Context) ([]*entity.Order, error) {
+	var orders []*entity.Order
+	err := r.db.WithContext(ctx).Order("create_time").Find(&orders).Error
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
+}

@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS orders (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id),
+	game_id TEXT NOT NULL,
+	instance_id TEXT NOT NULL DEFAULT '',
+	amount BIGINT NOT NULL DEFAULT 0,
+	status SMALLINT NOT NULL DEFAULT 0,
+	create_time TIMESTAMPTZ NOT NULL DEFAULT now(),
+	update_time TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);

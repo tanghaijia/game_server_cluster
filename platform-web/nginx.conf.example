@@ -1,0 +1,29 @@
+# Nginx 配置示例（生产环境，见 ADR-0005）
+# platform-web 静态文件 + /api 反代到 platform-service
+
+server {
+    listen 80;
+    server_name console.example.com;
+
+    root /var/www/platform-web/dist;
+    index index.html;
+
+    # SPA history 路由回退
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 后端 API 反代
+    location /api/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE 需要关闭缓冲（ADR-0005）
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 3600s;
+    }
+}
