@@ -114,10 +114,11 @@ func main() {
 	// 7. Use Cases
 	// ---------------------------------------------------------------
 	gameUseCase := biz.NewGameUseCase(gameRepo, steamBranchRepo, businessClient)
-	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, dispatcher, assetClient)
+	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, containerPortMappingRepo, dispatcher, assetClient)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
-	_ = biz.NewNodeUseCase(nodeRepo)
-	_ = biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
+	nodeUseCase := biz.NewNodeUseCase(nodeRepo)
+	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
+	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
 	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
 
 	// ---------------------------------------------------------------
@@ -143,6 +144,10 @@ func main() {
 	router := gin.Default()
 	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
 	handler.NewGameHandler(gameUseCase).RegisterRoutes(router)
+	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
+	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
+	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
+	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

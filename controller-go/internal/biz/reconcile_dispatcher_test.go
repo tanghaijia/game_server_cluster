@@ -29,6 +29,14 @@ func (m *mockInstanceRepo) ListByStatuses(ctx context.Context, statuses ...entit
 	return nil, nil
 }
 
+func (m *mockInstanceRepo) ListAll(ctx context.Context) ([]*entity.GameInstance, error) {
+	return nil, nil
+}
+
+func (m *mockInstanceRepo) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
 // Ensure mockInstanceRepo implements repository.GameInstanceRepository
 var _ repository.GameInstanceRepository = (*mockInstanceRepo)(nil)
 
@@ -42,6 +50,10 @@ func (m *mockNodeAgentRepo) ListEnabledIDs(ctx context.Context) ([]string, error
 	return []string{"node-agent-1"}, nil
 }
 
+func (m *mockNodeAgentRepo) ListAll(ctx context.Context) ([]*entity.NodeAgent, error) {
+	return nil, nil
+}
+
 var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
 
 type mockNodeRepo struct{}
@@ -49,6 +61,10 @@ type mockNodeRepo struct{}
 func (m *mockNodeRepo) Save(node *entity.Node) error { return nil }
 func (m *mockNodeRepo) GetByID(id string) (*entity.Node, error) {
 	return &entity.Node{Id: 1, Ip: "127.0.0.1"}, nil
+}
+
+func (m *mockNodeRepo) ListAll(ctx context.Context) ([]*entity.Node, error) {
+	return nil, nil
 }
 
 var _ repository.NodeRepository = (*mockNodeRepo)(nil)

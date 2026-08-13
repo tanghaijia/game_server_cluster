@@ -262,6 +262,64 @@ func isGameCacheNotFound(detail *nodeagentv1.ErrorDetail) bool {
 		detail.GetCode() == nodeagentv1.BusinessErrorCode_BUSINESS_ERROR_CODE_BUILD_CACHE_MISS
 }
 
+// ListNodeBranches 列出某 game 已同步的 Steam 分支记录
+func (g *GameCacheManager) ListNodeBranches(ctx context.Context, gameId string) ([]*entity.SteamBranch, error) {
+	if gameId == "" {
+		return nil, errors.New("game_id is required")
+	}
+	return g.steamBranchRepo.ListByGame(ctx, gameId)
+}
+
+// UpdateBranchCache 按 game_id + branch_name 加载本地分支记录，
+// 用其最新构建版本在指定 node_agent 上执行缓存检查，必要时触发下载/更新。
+// （CheckAndUpdate 语义：已最新/下载中幂等成功，其他情况返回错误）
+func (g *GameCacheManager) UpdateBranchCache(ctx context.Context, gameId, branchName, nodeAgentId string) error {
+	branch, err := g.steamBranchRepo.GetByGameAndBranch(ctx, gameId, branchName)
+	if err != nil {
+		return err
+	}
+	return g.CheckAndUpdate(ctx, gameId, branchName, branch.LastBuildId, nodeAgentId)
+}
+
+// GetNodeCache 查询指定 node_agent 上某 (game, branch) 的缓存状态。
+// 缓存不存在（node_agent 返回 BUILD_CACHE_MISS / NOT_FOUND）时返回 (nil, nil)。
+func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId, branchName string) (*nodeagentv1.GameCache, error) {
+	if nodeAgentId == "" {
+		return nil, errors.New("node_agent_id is required")
+	}
+	if gameId == "" || branchName == "" {
+		return nil, errors.New("game_id and branch_name are required")
+	}
+
+	nodeAgent, err := g.nodeAgentRepo.GetByID(ctx, nodeAgentId)
+	if err != nil {
+		return nil, fmt.Errorf("get node_agent %s: %w", nodeAgentId, err)
+	}
+	node, err := g.nodeRepo.GetByID(nodeAgent.NodeId)
+	if err != nil {
+		return nil, fmt.Errorf("get node %s: %w", nodeAgent.NodeId, err)
+	}
+	client, err := g.nodeAgentClients.Get(ctx, nodeAgentId, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+	if err != nil {
+		return nil, fmt.Errorf("get node_agent client %s: %w", nodeAgentId, err)
+	}
+
+	resp, err := client.GetCacheGame(ctx, &nodeagentv1.GetCacheGameRequest{
+		GameId:     gameId,
+		BranchName: branchName,
+	})
+	if err != nil {
+		if isGameCacheNotFound(extractErrorDetail(err)) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get cache game from node_agent %s: %w", nodeAgentId, err)
+	}
+	if resp == nil || resp.GameCache == nil {
+		return nil, errors.New("node_agent returned empty game cache")
+	}
+	return resp.GameCache, nil
+}
+
 // Start 启动后台循环：周期性执行分支同步 + Enable 分支缓存检查/更新。
 // interval 每轮间隔；启动后立即执行一轮追平存量。
 func (g *GameCacheManager) Start(ctx context.Context, interval time.Duration) {

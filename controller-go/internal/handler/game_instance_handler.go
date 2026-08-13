@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"controller-go/internal/biz"
+	"controller-go/internal/entity"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,9 +24,14 @@ func NewGameInstanceHandler(uc *biz.GameInstanceUseCase) *GameInstanceHandler {
 func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 	group := router.Group("/api/game-instances")
 	group.POST("", h.CreateGameInstance)
+	group.GET("", h.ListGameInstances)
 	group.GET("/:id", h.GetGameInstance)
+	group.GET("/:id/ports", h.GetInstancePorts)
 	group.POST("/:id/start", h.StartGameInstance)
 	group.POST("/:id/stop", h.StopGameInstance)
+	group.POST("/:id/retry", h.RetryGameInstance)
+	group.POST("/:id/dispatch", h.ForceDispatch)
+	group.DELETE("/:id", h.DeleteGameInstance)
 }
 
 type createGameInstanceRequest struct {
@@ -95,4 +101,77 @@ func (h *GameInstanceHandler) StopGameInstance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "stopping"})
+}
+
+// ListGameInstances 列出全部实例，支持 ?status=<状态字符串> 过滤
+func (h *GameInstanceHandler) ListGameInstances(c *gin.Context) {
+	var status *entity.InstanceStatus
+	if s := c.Query("status"); s != "" {
+		parsed, ok := entity.ParseInstanceStatus(s)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status: " + s})
+			return
+		}
+		status = &parsed
+	}
+
+	instances, err := h.gameInstanceUseCase.ListGameInstances(c.Request.Context(), status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"instances": instances})
+}
+
+// GetInstancePorts 查询实例已分配的端口映射（调试用）
+func (h *GameInstanceHandler) GetInstancePorts(c *gin.Context) {
+	id := c.Param("id")
+	ports, err := h.gameInstanceUseCase.GetInstancePorts(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"instance_id": id, "ports": ports})
+}
+
+// RetryGameInstance 重试失败实例：failed → pending 重新入队调度
+func (h *GameInstanceHandler) RetryGameInstance(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.gameInstanceUseCase.RetryGameInstance(c.Request.Context(), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "retrying"})
+}
+
+// ForceDispatch 跳过状态校验，强制把实例压入调度队列（调试用）
+func (h *GameInstanceHandler) ForceDispatch(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.gameInstanceUseCase.ForceDispatch(c.Request.Context(), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "dispatched"})
+}
+
+// DeleteGameInstance 删除实例（非运行/非调度中状态；同时清理端口映射）
+func (h *GameInstanceHandler) DeleteGameInstance(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.gameInstanceUseCase.DeleteGameInstance(c.Request.Context(), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }

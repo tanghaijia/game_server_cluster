@@ -98,6 +98,34 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 }
 
 /**
+* ForceDispatch 跳过状态校验，直接将实例压入派遣队列。
+* 用于调试：当实例状态因异常停留在可调度中间态但未被消费时，手动强制重新入队。
+**/
+func (d *ReconcileDispatcher) ForceDispatch(ctx context.Context, instance *entity.GameInstance) error {
+	if instance == nil {
+		return errors.New("instance cannot be nil")
+	}
+	d.queue <- instance
+	return nil
+}
+
+// QueueLen 返回当前派遣队列长度（调试用）
+func (d *ReconcileDispatcher) QueueLen() int {
+	return len(d.queue)
+}
+
+// RetryCounts 返回各实例当前自动重试次数快照（调试用）
+func (d *ReconcileDispatcher) RetryCounts() map[string]int {
+	d.retryMu.Lock()
+	defer d.retryMu.Unlock()
+	out := make(map[string]int, len(d.operationRetryCounts))
+	for k, v := range d.operationRetryCounts {
+		out[k] = v
+	}
+	return out
+}
+
+/**
 * 派遣下一个需要派遣的GameInstance, 若队列中为空则会阻塞
 **/
 func (d *ReconcileDispatcher) NextDispatch(ctx context.Context) error {

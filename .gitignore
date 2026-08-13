@@ -8,7 +8,8 @@ game_node/Cargo.lock
 .gitnexus
 .claude
 *.exe
-null
+*/nul
 debug.json
 *.bkp
 *.dtmp
+.vscode

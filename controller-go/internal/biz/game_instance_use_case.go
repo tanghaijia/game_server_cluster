@@ -17,17 +17,20 @@ import (
 // GameInstanceUseCase 业务逻辑执行器
 type GameInstanceUseCase struct {
 	instanceRepo        repository.GameInstanceRepository
+	portMappingRepo     repository.ContainerPortMappingRepository
 	ReconcileDispatcher *ReconcileDispatcher
 	assetClient         *assetservice.AssetServiceFaceClient
 }
 
 func NewGameInstanceUseCase(
 	instanceRepo repository.GameInstanceRepository,
+	portMappingRepo repository.ContainerPortMappingRepository,
 	reconcileDispatcher *ReconcileDispatcher,
 	assetClient *assetservice.AssetServiceFaceClient,
 ) *GameInstanceUseCase {
 	return &GameInstanceUseCase{
 		instanceRepo:        instanceRepo,
+		portMappingRepo:     portMappingRepo,
 		ReconcileDispatcher: reconcileDispatcher,
 		assetClient:         assetClient,
 	}
@@ -155,4 +158,70 @@ func (uc *GameInstanceUseCase) StopGameInstance(ctx context.Context, instanceID 
 **/
 func (uc *GameInstanceUseCase) GetGameInstance(ctx context.Context, instanceID string) (*entity.GameInstance, error) {
 	return uc.instanceRepo.GetByID(ctx, instanceID)
+}
+
+/**
+* 列出 GameInstance；status 非空时按状态过滤，为空时列出全部（按创建时间排序）
+**/
+func (uc *GameInstanceUseCase) ListGameInstances(ctx context.Context, status *entity.InstanceStatus) ([]*entity.GameInstance, error) {
+	if status != nil {
+		return uc.instanceRepo.ListByStatuses(ctx, *status)
+	}
+	return uc.instanceRepo.ListAll(ctx)
+}
+
+/**
+* 重试失败的 GameInstance：状态置为 StatusPending 重新进入调度（仅 Failed 可重试）
+**/
+func (uc *GameInstanceUseCase) RetryGameInstance(ctx context.Context, instanceID string) error {
+	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return err
+	}
+	if instance.Status != entity.Failed {
+		return fmt.Errorf("invalid instance status：%s（仅 failed 状态可重试）", instance.Status)
+	}
+
+	instance.Status = entity.StatusPending
+	if err := uc.instanceRepo.UpdateStatus(ctx, instance); err != nil {
+		return err
+	}
+	return uc.ReconcileDispatcher.RequestDispatch(ctx, instance)
+}
+
+/**
+* ForceDispatch 跳过状态校验，将实例（当前状态原样）压入派遣队列。
+* 用于调试：实例卡在中间态但队列未消费时强制重新调度。
+**/
+func (uc *GameInstanceUseCase) ForceDispatch(ctx context.Context, instanceID string) error {
+	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return err
+	}
+	return uc.ReconcileDispatcher.ForceDispatch(ctx, instance)
+}
+
+/**
+* 删除 GameInstance（仅允许非调度中/非运行中的实例）：
+* 先清理其端口映射，再删除实例记录。
+**/
+func (uc *GameInstanceUseCase) DeleteGameInstance(ctx context.Context, instanceID string) error {
+	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return err
+	}
+	if isDispatchableStatus(instance.Status) {
+		return fmt.Errorf("instance is in dispatchable state %s, stop it first", instance.Status)
+	}
+	if err := uc.portMappingRepo.DeleteByInstanceId(ctx, instanceID); err != nil {
+		return fmt.Errorf("delete instance port mappings: %w", err)
+	}
+	return uc.instanceRepo.Delete(ctx, instanceID)
+}
+
+/**
+* 查询实例已分配的端口映射
+**/
+func (uc *GameInstanceUseCase) GetInstancePorts(ctx context.Context, instanceID string) ([]*entity.ContainerPortMapping, error) {
+	return uc.portMappingRepo.ListByInstanceId(ctx, instanceID)
 }

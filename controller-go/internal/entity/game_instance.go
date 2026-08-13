@@ -55,6 +55,35 @@ func (s InstanceStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
 }
 
+// ParseInstanceStatus 将状态字符串解析为 InstanceStatus，未知状态返回 false。
+// 用于 HTTP 查询参数（如 ?status=running）等外部输入解析。
+func ParseInstanceStatus(s string) (InstanceStatus, bool) {
+	switch s {
+	case "pending":
+		return StatusPending, true
+	case "scheduling":
+		return StatusScheduling, true
+	case "preparing_build":
+		return StatusPreparingBuild, true
+	case "restoring_snapshot":
+		return StatusRestoringSnapshot, true
+	case "starting":
+		return StatusStarting, true
+	case "running":
+		return StatusRunning, true
+	case "stopping":
+		return StatusStopping, true
+	case "cleaning":
+		return StatusCleaning, true
+	case "stopped":
+		return StatusStopped, true
+	case "failed":
+		return Failed, true
+	default:
+		return 0, false
+	}
+}
+
 type GameInstance struct {
 	ID              string         `gorm:"column:id;primaryKey"`
 	GameID          string         `gorm:"column:game_id"`

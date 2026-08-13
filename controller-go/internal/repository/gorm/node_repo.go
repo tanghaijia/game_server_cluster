@@ -1,6 +1,8 @@
 package gorm
 
 import (
+	"context"
+
 	"controller-go/internal/entity"
 
 	"gorm.io/gorm"
@@ -25,4 +27,13 @@ func (r *NodeRepo) GetByID(id string) (*entity.Node, error) {
 		return nil, err
 	}
 	return &node, nil
+}
+
+func (r *NodeRepo) ListAll(ctx context.Context) ([]*entity.Node, error) {
+	var nodes []*entity.Node
+	err := r.db.WithContext(ctx).Find(&nodes).Error
+	if err != nil {
+		return nil, err
+	}
+	return nodes, nil
 }

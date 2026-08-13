@@ -38,3 +38,12 @@ func (r *NodeAgentRepo) ListEnabledIDs(ctx context.Context) ([]string, error) {
 	}
 	return ids, nil
 }
+
+func (r *NodeAgentRepo) ListAll(ctx context.Context) ([]*entity.NodeAgent, error) {
+	var agents []*entity.NodeAgent
+	err := r.db.WithContext(ctx).Find(&agents).Error
+	if err != nil {
+		return nil, err
+	}
+	return agents, nil
+}
