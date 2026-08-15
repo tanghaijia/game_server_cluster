@@ -45,6 +45,15 @@ func (r *GameInstanceRepo) ListByStatuses(ctx context.Context, statuses ...entit
 	return instances, nil
 }
 
+func (r *GameInstanceRepo) ListByGame(ctx context.Context, gameID string) ([]*entity.GameInstance, error) {
+	var instances []*entity.GameInstance
+	err := r.db.WithContext(ctx).Where("game_id = ?", gameID).Order("create_time").Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+	return instances, nil
+}
+
 func (r *GameInstanceRepo) ListAll(ctx context.Context) ([]*entity.GameInstance, error) {
 	var instances []*entity.GameInstance
 	err := r.db.WithContext(ctx).

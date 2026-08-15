@@ -1,4 +1,4 @@
-package biz
+﻿package biz
 
 import (
 	"context"
@@ -24,11 +24,12 @@ type GameView struct {
 // GameCatalogUseCase 游戏目录：聚合 controller games 与 platform game_profiles
 type GameCatalogUseCase struct {
 	profileRepo repository.GameProfileRepository
+	orderRepo   repository.OrderRepository
 	controller  *controller.Client
 }
 
-func NewGameCatalogUseCase(profileRepo repository.GameProfileRepository, controllerClient *controller.Client) *GameCatalogUseCase {
-	return &GameCatalogUseCase{profileRepo: profileRepo, controller: controllerClient}
+func NewGameCatalogUseCase(profileRepo repository.GameProfileRepository, orderRepo repository.OrderRepository, controllerClient *controller.Client) *GameCatalogUseCase {
+	return &GameCatalogUseCase{profileRepo: profileRepo, orderRepo: orderRepo, controller: controllerClient}
 }
 
 // ListGames 聚合游戏列表。includeDisabled=true（管理员）返回全部 game（含无 profile 的）；
@@ -148,4 +149,22 @@ func (uc *GameCatalogUseCase) UpdateProfile(ctx context.Context, gameID string, 
 		return nil, err
 	}
 	return prof, nil
+}
+
+// DeleteGame 删除游戏（admin）：先调 controller 级联删除（存在运行中实例会被拒绝），
+// 成功后删除平台侧 game_profiles 并把该游戏未终结订单标记为"已下架"。
+func (uc *GameCatalogUseCase) DeleteGame(ctx context.Context, gameID string) error {
+	// 1) controller 删除（含实例检查/级联；失败则整体中止）
+	if err := uc.controller.DeleteGame(ctx, gameID); err != nil {
+		return err
+	}
+	// 2) 删游戏资料（下架）
+	if err := uc.profileRepo.Delete(ctx, gameID); err != nil {
+		return err
+	}
+	// 3) 关联订单标记"已下架"（保留审计）
+	if err := uc.orderRepo.MarkGameRemoved(ctx, gameID); err != nil {
+		return err
+	}
+	return nil
 }

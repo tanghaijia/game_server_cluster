@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"errors"
@@ -201,7 +201,8 @@ func (h *AdminHandler) UpdateGame(c *gin.Context) {
 }
 
 func (h *AdminHandler) DeleteGame(c *gin.Context) {
-	if err := h.controller.DeleteGame(c.Request.Context(), c.Param("id")); err != nil {
+	// 级联删除：controller 删实例/分支/配置 + platform 删资料 + 订单标记下架
+	if err := h.gameCatalog.DeleteGame(c.Request.Context(), c.Param("id")); err != nil {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})

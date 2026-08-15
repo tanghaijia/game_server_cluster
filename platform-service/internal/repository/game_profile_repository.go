@@ -12,4 +12,5 @@ type GameProfileRepository interface {
 	GetByID(ctx context.Context, gameID string) (*entity.GameProfile, error)
 	ListAll(ctx context.Context) ([]*entity.GameProfile, error)
 	ListEnabled(ctx context.Context) ([]*entity.GameProfile, error)
+	Delete(ctx context.Context, gameID string) error
 }

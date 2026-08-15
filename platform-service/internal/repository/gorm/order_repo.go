@@ -56,6 +56,15 @@ func (r *OrderRepo) ListByUserAndGame(ctx context.Context, userID, gameID string
 	return orders, nil
 }
 
+func (r *OrderRepo) MarkGameRemoved(ctx context.Context, gameID string) error {
+	// 标记未终结订单（created/paid/provisioned）；已取消/已退款保留历史
+	return r.db.WithContext(ctx).Model(&entity.Order{}).
+		Where("game_id = ? AND status IN ?", gameID, []entity.OrderStatus{
+			entity.OrderStatusCreated, entity.OrderStatusPaid, entity.OrderStatusProvisioned,
+		}).
+		Update("status", entity.OrderStatusGameRemoved).Error
+}
+
 func (r *OrderRepo) ListAll(ctx context.Context) ([]*entity.Order, error) {
 	var orders []*entity.Order
 	err := r.db.WithContext(ctx).Order("create_time").Find(&orders).Error

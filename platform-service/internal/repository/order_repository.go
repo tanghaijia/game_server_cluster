@@ -14,4 +14,6 @@ type OrderRepository interface {
 	ListByGame(ctx context.Context, gameID string) ([]*entity.Order, error)
 	ListByUserAndGame(ctx context.Context, userID, gameID string) ([]*entity.Order, error)
 	ListAll(ctx context.Context) ([]*entity.Order, error)
+	// MarkGameRemoved 把某游戏未终结的订单标记为已下架（删除游戏时调用）
+	MarkGameRemoved(ctx context.Context, gameID string) error
 }

@@ -6,29 +6,46 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"controller-go/internal/client/assetservice"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 	assetservicev1 "controller-go/internal/third/assetservice/v1"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // GameUseCase 提供 Game 增删改查，并同步到 asset_service。
 // 写操作采用 write-through：先调 asset_service（同步目标必须成功），成功后再落本地库；
 // 读操作以本地库为准（controller 是游戏管理的权威入口，本地表驱动实例调度）。
 type GameUseCase struct {
-	gamerepo       repository.GameRepository
-	steamBranchRepo repository.SteamBranchRepository
-	businessClient *assetservice.BusinessServiceFaceClient
+	gamerepo            repository.GameRepository
+	steamBranchRepo     repository.SteamBranchRepository
+	instanceRepo        repository.GameInstanceRepository
+	portMappingRepo     repository.ContainerPortMappingRepository
+	containerConfigRepo repository.GameContainerConfigRepository
+	businessClient      *assetservice.BusinessServiceFaceClient
 }
 
 func NewGameUseCase(
 	gamerepo repository.GameRepository,
 	steamBranchRepo repository.SteamBranchRepository,
+	instanceRepo repository.GameInstanceRepository,
+	portMappingRepo repository.ContainerPortMappingRepository,
+	containerConfigRepo repository.GameContainerConfigRepository,
 	businessClient *assetservice.BusinessServiceFaceClient,
 ) *GameUseCase {
-	return &GameUseCase{gamerepo: gamerepo, steamBranchRepo: steamBranchRepo, businessClient: businessClient}
+	return &GameUseCase{
+		gamerepo:            gamerepo,
+		steamBranchRepo:     steamBranchRepo,
+		instanceRepo:        instanceRepo,
+		portMappingRepo:     portMappingRepo,
+		containerConfigRepo: containerConfigRepo,
+		businessClient:      businessClient,
+	}
 }
 
 // CreateGame 创建一个 Game：controller 生成 id，先同步到 asset_service，再落本地库。
@@ -94,18 +111,73 @@ func (uc *GameUseCase) UpdateGame(ctx context.Context, id, name, appID string) (
 	return existing, nil
 }
 
-// DeleteGame 删除 Game：先同步到 asset_service（须存在），再删本地库，
-// 同时级联删除该 game 同步下来的 steam_branches 分支记录。
+// DeleteGame 删除 Game（级联）：
+// 1) 存在非终态（运行中/调度中/停止中...）实例 → 拒绝（管理员须先全部停止并删除实例）；
+// 2) 级联删除该游戏全部实例及其端口映射；
+// 3) 同步删除 asset_service；
+// 4) 删除 steam_branches；
+// 5) 删除 game_container_configs（仅当无其他游戏引用）；
+// 6) 删除 games 行。
 func (uc *GameUseCase) DeleteGame(ctx context.Context, id string) error {
 	if id == "" {
 		return errors.New("id is required")
 	}
-	if _, err := uc.businessClient.DeleteGame(ctx, &assetservicev1.DeleteGameRequest{Id: id}); err != nil {
-		return err
+
+	// 1) 检查实例状态：非 stopped/failed 的实例拒绝删除
+	instances, err := uc.instanceRepo.ListByGame(ctx, id)
+	if err != nil {
+		return fmt.Errorf("list game instances: %w", err)
 	}
+	for _, inst := range instances {
+		if inst.Status != entity.StatusStopped && inst.Status != entity.Failed {
+			return fmt.Errorf("游戏仍有状态为 %s 的实例 %s，请先全部停止并删除实例", inst.Status, inst.ID)
+		}
+	}
+
+	// 2) 删除实例及其端口映射
+	for _, inst := range instances {
+		if err := uc.portMappingRepo.DeleteByInstanceId(ctx, inst.ID); err != nil {
+			return fmt.Errorf("delete port mappings of instance %s: %w", inst.ID, err)
+		}
+		if err := uc.instanceRepo.Delete(ctx, inst.ID); err != nil {
+			return fmt.Errorf("delete instance %s: %w", inst.ID, err)
+		}
+	}
+
+	// 3) 同步删除 asset_service；asset_service 中不存在（NotFound）时跳过——
+	//    允许删除"本地 seed 但 asset_service 未注册"的游戏
+	if _, err := uc.businessClient.DeleteGame(ctx, &assetservicev1.DeleteGameRequest{Id: id}); err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			slog.Warn("asset_service 中游戏不存在，跳过同步删除", "game_id", id)
+		} else {
+			return err
+		}
+	}
+
+	// 4) 删除分支
 	if err := uc.steamBranchRepo.DeleteByGame(ctx, id); err != nil {
 		return fmt.Errorf("delete steam branches locally: %w", err)
 	}
+
+	// 5) 删除容器配置（仅当无其他游戏引用同一配置）
+	if game, err := uc.gamerepo.GetByID(ctx, id); err == nil && game.ContainerConfigID != "" {
+		if all, err := uc.gamerepo.ListAll(ctx); err == nil {
+			referenced := false
+			for _, g := range all {
+				if g.ID != id && g.ContainerConfigID == game.ContainerConfigID {
+					referenced = true
+					break
+				}
+			}
+			if !referenced {
+				if err := uc.containerConfigRepo.Delete(ctx, game.ContainerConfigID); err != nil {
+					return fmt.Errorf("delete container config: %w", err)
+				}
+			}
+		}
+	}
+
+	// 6) 删除游戏
 	if err := uc.gamerepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete game locally: %w", err)
 	}

@@ -65,7 +65,7 @@ func main() {
 	// controller-go 客户端（ADR-0001）
 	controllerClient := controller.NewClient(cfg.ControllerAddr)
 	orderUseCase := biz.NewOrderUseCase(orderRepo, controllerClient)
-	gameCatalogUseCase := biz.NewGameCatalogUseCase(gameProfileRepo, controllerClient)
+	gameCatalogUseCase := biz.NewGameCatalogUseCase(gameProfileRepo, orderRepo, controllerClient)
 
 	// 管理员播种（ADR 方案1）：ADMIN_USERNAME/ADMIN_PASSWORD 已设置且用户不存在时创建
 	if cfg.AdminUsername != "" {

@@ -1,4 +1,4 @@
-package gorm
+﻿package gorm
 
 import (
 	"context"
@@ -45,4 +45,8 @@ func (r *GameProfileRepo) ListEnabled(ctx context.Context) ([]*entity.GameProfil
 		return nil, err
 	}
 	return ps, nil
+}
+
+func (r *GameProfileRepo) Delete(ctx context.Context, gameID string) error {
+	return r.db.WithContext(ctx).Delete(&entity.GameProfile{}, "game_id = ?", gameID).Error
 }

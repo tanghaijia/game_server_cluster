@@ -1,4 +1,4 @@
-package gorm
+﻿package gorm
 
 import (
 	"context"
@@ -26,4 +26,14 @@ func (r *GameContainerConfigRepo) GetByID(ctx context.Context, id string) (*enti
 		return nil, err
 	}
 	return &config, nil
+}
+
+func (r *GameContainerConfigRepo) Delete(ctx context.Context, id string) error {
+	// 先删端口片段，再删配置
+	if err := r.db.WithContext(ctx).
+		Where("game_container_config_id = ?", id).
+		Delete(&entity.GameContainerPortExcerpt{}).Error; err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Delete(&entity.GameContainerConfig{}, "id = ?", id).Error
 }

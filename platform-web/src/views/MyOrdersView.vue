@@ -78,7 +78,7 @@ const orders = ref<Order[]>([])
 const form = reactive({ amount: 100 })
 const error = ref('')
 
-const statusText = (s: number) => ['created', 'paid', 'cancelled', 'refunded', 'provisioned'][s] ?? 'unknown'
+const statusText = (s: number) => ['created', 'paid', 'cancelled', 'refunded', 'provisioned', '已下架'][s] ?? 'unknown'
 
 async function load() {
   error.value = ''

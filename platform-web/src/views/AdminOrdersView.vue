@@ -60,7 +60,7 @@ const orders = ref<Order[]>([])
 const filterUser = ref('')
 const error = ref('')
 
-const statusText = (s: number) => ['created', 'paid', 'cancelled', 'refunded', 'provisioned'][s] ?? 'unknown'
+const statusText = (s: number) => ['created', 'paid', 'cancelled', 'refunded', 'provisioned', '已下架'][s] ?? 'unknown'
 
 async function load() {
   orders.value = await listOrders(filterUser.value || undefined)
