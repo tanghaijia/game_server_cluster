@@ -45,7 +45,9 @@ func Load() *Config {
 		GameCacheReconcileInterval: getEnvInt("GAME_CACHE_RECONCILE_INTERVAL", 60),
 
 		NodeAgentFileSecret:     getEnv("NODE_AGENT_FILE_SECRET", "dev-file-secret-change-me"),
-		NodeAgentFilePortOffset: getEnvInt("NODE_AGENT_FILE_PORT_OFFSET", 1),
+		// 文件服务端口 = node_agent gRPC 端口 + offset。
+		// node_agent 文件服务默认监听 50054（= gRPC 50052 + 2，避开 asset_service 的 50053）
+		NodeAgentFilePortOffset: getEnvInt("NODE_AGENT_FILE_PORT_OFFSET", 2),
 	}
 }
 

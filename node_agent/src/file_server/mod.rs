@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Path as AxumPath, Query, RawQuery, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::extract::{Path as AxumPath, Query, RawQuery, Request, State};
+use axum::http::{header, HeaderMap, Method, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
@@ -49,6 +50,8 @@ impl FileServer {
             .route("/v1/instances/{instance_id}/files/text", get(read_text).put(write_text))
             .route("/v1/instances/{instance_id}/files/rename", post(rename_file))
             .route("/v1/instances/{instance_id}/files/mkdir", post(mkdir))
+            // 浏览器跨源直连（dev 5173 / 生产其他源）必须 CORS；token 走 header 非 cookie，允许 *
+            .layer(middleware::from_fn(cors))
             .with_state(self)
     }
 
@@ -313,6 +316,40 @@ async fn write_text(
     }
     tokio::fs::write(&target, body.content).await.map_err(FileError::io)?;
     Ok(Json(serde_json::json!({ "message": "saved", "path": path })))
+}
+
+// ------------------------- CORS -------------------------
+
+/// 手写 CORS 中间件：允许跨源直连（浏览器 ↔ node_agent），token 走 Authorization header 而非 cookie。
+async fn cors(request: Request, next: Next) -> Response {
+    let method = request.method().clone();
+    let mut response = if method == Method::OPTIONS {
+        Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(Body::empty())
+            .expect("build OPTIONS response")
+    } else {
+        next.run(request).await
+    };
+
+    let headers = response.headers_mut();
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        header::HeaderValue::from_static("*"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_METHODS,
+        header::HeaderValue::from_static("GET, PUT, POST, DELETE, OPTIONS"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_HEADERS,
+        header::HeaderValue::from_static("Authorization, Content-Type"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        header::HeaderValue::from_static("86400"),
+    );
+    response
 }
 
 // ------------------------- 工具 -------------------------
