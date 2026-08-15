@@ -514,7 +514,7 @@ where
                 message: err.to_string(),
             })?;
 
-        // 恢复到 /data/game-instances/{game_instance_id}
+        // 恢复到 /data/game_instances/{game_instance_id}（HOST_DATA_PATH）
         let data_path = HostSnapShotDataPath::new(instance_id.clone());
         let restore_path_string = data_path.as_ref().display().to_string();
         self.directory_service

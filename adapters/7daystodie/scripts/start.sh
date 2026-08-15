@@ -69,6 +69,9 @@ log "USER_DATA=${USER_DATA}"
 
 cd "${BIN_DIR}"
 
+# 确保游戏目录进入库搜索路径（steamclient.so 等）
+export LD_LIBRARY_PATH="${BIN_DIR}:${BIN_DIR}/linux64:${LD_LIBRARY_PATH:-}"
+
 log "starting 7 Days to Die dedicated server..."
 
 # 必须加 -logfile，否则 Unity 默认往安装目录(/server 只读)写 output_log

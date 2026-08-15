@@ -149,6 +149,7 @@ pub struct NodeOperation {
     pub error: Option<OperationError>,
 }
 
+/// 实例数据路径（与 HOST_DATA_PATH 一致：`/data/game_instances/{id}`，勿用连字符）
 pub fn instance_data_path(instance_id: &InstanceId) -> String {
-    format!("/data/game-instances/{}", instance_id.0)
+    format!("/data/game_instances/{}", instance_id.0)
 }

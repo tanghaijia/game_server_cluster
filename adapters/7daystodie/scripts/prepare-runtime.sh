@@ -35,6 +35,14 @@ copy_if_missing "${TEMPLATE_DIR}/serverconfig.xml" "${CONFIG_FILE}"
 # serveradmin.xml 位于 UserDataFolder/Saves 下（AdminFileName 相对 Saves）
 copy_if_missing "${TEMPLATE_DIR}/serveradmin.xml" "${USER_DATA}/Saves/serveradmin.xml"
 
+# steamclient.so：Steam GameServer 初始化必需，缺失会导致 Steam 玩家连接超时。
+# 它属于运行环境，应随游戏构建提供（/server 内，start.sh 已把游戏目录加入 LD_LIBRARY_PATH），
+# 不写入 /data（用户数据边界，避免被快照/备份/文件管理混淆）。
+if ! find "${SERVER_ROOT}" -name steamclient.so -type f 2>/dev/null | grep -q .; then
+  echo "[prepare-runtime] WARN: steamclient.so not found under ${SERVER_ROOT}; Steam GameServer init will fail."
+  echo "[prepare-runtime]       place linux64/steamclient.so inside the game build (e.g. ${SERVER_ROOT}/linux64/)."
+fi
+
 # 7DTD 无必须手动提供的 token，但可检查 config 是否非空，避免启动即失败
 if [ ! -s "${CONFIG_FILE}" ]; then
   echo "[prepare-runtime] ERROR: ${CONFIG_FILE} is empty."
