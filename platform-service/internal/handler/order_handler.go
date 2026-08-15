@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"platform-service/internal/biz"
+	"platform-service/internal/client/controller"
 	"platform-service/internal/entity"
 
 	"github.com/gin-gonic/gin"
@@ -195,19 +196,35 @@ func (h *OrderHandler) MyInstances(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"instances": instances})
 }
 
-// MyFileSession 为当前用户订单关联的实例签发文件会话（本人或管理员）
+// MyFileSession 为当前用户订单关联的实例签发文件会话（本人或管理员）。
+// 注意：路由参数是 :orderId，不能复用 loadOwnOrder（其内部取 c.Param("id")）。
 func (h *OrderHandler) MyFileSession(c *gin.Context) {
-	order, ok := h.loadOwnOrder(c)
-	if !ok {
+	orderID := c.Param("orderId")
+	order, err := h.orderUseCase.GetOrder(c.Request.Context(), orderID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !isAdmin(c) && order.UserID != CurrentUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot access other users instances"})
 		return
 	}
 	if order.InstanceID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "order has no instance, pay or provision first"});
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order has no instance, pay or provision first"})
 		return
 	}
 	session, err := h.orderUseCase.FileSession(c.Request.Context(), order.InstanceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()});
+		if errors.Is(err, controller.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		// controller 不可达或返回错误：502 + 透传 controller 的响应体便于排查
+		c.JSON(http.StatusBadGateway, gin.H{"error": "controller 不可达或返回错误: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, session)

@@ -66,8 +66,16 @@ func (h *FileSessionHandler) FileSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "load node_agent: " + err.Error()});
 		return
 	}
+	if nodeAgent.NodeId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_agent " + nodeAgent.ID + " has no node_id assigned, set node_id first"});
+		return
+	}
 	node, err := h.nodeRepo.GetByID(nodeAgent.NodeId)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "node " + nodeAgent.NodeId + " not found for node_agent " + nodeAgent.ID});
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "load node: " + err.Error()});
 		return
 	}
