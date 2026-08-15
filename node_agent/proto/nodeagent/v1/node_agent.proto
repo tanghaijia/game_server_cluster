@@ -190,6 +190,8 @@ message InstanceRuntimeSpec {
   string container_server_path = 4;
   optional string branch_name = 5;
   optional PortMapping port_mapping = 6;
+  // 容器环境变量（端口注入等：如 SDTD_SERVER_PORT=<宿主端口>，供 adapter 改写游戏端口）
+  map<string, string> env = 7;
 }
 
 message BuildPreparationResult {

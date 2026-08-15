@@ -10,6 +10,9 @@ SERVER_ROOT="${SDTD_SERVER_ROOT:-/server}"
 CONFIG_FILE="${SDTD_CONFIG_FILE:-/data/serverconfig.xml}"
 USER_DATA="${SDTD_USER_DATA:-/data/7DaysToDie}"
 TELNET_PORT="${SDTD_TELNET_PORT:-8081}"
+# 端口注入：平台分配宿主端口后通过 env 传入（SDTD_SERVER_PORT=<宿主端口>），
+# 启动前改写 serverconfig.xml 的 ServerPort，使游戏通告端口 == 宿主映射端口（EOS/Steam 发现与直连一致）。
+SERVER_PORT="${SDTD_SERVER_PORT:-26900}"
 BIN="${SDTD_BIN:-}"
 
 # Unity/7DTD 需要可写的 HOME：
@@ -57,6 +60,12 @@ trap stop_server SIGTERM SIGINT
 
 /scripts/prepare-runtime.sh
 
+# 端口注入：改写 /data/serverconfig.xml 的 ServerPort（幂等；模板默认 26900）
+if [ -f "${CONFIG_FILE}" ] && [ "${SERVER_PORT}" != "26900" ]; then
+  log "SDTD_SERVER_PORT=${SERVER_PORT} -> rewrite ${CONFIG_FILE} ServerPort"
+  sed -i "s|<property name=\"ServerPort\" value=\"[0-9]*\"/>|<property name=\"ServerPort\" value=\"${SERVER_PORT}\"/>|" "${CONFIG_FILE}"
+fi
+
 BIN="$(find_server_bin)"
 BIN_DIR="$(dirname "${BIN}")"
 
@@ -66,6 +75,7 @@ log "BIN_DIR=${BIN_DIR}"
 log "DATA_ROOT=${DATA_ROOT}"
 log "CONFIG_FILE=${CONFIG_FILE}"
 log "USER_DATA=${USER_DATA}"
+log "SERVER_PORT=${SERVER_PORT}"
 
 cd "${BIN_DIR}"
 

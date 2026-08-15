@@ -110,6 +110,7 @@ impl ContainerClient for DockerContainerClient {
         path_mapping: Vec<crate::domain::ContainerFilePathMappingHost>,
         port_mapping: Option<crate::domain::ContainerPortMapping>,
         resource_limitation: Option<crate::domain::ContainerResourceLimitation>,
+        env: HashMap<String, String>,
     ) -> Result<GameContainer, ContainerError> {
         let docker = Docker::connect_with_socket_defaults().map_err(bollard_to_io_error)?;
 
@@ -146,6 +147,9 @@ impl ContainerClient for DockerContainerClient {
             }
         }
 
+        // 容器环境变量（端口注入等：KEY=VALUE 列表）
+        let env: Vec<String> = env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
+
         // 资源限制（当前 ContainerResourceLimitation 为空结构体，后续扩展）
         let _ = resource_limitation;
 
@@ -159,6 +163,7 @@ impl ContainerClient for DockerContainerClient {
             image: Some(image_full_name),
             // 以宿主机当前用户的 UID/GID 运行容器进程，解决挂载卷权限问题
             user: current_user_id_gid(),
+            env: if env.is_empty() { None } else { Some(env) },
             labels: Some(HashMap::from([(
                 "managed-by".to_string(),
                 "node-agent".to_string(),

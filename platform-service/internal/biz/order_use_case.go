@@ -152,11 +152,12 @@ func (uc *OrderUseCase) StopInstance(ctx context.Context, orderID string) (*enti
 
 // UserInstance 用户侧实例视图（订单 + controller 实例状态）
 type UserInstance struct {
-	OrderID    string `json:"order_id"`
-	InstanceID string `json:"instance_id"`
-	GameID     string `json:"game_id"`
-	Status     string `json:"status"`
-	NodeAgent  string `json:"node_agent,omitempty"`
+	OrderID        string `json:"order_id"`
+	InstanceID     string `json:"instance_id"`
+	GameID         string `json:"game_id"`
+	Status         string `json:"status"`
+	NodeAgent      string `json:"node_agent,omitempty"`
+	ConnectAddress string `json:"connect_address,omitempty"` // node_ip:game_host_port（running 实例）
 }
 
 // ListInstances 返回订单关联的实例列表。userID 为空表示全部（管理员）；gameID 非空按游戏过滤。
@@ -187,6 +188,12 @@ func (uc *OrderUseCase) ListInstances(ctx context.Context, userID, gameID string
 			ui.Status = inst.Status
 			if inst.NodeAgentID != nil {
 				ui.NodeAgent = *inst.NodeAgentID
+			}
+			// running 实例补充对外连接地址（controller 不可达/未调度时忽略）
+			if inst.Status == "running" {
+				if conn, err := uc.controller.GetInstanceConnect(ctx, o.InstanceID); err == nil && conn != nil && conn.NodeIP != "" && conn.GameHostPort > 0 {
+					ui.ConnectAddress = fmt.Sprintf("%s:%d", conn.NodeIP, conn.GameHostPort)
+				}
 			}
 		} else {
 			ui.Status = "unknown"

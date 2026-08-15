@@ -21,6 +21,7 @@
             <th class="px-4 py-3">实例</th>
             <th class="px-4 py-3">状态</th>
             <th class="px-4 py-3">节点</th>
+            <th class="px-4 py-3">连接地址</th>
             <th class="px-4 py-3">操作</th>
           </tr>
         </thead>
@@ -32,6 +33,12 @@
               <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ statusText(inst.status) }}</span>
             </td>
             <td class="px-4 py-3 text-xs">{{ inst.node_agent ?? '-' }}</td>
+            <td class="px-4 py-3 text-xs">
+              <span v-if="inst.connect_address" class="inline-flex items-center gap-1 font-mono">{{ inst.connect_address }}
+                <button class="rounded border px-1.5 py-0.5 text-[10px] hover:bg-muted" title="复制连接地址" @click="copyAddress(inst.connect_address!)">复制</button>
+              </span>
+              <span v-else class="text-muted-foreground">-</span>
+            </td>
             <td class="px-4 py-3">
               <button
                 v-if="action(inst.status)"
@@ -46,7 +53,7 @@
             </td>
           </tr>
           <tr v-if="!instances.length">
-            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">暂无服务器——先去「订单」下单并开服</td>
+            <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">暂无服务器——先去「订单」下单并开服</td>
           </tr>
         </tbody>
       </table>
@@ -88,6 +95,13 @@ async function load() {
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载实例失败（请确认已登录、后端已启动）'
   }
+}
+
+function copyAddress(addr: string) {
+  navigator.clipboard?.writeText(addr).then(
+    () => { error.value = '' },
+    () => { error.value = '复制失败，请手动复制' },
+  )
 }
 
 function openFiles(inst: UserInstance) {

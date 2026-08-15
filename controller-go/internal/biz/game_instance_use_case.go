@@ -18,6 +18,10 @@ import (
 type GameInstanceUseCase struct {
 	instanceRepo        repository.GameInstanceRepository
 	portMappingRepo     repository.ContainerPortMappingRepository
+	nodeAgentRepo       repository.NodeAgentRepository
+	nodeRepo            repository.NodeRepository
+	gameRepo            repository.GameRepository
+	gameContainerConfigRepo repository.GameContainerConfigRepository
 	ReconcileDispatcher *ReconcileDispatcher
 	assetClient         *assetservice.AssetServiceFaceClient
 }
@@ -25,14 +29,22 @@ type GameInstanceUseCase struct {
 func NewGameInstanceUseCase(
 	instanceRepo repository.GameInstanceRepository,
 	portMappingRepo repository.ContainerPortMappingRepository,
+	nodeAgentRepo repository.NodeAgentRepository,
+	nodeRepo repository.NodeRepository,
+	gameRepo repository.GameRepository,
+	gameContainerConfigRepo repository.GameContainerConfigRepository,
 	reconcileDispatcher *ReconcileDispatcher,
 	assetClient *assetservice.AssetServiceFaceClient,
 ) *GameInstanceUseCase {
 	return &GameInstanceUseCase{
-		instanceRepo:        instanceRepo,
-		portMappingRepo:     portMappingRepo,
-		ReconcileDispatcher: reconcileDispatcher,
-		assetClient:         assetClient,
+		instanceRepo:            instanceRepo,
+		portMappingRepo:         portMappingRepo,
+		nodeAgentRepo:           nodeAgentRepo,
+		nodeRepo:                nodeRepo,
+		gameRepo:                gameRepo,
+		gameContainerConfigRepo: gameContainerConfigRepo,
+		ReconcileDispatcher:     reconcileDispatcher,
+		assetClient:             assetClient,
 	}
 }
 
@@ -224,4 +236,94 @@ func (uc *GameInstanceUseCase) DeleteGameInstance(ctx context.Context, instanceI
 **/
 func (uc *GameInstanceUseCase) GetInstancePorts(ctx context.Context, instanceID string) ([]*entity.ContainerPortMapping, error) {
 	return uc.portMappingRepo.ListByInstanceId(ctx, instanceID)
+}
+
+// InstanceConnectInfo 实例对外连接信息（connect_address = node_ip:game_host_port）
+type InstanceConnectInfo struct {
+	NodeIP        string `json:"node_ip"`
+	GameHostPort  uint16 `json:"game_host_port"`
+	GamePort      uint16 `json:"game_port"` // 容器内游戏端口
+	Protocol      string `json:"protocol"`  // tcp/udp
+	HostPort      uint16 `json:"host_port"` // 映射的宿主端口（可能多个，取游戏端口那条）
+	ContainerPort uint16 `json:"container_port"`
+}
+
+// GetInstanceConnectInfo 计算实例对客户端公开的连接地址：
+// node_ip = 实例所在 node 的 IP；game_host_port = 游戏主端口(is_game_port)对应的宿主端口。
+// 仅 running 实例有完整映射；未调度/无 node_agent 时返回 error。
+func (uc *GameInstanceUseCase) GetInstanceConnectInfo(ctx context.Context, instanceID string) (*InstanceConnectInfo, error) {
+	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	if instance.NodeAgentID == nil {
+		return nil, errors.New("instance has no node agent assigned")
+	}
+	nodeAgent, err := uc.nodeAgentRepo.GetByID(ctx, *instance.NodeAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("load node agent: %w", err)
+	}
+	node, err := uc.nodeRepo.GetByID(nodeAgent.NodeId)
+	if err != nil {
+		return nil, fmt.Errorf("load node: %w", err)
+	}
+	game, err := uc.gameRepo.GetByID(ctx, instance.GameID)
+	if err != nil {
+		return nil, fmt.Errorf("load game: %w", err)
+	}
+	config, err := uc.gameContainerConfigRepo.GetByID(ctx, game.ContainerConfigID)
+	if err != nil {
+		return nil, fmt.Errorf("load container config: %w", err)
+	}
+
+	// 找游戏主端口（is_game_port 标记；没有标记则退化为第一个 excerpt 的起始端口）
+	var gamePort uint16
+	for _, e := range config.PortExcerpt {
+		if e.IsGamePort {
+			gamePort = e.BeginPort
+			break
+		}
+	}
+	if gamePort == 0 && len(config.PortExcerpt) > 0 {
+		gamePort = config.PortExcerpt[0].BeginPort
+	}
+	if gamePort == 0 {
+		return nil, errors.New("container config declares no game port")
+	}
+
+	mappings, err := uc.portMappingRepo.ListByInstanceId(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("list port mappings: %w", err)
+	}
+	// 注入模式下 container_port == host_port（identity），无法按容器端口匹配，
+	// 优先取 is_game_port 标记的映射；否则回退到容器端口 == 游戏端口。
+	var fallback *entity.ContainerPortMapping
+	for _, m := range mappings {
+		if m.IsGamePort {
+			return connectInfoFromMapping(node.Ip, gamePort, m), nil
+		}
+		if m.ContainerPort == gamePort && fallback == nil {
+			fallback = m
+		}
+	}
+	if fallback != nil {
+		return connectInfoFromMapping(node.Ip, gamePort, fallback), nil
+	}
+	return nil, fmt.Errorf("no port mapping found for game port %d", gamePort)
+}
+
+// connectInfoFromMapping 由端口映射行构造连接信息
+func connectInfoFromMapping(nodeIP string, gamePort uint16, m *entity.ContainerPortMapping) *InstanceConnectInfo {
+	protocol := "tcp"
+	if m.Protocol == entity.UDP {
+		protocol = "udp"
+	}
+	return &InstanceConnectInfo{
+		NodeIP:        nodeIP,
+		GameHostPort:  m.HostPort,
+		GamePort:      gamePort,
+		Protocol:      protocol,
+		HostPort:      m.HostPort,
+		ContainerPort: m.ContainerPort,
+	}
 }

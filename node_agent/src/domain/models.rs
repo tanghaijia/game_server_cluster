@@ -46,6 +46,8 @@ pub struct StartInstanceArgument {
     pub container_server_path: String,
     pub branch_name: String,
     pub port_mapping: Option<ContainerPortMapping>,
+    /// 容器环境变量（端口注入：如 SDTD_SERVER_PORT=<宿主端口>，adapter 用于改写游戏端口）
+    pub env: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

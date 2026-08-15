@@ -7,6 +7,7 @@ type ContainerPortMapping struct {
 	HostPort      uint16       `gorm:"column:host_port"`
 	ContainerPort uint16       `gorm:"column:container_port"`
 	Protocol      ProtocolType `gorm:"column:protocol"`
+	IsGamePort    bool         `gorm:"column:is_game_port"` // 游戏主端口对应的宿主端口（connect 地址/端口注入用）
 }
 
 func (ContainerPortMapping) TableName() string {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -625,11 +626,33 @@ func buildInstanceRuntimeSpec(
 		Build:               mapGameBuild(build),
 		ContainerServerPath: config.ContainerServerPath,
 		PortMapping:         mapPortMapping(config, portMappings),
+		// 端口注入：把游戏端口对应的宿主端口通过 env 传给 adapter
+		// （adapter start.sh 用它改写 serverconfig.xml 的 ServerPort，使游戏通告端口 == 宿主端口）
+		Env: buildInstanceEnv(config, portMappings),
 		// spec 目前无数据来源，先填占位结构体以满足 nodeagent 的校验
 		Spec: &nodeagentv1.InstanceSpec{
 			Resources: &nodeagentv1.ResourceRequirements{},
 		},
 	}
+}
+
+/**
+* buildInstanceEnv 构造容器环境变量：
+* 注入模式（InjectGamePort）下，向 adapter 传递 SDTD_SERVER_PORT=<游戏端口宿主端口>。
+* 未启用注入时返回 nil（空 env，nodeagent 不注入任何环境变量）。
+**/
+func buildInstanceEnv(config *entity.GameContainerConfig, portMappings []entity.ContainerPortMapping) map[string]string {
+	if config == nil || !config.InjectGamePort {
+		return nil
+	}
+	for _, m := range portMappings {
+		if m.IsGamePort {
+			return map[string]string{
+				"SDTD_SERVER_PORT": strconv.Itoa(int(m.HostPort)),
+			}
+		}
+	}
+	return nil
 }
 
 /**

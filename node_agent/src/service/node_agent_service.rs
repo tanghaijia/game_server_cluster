@@ -477,6 +477,7 @@ where
                 v2,
                 argument.port_mapping,
                 None,
+                argument.env,
             )
             .await?;
 

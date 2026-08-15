@@ -27,6 +27,7 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 	group.GET("", h.ListGameInstances)
 	group.GET("/:id", h.GetGameInstance)
 	group.GET("/:id/ports", h.GetInstancePorts)
+	group.GET("/:id/connect", h.GetInstanceConnect)
 	group.POST("/:id/start", h.StartGameInstance)
 	group.POST("/:id/stop", h.StopGameInstance)
 	group.POST("/:id/retry", h.RetryGameInstance)
@@ -132,6 +133,21 @@ func (h *GameInstanceHandler) GetInstancePorts(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"instance_id": id, "ports": ports})
+}
+
+// GetInstanceConnect 查询实例对客户端公开的连接地址（node_ip:game_host_port）
+func (h *GameInstanceHandler) GetInstanceConnect(c *gin.Context) {
+	id := c.Param("id")
+	info, err := h.gameInstanceUseCase.GetInstanceConnectInfo(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, info)
 }
 
 // RetryGameInstance 重试失败实例：failed → pending 重新入队调度

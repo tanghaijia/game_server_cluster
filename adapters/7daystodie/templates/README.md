@@ -44,6 +44,7 @@
 | `SDTD_CONFIG_FILE` | `/data/serverconfig.xml` | `-configfile` 指向的配置路径 |
 | `SDTD_USER_DATA` | `/data/7DaysToDie` | 对应 XML 中 `UserDataFolder` |
 | `SDTD_TELNET_PORT` | `8081` | Telnet 端口（save/stop 用） |
+| `SDTD_SERVER_PORT` | `26900` | 游戏 ServerPort（端口注入：平台分配宿主端口后传入，启动前改写 serverconfig.xml；默认 26900 即不改写） |
 | `SDTD_BIN` | 自动查找 | 覆盖服务器二进制路径 |
 | `SDTD_DEBUG` | `0` | 设为 1 开启 bash -x |
 

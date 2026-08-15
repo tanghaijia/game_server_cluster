@@ -512,6 +512,7 @@ impl ContainerClient for FakeImageClient {
         path_mapping: Vec<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,
         resource_limitation: Option<ContainerResourceLimitation>,
+        _env: HashMap<String, String>,
     ) -> Result<GameContainer, ContainerError> {
         let container = GameContainer {
             id: format!("fake-container-{}", game_build.build_id),

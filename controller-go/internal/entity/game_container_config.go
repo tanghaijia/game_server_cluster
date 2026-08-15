@@ -4,6 +4,7 @@ type GameContainerConfig struct {
 	ID                  string                     `gorm:"column:id;primaryKey"`
 	ContainerServerPath string                     `gorm:"column:container_server_path"`
 	PortMode            GameContainerPortMode      `gorm:"column:port_mode"`
+	InjectGamePort      bool                       `gorm:"column:inject_game_port"` // 端口注入：游戏端口 = 分配的宿主端口（identity），通过 env 通告给 adapter
 	PortExcerpt         []GameContainerPortExcerpt `gorm:"foreignKey:GameContainerConfigID"`
 }
 
@@ -27,4 +28,5 @@ type GameContainerPortExcerpt struct {
 	Protocol              ProtocolType `gorm:"column:protocol"` // 协议
 	BeginPort             uint16       `gorm:"column:begin_port"` // 起始端口
 	ExcerptLength         uint16       `gorm:"column:excerpt_length"` // 片段长度
+	IsGamePort            bool         `gorm:"column:is_game_port"` // 游戏主端口（对客户端公开的连接端口）
 }

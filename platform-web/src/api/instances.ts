@@ -6,6 +6,7 @@ export interface UserInstance {
   game_id: string
   status: string
   node_agent?: string
+  connect_address?: string
 }
 
 export async function myInstances(gameId?: string): Promise<UserInstance[]> {

@@ -72,6 +72,23 @@ func (c *Client) StopGameInstance(ctx context.Context, instanceID string) error 
 	return c.do(ctx, http.MethodPost, "/api/game-instances/"+instanceID+"/stop", nil, nil)
 }
 
+// InstanceConnect controller 返回的实例连接信息（connect_address = node_ip:game_host_port）
+type InstanceConnect struct {
+	NodeIP        string `json:"node_ip"`
+	GameHostPort  uint16 `json:"game_host_port"`
+	GamePort      uint16 `json:"game_port"`
+	Protocol      string `json:"protocol"`
+}
+
+// GetInstanceConnect 查询实例对外连接信息（node_ip + 游戏端口宿主端口）
+func (c *Client) GetInstanceConnect(ctx context.Context, instanceID string) (*InstanceConnect, error) {
+	var info InstanceConnect
+	if err := c.do(ctx, http.MethodGet, "/api/game-instances/"+instanceID+"/connect", nil, &info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
 // ---------------------------------------------------------------------------
 // 文件会话（M2，见 docs/file-manager-design.md）
 // ---------------------------------------------------------------------------

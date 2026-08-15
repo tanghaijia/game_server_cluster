@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
+use std::collections::HashMap;
+
 use crate::domain::{
     ContainerFilePathMappingHost, ContainerPortMapping, ContainerResourceLimitation, GameContainer,
     Image, LocalGameBuild, RemoteImage,
@@ -23,6 +25,7 @@ pub trait ContainerClient: Send + Sync {
         path_mapping: Vec<ContainerFilePathMappingHost>,
         port_mapping: Option<ContainerPortMapping>,
         resource_limitation: Option<ContainerResourceLimitation>,
+        env: HashMap<String, String>,
     ) -> Result<GameContainer, ContainerError>;
 
     async fn stop_container(&self, id: String) -> Result<GameContainer, ContainerError>;
