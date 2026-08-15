@@ -8,13 +8,13 @@ export interface UserInstance {
   node_agent?: string
 }
 
-export async function myInstances(): Promise<UserInstance[]> {
-  const resp = await http.get('/me/instances')
+export async function myInstances(gameId?: string): Promise<UserInstance[]> {
+  const resp = await http.get('/me/instances', { params: gameId ? { game_id: gameId } : {} })
   return resp.data.instances
 }
 
-export async function allInstances(): Promise<UserInstance[]> {
-  const resp = await http.get('/instances')
+export async function allInstances(gameId?: string): Promise<UserInstance[]> {
+  const resp = await http.get('/instances', { params: gameId ? { game_id: gameId } : {} })
   return resp.data.instances
 }
 

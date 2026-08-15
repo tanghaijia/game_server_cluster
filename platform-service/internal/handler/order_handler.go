@@ -66,7 +66,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	c.JSON(http.StatusCreated, order)
 }
 
-// ListOrders 列出订单：普通用户只看自己的；管理员看全部（可用 ?user_id= 过滤）
+// ListOrders 列出订单：普通用户只看自己的；管理员看全部（可用 ?user_id=、?game_id= 过滤）
 func (h *OrderHandler) ListOrders(c *gin.Context) {
 	userID := ""
 	if isAdmin(c) {
@@ -75,7 +75,7 @@ func (h *OrderHandler) ListOrders(c *gin.Context) {
 		userID = CurrentUserID(c)
 	}
 
-	orders, err := h.orderUseCase.ListOrders(c.Request.Context(), userID)
+	orders, err := h.orderUseCase.ListOrders(c.Request.Context(), userID, c.Query("game_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -186,9 +186,9 @@ func (h *OrderHandler) ProvisionOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-// MyInstances 当前用户的实例列表
+// MyInstances 当前用户的实例列表（?game_id= 过滤）
 func (h *OrderHandler) MyInstances(c *gin.Context) {
-	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), CurrentUserID(c))
+	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), CurrentUserID(c), c.Query("game_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -230,9 +230,9 @@ func (h *OrderHandler) MyFileSession(c *gin.Context) {
 	c.JSON(http.StatusOK, session)
 }
 
-// AllInstances 全部实例（管理员）
+// AllInstances 全部实例（管理员；?game_id= 过滤）
 func (h *OrderHandler) AllInstances(c *gin.Context) {
-	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), "")
+	instances, err := h.orderUseCase.ListInstances(c.Request.Context(), "", c.Query("game_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

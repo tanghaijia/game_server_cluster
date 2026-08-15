@@ -62,12 +62,18 @@ func (uc *OrderUseCase) FileSession(ctx context.Context, instanceID string) (*co
 	return uc.controller.CreateFileSession(ctx, instanceID)
 }
 
-// ListOrders 列出订单；userID 非空时只列该用户的订单
-func (uc *OrderUseCase) ListOrders(ctx context.Context, userID string) ([]*entity.Order, error) {
-	if userID != "" {
+// ListOrders 列出订单；userID 非空只列该用户，gameID 非空按游戏过滤（组合生效）
+func (uc *OrderUseCase) ListOrders(ctx context.Context, userID, gameID string) ([]*entity.Order, error) {
+	switch {
+	case userID != "" && gameID != "":
+		return uc.repo.ListByUserAndGame(ctx, userID, gameID)
+	case userID != "":
 		return uc.repo.ListByUser(ctx, userID)
+	case gameID != "":
+		return uc.repo.ListByGame(ctx, gameID)
+	default:
+		return uc.repo.ListAll(ctx)
 	}
-	return uc.repo.ListAll(ctx)
 }
 
 // PayOrder 支付订单（占位：无真实支付渠道，直接标记已支付）并编排实例：
@@ -153,13 +159,17 @@ type UserInstance struct {
 	NodeAgent  string `json:"node_agent,omitempty"`
 }
 
-// ListInstances 返回订单关联的实例列表。userID 为空表示全部（管理员）。
+// ListInstances 返回订单关联的实例列表。userID 为空表示全部（管理员）；gameID 非空按游戏过滤。
 // controller 不可达时状态降级为 "unknown"，不阻断返回。
-func (uc *OrderUseCase) ListInstances(ctx context.Context, userID string) ([]UserInstance, error) {
+func (uc *OrderUseCase) ListInstances(ctx context.Context, userID, gameID string) ([]UserInstance, error) {
 	var orders []*entity.Order
 	var err error
-	if userID != "" {
+	if userID != "" && gameID != "" {
+		orders, err = uc.repo.ListByUserAndGame(ctx, userID, gameID)
+	} else if userID != "" {
 		orders, err = uc.repo.ListByUser(ctx, userID)
+	} else if gameID != "" {
+		orders, err = uc.repo.ListByGame(ctx, gameID)
 	} else {
 		orders, err = uc.repo.ListAll(ctx)
 	}

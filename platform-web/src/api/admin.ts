@@ -99,6 +99,29 @@ export async function syncBranches(gameId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/branches/sync')
 }
 
+// ---- 游戏资料（多游戏平台） ----
+
+export interface GameProfileInput {
+  display_name?: string
+  icon_url?: string
+  accent_color?: string
+  description?: string
+  enabled?: boolean
+  sort_order?: number
+}
+
+export async function updateGameProfile(gameId: string, data: GameProfileInput) {
+  const resp = await http.put('/admin/games/' + gameId + '/profile', data)
+  return resp.data
+}
+
+export async function uploadGameIcon(gameId: string, file: File): Promise<{ icon_url: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const resp = await http.post('/admin/games/' + gameId + '/icon', form)
+  return resp.data
+}
+
 export async function updateBranchCache(gameId: string, branch: string, nodeAgentId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/branches/' + branch + '/cache', { node_agent_id: nodeAgentId })
 }

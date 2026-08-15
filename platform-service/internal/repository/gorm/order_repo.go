@@ -38,6 +38,24 @@ func (r *OrderRepo) ListByUser(ctx context.Context, userID string) ([]*entity.Or
 	return orders, nil
 }
 
+func (r *OrderRepo) ListByGame(ctx context.Context, gameID string) ([]*entity.Order, error) {
+	var orders []*entity.Order
+	err := r.db.WithContext(ctx).Where("game_id = ?", gameID).Order("create_time").Find(&orders).Error
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+func (r *OrderRepo) ListByUserAndGame(ctx context.Context, userID, gameID string) ([]*entity.Order, error) {
+	var orders []*entity.Order
+	err := r.db.WithContext(ctx).Where("user_id = ? AND game_id = ?", userID, gameID).Order("create_time").Find(&orders).Error
+	if err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
 func (r *OrderRepo) ListAll(ctx context.Context) ([]*entity.Order, error) {
 	var orders []*entity.Order
 	err := r.db.WithContext(ctx).Order("create_time").Find(&orders).Error

@@ -11,8 +11,11 @@ export interface Order {
   UpdateTime: string
 }
 
-export async function listOrders(userId?: string): Promise<Order[]> {
-  const resp = await http.get('/orders', { params: userId ? { user_id: userId } : {} })
+export async function listOrders(userId?: string, gameId?: string): Promise<Order[]> {
+  const params: Record<string, string> = {}
+  if (userId) params.user_id = userId
+  if (gameId) params.game_id = gameId
+  const resp = await http.get('/orders', { params })
   return resp.data.orders
 }
 

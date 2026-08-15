@@ -15,10 +15,11 @@ const router = createRouter({
       component: () => import('@/layouts/DefaultLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
-        { path: 'my-servers', name: 'my-servers', component: () => import('@/views/MyServersView.vue') },
+        { path: '', name: 'launcher', component: () => import('@/views/GameLauncherView.vue') },
+        { path: 'games/:gameId/servers', name: 'game-servers', component: () => import('@/views/MyServersView.vue') },
+        { path: 'games/:gameId/orders', name: 'game-orders', component: () => import('@/views/MyOrdersView.vue') },
+        { path: 'games/:gameId/settings', name: 'game-settings', component: () => import('@/views/GameSettingsView.vue'), meta: { requiresAuth: true, roles: ['admin'] } },
         { path: 'my-servers/:orderId/files', name: 'my-instance-files', component: () => import('@/views/InstanceFilesView.vue') },
-        { path: 'my-orders', name: 'my-orders', component: () => import('@/views/MyOrdersView.vue') },
         {
           path: 'admin/users',
           name: 'admin-users',
@@ -79,11 +80,11 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
   if (to.name === 'login' && auth.isAuthenticated) {
-    return { name: 'dashboard' }
+    return { name: 'launcher' }
   }
   const roles = to.meta.roles as string[] | undefined
   if (roles && roles.includes('admin') && !auth.isAdmin) {
-    return { name: 'dashboard' }
+    return { name: 'launcher' }
   }
 })
 

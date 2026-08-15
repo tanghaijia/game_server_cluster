@@ -55,6 +55,7 @@ func main() {
 	// ---------------------------------------------------------------
 	userRepo := repogorm.NewUserRepo(db)
 	orderRepo := repogorm.NewOrderRepo(db)
+	gameProfileRepo := repogorm.NewGameProfileRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. Use Cases
@@ -64,6 +65,7 @@ func main() {
 	// controller-go 客户端（ADR-0001）
 	controllerClient := controller.NewClient(cfg.ControllerAddr)
 	orderUseCase := biz.NewOrderUseCase(orderRepo, controllerClient)
+	gameCatalogUseCase := biz.NewGameCatalogUseCase(gameProfileRepo, controllerClient)
 
 	// 管理员播种（ADR 方案1）：ADMIN_USERNAME/ADMIN_PASSWORD 已设置且用户不存在时创建
 	if cfg.AdminUsername != "" {
@@ -98,7 +100,14 @@ func main() {
 	handler.NewAuthHandler(userUseCase, tokenManager).RegisterRoutes(router)
 	handler.NewUserHandler(userUseCase).RegisterRoutes(router, authMiddleware)
 	handler.NewOrderHandler(orderUseCase).RegisterRoutes(router, authMiddleware)
-	handler.NewAdminHandler(controllerClient).RegisterRoutes(router, authMiddleware)
+	handler.NewGameCatalogHandler(gameCatalogUseCase).RegisterRoutes(router, authMiddleware)
+	handler.NewAdminHandler(controllerClient, gameCatalogUseCase).RegisterRoutes(router, authMiddleware)
+
+	// 静态资源（游戏图标等）
+	if err := os.MkdirAll("static", 0o755); err != nil {
+		slog.Error("创建 static 目录失败", "err", err)
+	}
+	router.Static("/static", "./static")
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

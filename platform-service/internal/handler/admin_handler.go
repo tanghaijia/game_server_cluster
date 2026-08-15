@@ -1,21 +1,26 @@
-package handler
+﻿package handler
 
 import (
 	"errors"
 	"net/http"
+	"os"
+	"strings"
 
+	"platform-service/internal/biz"
 	"platform-service/internal/client/controller"
+	"platform-service/internal/entity"
 
 	"github.com/gin-gonic/gin"
 )
 
 // AdminHandler 管理员管理接口：代理转发到 controller-go（ADR-0001：前端只连 platform-service）
 type AdminHandler struct {
-	controller *controller.Client
+	controller  *controller.Client
+	gameCatalog *biz.GameCatalogUseCase
 }
 
-func NewAdminHandler(cc *controller.Client) *AdminHandler {
-	return &AdminHandler{controller: cc}
+func NewAdminHandler(cc *controller.Client, gc *biz.GameCatalogUseCase) *AdminHandler {
+	return &AdminHandler{controller: cc, gameCatalog: gc}
 }
 
 // RegisterRoutes 注册管理员路由（全部需登录 + 管理员）
@@ -40,6 +45,10 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.GET("/games/:id", h.GetGame)
 	group.PUT("/games/:id", h.UpdateGame)
 	group.DELETE("/games/:id", h.DeleteGame)
+
+	// 游戏资料（多游戏平台）
+	group.PUT("/games/:id/profile", h.UpdateGameProfile)
+	group.POST("/games/:id/icon", h.UploadGameIcon)
 
 	// 文件会话（管理员可对任意实例）
 	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
@@ -241,4 +250,86 @@ func (h *AdminHandler) UpdateBranchCache(c *gin.Context) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "cache ok"})
+}
+
+// ------------------------- 游戏资料（多游戏平台） -------------------------
+
+type gameProfileRequest struct {
+	DisplayName string `json:"display_name"`
+	IconURL     string `json:"icon_url"`
+	AccentColor string `json:"accent_color"`
+	Description string `json:"description"`
+	Enabled     *bool  `json:"enabled"`
+	SortOrder   *int   `json:"sort_order"`
+}
+
+// UpdateGameProfile 更新游戏资料（admin；不存在则创建）
+func (h *AdminHandler) UpdateGameProfile(c *gin.Context) {
+	var req gameProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()});
+		return
+	}
+
+	updates := &entity.GameProfile{
+		DisplayName: req.DisplayName,
+		IconURL:     req.IconURL,
+		AccentColor: req.AccentColor,
+		Description: req.Description,
+	}
+	if req.Enabled != nil {
+		updates.Enabled = *req.Enabled
+	}
+	if req.SortOrder != nil {
+		updates.SortOrder = *req.SortOrder
+	}
+
+	prof, err := h.gameCatalog.UpdateProfile(c.Request.Context(), c.Param("id"), updates)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()});
+		return
+	}
+	c.JSON(http.StatusOK, prof)
+}
+
+// UploadGameIcon 上传游戏图标（≤1MB，存 static/games/{gameId}.png）
+func (h *AdminHandler) UploadGameIcon(c *gin.Context) {
+	gameID := c.Param("id")
+	if gameID == "" || strings.ContainsAny(gameID, "/\\.") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid game_id"});
+		return
+	}
+	// 游戏必须存在（controller）
+	if _, err := h.controller.GetGame(c.Request.Context(), gameID); err != nil {
+		fail(c, err);
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"});
+		return
+	}
+	if file.Size > 1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "icon too large (max 1MB)"});
+		return
+	}
+
+	if err := os.MkdirAll("static/games", 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()});
+		return
+	}
+	if err := c.SaveUploadedFile(file, "static/games/"+gameID+".png"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "save icon: " + err.Error()});
+		return
+	}
+
+	prof, err := h.gameCatalog.UpdateProfile(c.Request.Context(), gameID, &entity.GameProfile{
+		IconURL: "/static/games/" + gameID + ".png",
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()});
+		return
+	}
+	c.JSON(http.StatusOK, prof)
 }
