@@ -2,6 +2,7 @@ pub mod clients;
 pub mod common;
 pub mod domain;
 pub mod error;
+pub mod file_server;
 pub mod ports;
 pub mod proto;
 pub mod providers;

@@ -32,8 +32,9 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.POST("/:id/instance/start", h.StartInstance)
 	group.POST("/:id/instance/stop", h.StopInstance)
 
-	// 用户侧实例视图
+	// 用户侧实例视图 + 文件会话
 	router.GET("/api/me/instances", auth, h.MyInstances)
+	router.POST("/api/me/instances/:orderId/file-session", auth, h.MyFileSession)
 	router.GET("/api/instances", auth, RequireAdmin(), h.AllInstances)
 }
 
@@ -192,6 +193,24 @@ func (h *OrderHandler) MyInstances(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"instances": instances})
+}
+
+// MyFileSession 为当前用户订单关联的实例签发文件会话（本人或管理员）
+func (h *OrderHandler) MyFileSession(c *gin.Context) {
+	order, ok := h.loadOwnOrder(c)
+	if !ok {
+		return
+	}
+	if order.InstanceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "order has no instance, pay or provision first"});
+		return
+	}
+	session, err := h.orderUseCase.FileSession(c.Request.Context(), order.InstanceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()});
+		return
+	}
+	c.JSON(http.StatusOK, session)
 }
 
 // AllInstances 全部实例（管理员）

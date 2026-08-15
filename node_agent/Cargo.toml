@@ -42,6 +42,10 @@ walkdir = "2"
 sysinfo = "0.33"
 regex = "1"
 
+# 实例文件管理服务（M1，见 docs/file-manager-design.md）
+axum = "0.8"
+jsonwebtoken = "9"
+
 [build-dependencies]
 protoc-bin-vendored = "3"
 tonic-build = "0.12"

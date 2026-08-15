@@ -43,6 +43,8 @@ curl http://127.0.0.1:8081/healthz
 | POST | `/api/orders/:id/instance/start` | 启动订单关联实例（开服；本人或管理员） |
 | POST | `/api/orders/:id/instance/stop` | 停止订单关联实例（停服；本人或管理员） |
 | GET | `/api/me/instances` | 我的实例列表（登录；controller 不可达时状态降级为 unknown） |
+| POST | `/api/me/instances/:orderId/file-session` | 签发实例文件会话（本人或管理员；返回 node_agent 直连地址 + 短效 JWT，供文件管理器用） |
+| POST | `/api/admin/instances/:instanceId/file-session` | 管理员对任意实例签发文件会话 |
 | GET | `/api/instances` | 全部实例（**仅管理员**） |
 
 > 认证：请求头 `Authorization: Bearer <access_token>`（ADR-0004）。登录响应含 `access_token`（默认 30 分钟）、`refresh_token`（默认 7 天）与 `user`。

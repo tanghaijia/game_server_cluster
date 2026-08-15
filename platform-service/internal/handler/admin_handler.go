@@ -41,6 +41,9 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.PUT("/games/:id", h.UpdateGame)
 	group.DELETE("/games/:id", h.DeleteGame)
 
+	// 文件会话（管理员可对任意实例）
+	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
+
 	// Steam 分支
 	group.GET("/games/:id/branches", h.ListBranches)
 	group.POST("/games/:id/branches/sync", h.SyncBranches)
@@ -214,6 +217,16 @@ func (h *AdminHandler) SyncBranches(c *gin.Context) {
 
 type updateBranchCacheRequest struct {
 	NodeAgentID string `json:"node_agent_id"`
+}
+
+// InstanceFileSession 管理员为任意实例签发文件会话
+func (h *AdminHandler) InstanceFileSession(c *gin.Context) {
+	session, err := h.controller.CreateFileSession(c.Request.Context(), c.Param("instanceId"))
+	if err != nil {
+		fail(c, err);
+		return
+	}
+	c.JSON(http.StatusOK, session)
 }
 
 func (h *AdminHandler) UpdateBranchCache(c *gin.Context) {

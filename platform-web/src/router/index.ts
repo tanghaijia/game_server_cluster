@@ -17,6 +17,7 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'my-servers', name: 'my-servers', component: () => import('@/views/MyServersView.vue') },
+        { path: 'my-servers/:orderId/files', name: 'my-instance-files', component: () => import('@/views/InstanceFilesView.vue') },
         { path: 'my-orders', name: 'my-orders', component: () => import('@/views/MyOrdersView.vue') },
         {
           path: 'admin/users',
@@ -34,6 +35,12 @@ const router = createRouter({
           path: 'admin/instances',
           name: 'admin-instances',
           component: () => import('@/views/AdminInstancesView.vue'),
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/instances/:instanceId/files',
+          name: 'admin-instance-files',
+          component: () => import('@/views/InstanceFilesView.vue'),
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {

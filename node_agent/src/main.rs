@@ -1,6 +1,6 @@
-mod common;
+﻿mod common;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use node_agent::{
     clients::{
@@ -73,7 +73,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 6. 启动后台 worker
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
 
-        // 7. gRPC server
+        // 7. 文件服务（M1，见 docs/file-manager-design.md）
+        let file_secret =
+            std::env::var("NODE_AGENT_FILE_SECRET").unwrap_or_else(|_| "dev-file-secret-change-me".to_string());
+        let file_data_override =
+            std::env::var("FILE_DATA_ROOT_OVERRIDE").ok().map(PathBuf::from);
+        let file_server = Arc::new(node_agent::file_server::FileServer::new(
+            concrete_instance.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
+            file_secret.into_bytes(),
+            file_data_override,
+        ));
+        let file_addr: SocketAddr = std::env::var("FILE_SERVER_ADDR")
+            .unwrap_or_else(|_| "127.0.0.1:50054".to_string())
+            .parse()?;
+        tokio::spawn(async move {
+            let app = node_agent::file_server::FileServer::router(file_server);
+            let listener = tokio::net::TcpListener::bind(file_addr)
+                .await
+                .expect("bind file server");
+            println!("file server listening on {file_addr}");
+            axum::serve(listener, app).await.expect("serve file server");
+        });
+
+        // 8. gRPC server
         let grpc =
             GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance);
 
@@ -185,7 +207,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             docker_client.clone() as Arc<dyn node_agent::ports::ContainerClient>,
         ));
 
-        // 9. 后台 worker + gRPC server
+        // 9. 文件服务（M1，见 docs/file-manager-design.md）
+        let file_secret =
+            std::env::var("NODE_AGENT_FILE_SECRET").unwrap_or_else(|_| "dev-file-secret-change-me".to_string());
+        let file_data_override =
+            std::env::var("FILE_DATA_ROOT_OVERRIDE").ok().map(PathBuf::from);
+        let file_server = Arc::new(node_agent::file_server::FileServer::new(
+            sqlite_game_instances.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
+            file_secret.into_bytes(),
+            file_data_override,
+        ));
+        let file_addr: SocketAddr = std::env::var("FILE_SERVER_ADDR")
+            .unwrap_or_else(|_| "0.0.0.0:50054".to_string())
+            .parse()?;
+        tokio::spawn(async move {
+            let app = node_agent::file_server::FileServer::router(file_server);
+            let listener = tokio::net::TcpListener::bind(file_addr)
+                .await
+                .expect("bind file server");
+            println!("file server listening on {file_addr}");
+            axum::serve(listener, app).await.expect("serve file server");
+        });
+
+        // 10. 后台 worker + gRPC server
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
         let grpc = GrpcNodeAgentServer::new(
             node_agent_service,

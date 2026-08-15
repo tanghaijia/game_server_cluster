@@ -120,6 +120,7 @@ func main() {
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
 	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
 	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
+	fileSessionIssuer := biz.NewFileSessionIssuer(cfg.NodeAgentFileSecret, 30*time.Minute)
 
 	// ---------------------------------------------------------------
 	// 8. 启动 dispatcher
@@ -147,6 +148,7 @@ func main() {
 	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
+	handler.NewFileSessionHandler(gameInstanceUseCase, nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
 
 	httpServer := &http.Server{

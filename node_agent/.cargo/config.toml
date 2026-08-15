@@ -1,0 +1,6 @@
+# 离线构建：全部依赖已 vendor 到 node_agent/vendor（见 vendor-deps.cjs）
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

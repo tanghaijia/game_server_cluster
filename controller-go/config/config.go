@@ -24,6 +24,10 @@ type Config struct {
 
 	// GameCache 后台循环（秒）
 	GameCacheReconcileInterval int
+
+	// 实例文件管理（M2）：与 node_agent 共享的 HMAC 密钥 + 文件服务端口偏移
+	NodeAgentFileSecret     string
+	NodeAgentFilePortOffset int
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -39,6 +43,9 @@ func Load() *Config {
 		HTTPPort:         getEnvInt("HTTP_PORT", 8090),
 		// 默认 60 秒执行一轮分支同步 + 缓存检查
 		GameCacheReconcileInterval: getEnvInt("GAME_CACHE_RECONCILE_INTERVAL", 60),
+
+		NodeAgentFileSecret:     getEnv("NODE_AGENT_FILE_SECRET", "dev-file-secret-change-me"),
+		NodeAgentFilePortOffset: getEnvInt("NODE_AGENT_FILE_PORT_OFFSET", 1),
 	}
 }
 

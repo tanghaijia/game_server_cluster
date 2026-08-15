@@ -73,6 +73,28 @@ func (c *Client) StopGameInstance(ctx context.Context, instanceID string) error 
 }
 
 // ---------------------------------------------------------------------------
+// 文件会话（M2，见 docs/file-manager-design.md）
+// ---------------------------------------------------------------------------
+
+// FileSession controller 签发的文件会话（浏览器直连 node_agent 文件服务所需）
+type FileSession struct {
+	BaseURL    string `json:"base_url"`
+	Token      string `json:"token"`
+	InstanceID string `json:"instance_id"`
+	DataRoot   string `json:"data_root"`
+	ExpiresAt  string `json:"expires_at"`
+}
+
+// CreateFileSession 获取实例的文件会话（controller 签发短效 JWT）
+func (c *Client) CreateFileSession(ctx context.Context, instanceID string) (*FileSession, error) {
+	var s FileSession
+	if err := c.do(ctx, http.MethodPost, "/api/game-instances/"+instanceID+"/file-session", nil, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ---------------------------------------------------------------------------
 // Node（管理员管理）
 // ---------------------------------------------------------------------------
 

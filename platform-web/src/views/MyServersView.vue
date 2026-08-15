@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
@@ -45,6 +45,7 @@
                 {{ action(inst.status)!.label }}
               </button>
               <span v-else class="text-xs text-muted-foreground">-</span>
+              <button class="ml-2 rounded-md border px-3 py-1 text-xs hover:bg-muted" @click="openFiles(inst)">文件</button>
             </td>
           </tr>
           <tr v-if="!instances.length">
@@ -59,6 +60,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import {
   instanceActions,
@@ -68,6 +70,8 @@ import {
   stopOrderInstance,
   type UserInstance,
 } from '@/api/instances'
+
+const router = useRouter()
 
 const instances = ref<UserInstance[]>([])
 const busy = ref(false)
@@ -82,6 +86,14 @@ async function load() {
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载实例失败（请确认已登录、后端已启动）'
   }
+}
+
+function openFiles(inst: UserInstance) {
+  router.push({
+    name: 'my-instance-files',
+    params: { orderId: inst.order_id },
+    query: { running: inst.status === 'running' ? '1' : '0' },
+  })
 }
 
 async function onAction(inst: UserInstance, act: { label: string; action: 'start' | 'stop' }) {

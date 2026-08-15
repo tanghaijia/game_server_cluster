@@ -57,6 +57,11 @@ func (uc *OrderUseCase) GetOrder(ctx context.Context, id string) (*entity.Order,
 	return uc.repo.GetByID(ctx, id)
 }
 
+// FileSession 获取实例的文件会话（controller 签发短效 JWT，供浏览器直连 node_agent）
+func (uc *OrderUseCase) FileSession(ctx context.Context, instanceID string) (*controller.FileSession, error) {
+	return uc.controller.CreateFileSession(ctx, instanceID)
+}
+
 // ListOrders 列出订单；userID 非空时只列该用户的订单
 func (uc *OrderUseCase) ListOrders(ctx context.Context, userID string) ([]*entity.Order, error) {
 	if userID != "" {
