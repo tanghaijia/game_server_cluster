@@ -186,6 +186,20 @@ where
             })
     }
 
+    /// 列出某游戏的全部构建（可按 channel 过滤，结果按创建时间倒序）
+    pub async fn list_game_builds(
+        &self,
+        game_id: &str,
+        channel: Option<&str>,
+    ) -> Result<Vec<GameBuild>, AssetServiceError> {
+        let mut builds = self.builds.list_by_game(game_id).await?;
+        if let Some(ch) = channel {
+            builds.retain(|b| b.channel.as_deref() == Some(ch));
+        }
+        builds.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(builds)
+    }
+
     pub async fn create_snapshot(
         &self,
         request: CreateSnapshotRequest,

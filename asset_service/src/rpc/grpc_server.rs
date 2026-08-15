@@ -18,7 +18,8 @@ use crate::{
         GetGameBuildRequest, GetGameBuildResponse, GetLatestSnapshotRequest,
         GetLatestSnapshotResponse, GetModManifestRequest, GetModManifestResponse,
         GetSnapshotRequest, GetSnapshotResponse, GetSnapshotRestorePlanRequest,
-        GetSnapshotRestorePlanResponse, ListSnapshotsRequest, ListSnapshotsResponse,
+        GetSnapshotRestorePlanResponse, ListGameBuildsRequest, ListGameBuildsResponse,
+        ListSnapshotsRequest, ListSnapshotsResponse,
         ModEntry as ProtoModEntry, ModManifest as ProtoModManifest, RegisterGameBuildRequest,
         RegisterGameBuildResponse, RegisterModManifestRequest, RegisterModManifestResponse,
         ResolveGameBuildRequest, ResolveGameBuildResponse, SnapshotRecord as ProtoSnapshotRecord,
@@ -121,6 +122,21 @@ where
             .map_err(map_error)?;
         Ok(Response::new(GetGameBuildResponse {
             build: Some(map_build(build)),
+        }))
+    }
+
+    async fn list_game_builds(
+        &self,
+        request: Request<ListGameBuildsRequest>,
+    ) -> Result<Response<ListGameBuildsResponse>, Status> {
+        let req = request.into_inner();
+        let builds = self
+            .service
+            .list_game_builds(&req.game_id, req.channel.as_deref())
+            .await
+            .map_err(map_error)?;
+        Ok(Response::new(ListGameBuildsResponse {
+            builds: builds.into_iter().map(map_build).collect(),
         }))
     }
 

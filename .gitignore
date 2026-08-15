@@ -18,3 +18,6 @@ debug.json
 /.gomodcache
 /platform-web/node_modules
 /platform-web/dist
+.crate-cache
+vendor
+.cargo

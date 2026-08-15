@@ -124,6 +124,35 @@ export async function uploadGameIcon(gameId: string, file: File): Promise<{ icon
   return resp.data
 }
 
+// ---- game_build（资产版本） ----
+
+export interface GameBuild {
+  build_id: string
+  game?: { id: string }
+  channel?: string
+  adapter_id?: string
+  adapter_version?: string
+  upstream_version?: string
+  artifact_uri?: string
+  artifact_image_name?: string
+  artifact_image_tag?: string
+  status?: number
+  created_at?: string
+  updated_at?: string
+}
+
+export const BUILD_STATUS = ['unknown', 'discovered', 'resolving', 'available', 'deprecated', 'unavailable', 'deleted']
+
+export async function listGameBuilds(gameId: string, channel?: string): Promise<GameBuild[]> {
+  const resp = await http.get('/admin/games/' + gameId + '/builds', { params: channel ? { channel } : {} })
+  return resp.data.builds
+}
+
+export async function registerGameBuild(gameId: string, data: Record<string, string>): Promise<GameBuild> {
+  const resp = await http.post('/admin/games/' + gameId + '/builds', data)
+  return resp.data
+}
+
 export async function updateBranchCache(gameId: string, branch: string, nodeAgentId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/branches/' + branch + '/cache', { node_agent_id: nodeAgentId })
 }

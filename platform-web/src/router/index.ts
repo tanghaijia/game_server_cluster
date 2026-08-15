@@ -51,6 +51,12 @@ const router = createRouter({
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {
+          path: 'admin/games/:gameId/builds',
+          name: 'admin-game-builds',
+          component: () => import('@/views/AdminGameBuildsView.vue'),
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
           path: 'admin/nodes',
           name: 'admin-nodes',
           component: () => import('@/views/AdminNodesView.vue'),

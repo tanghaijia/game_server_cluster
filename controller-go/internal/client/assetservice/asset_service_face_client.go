@@ -42,6 +42,14 @@ func (c *AssetServiceFaceClient) RegisterGameBuild(ctx context.Context, in *asse
 	return out, nil
 }
 
+func (c *AssetServiceFaceClient) ListGameBuilds(ctx context.Context, in *assetservicev1.ListGameBuildsRequest, opts ...grpc.CallOption) (*assetservicev1.ListGameBuildsResponse, error) {
+	out, err := c.client.ListGameBuilds(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("list game builds: %w", err)
+	}
+	return out, nil
+}
+
 func (c *AssetServiceFaceClient) GetGameBuild(ctx context.Context, in *assetservicev1.GetGameBuildRequest, opts ...grpc.CallOption) (*assetservicev1.GetGameBuildResponse, error) {
 	out, err := c.client.GetGameBuild(ctx, in, opts...)
 	if err != nil {

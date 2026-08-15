@@ -1,4 +1,4 @@
-package controller
+﻿package controller
 
 import (
 	"bytes"
@@ -229,6 +229,56 @@ func (c *Client) UpdateGame(ctx context.Context, id, name, appID string) (*Game,
 
 func (c *Client) DeleteGame(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/api/games/"+id, nil, nil)
+}
+
+// ---------------------------------------------------------------------------
+// GameBuild（管理员管理，资产版本）
+// ---------------------------------------------------------------------------
+
+// GameBuild asset_service 的构建版本（JSON 字段为 snake_case，与 proto json tag 一致）
+type GameBuild struct {
+	BuildId           string  `json:"build_id"`
+	Game              *struct{ Id string `json:"id"` } `json:"game,omitempty"`
+	Channel           *string `json:"channel,omitempty"`
+	AdapterId         string  `json:"adapter_id,omitempty"`
+	AdapterVersion    *string `json:"adapter_version,omitempty"`
+	UpstreamVersion   *string `json:"upstream_version,omitempty"`
+	ArtifactUri       *string `json:"artifact_uri,omitempty"`
+	ArtifactImageName *string `json:"artifact_image_name,omitempty"`
+	ArtifactImageTag  *string `json:"artifact_image_tag,omitempty"`
+	Status            int32   `json:"status,omitempty"`
+	CreatedAt         string  `json:"created_at,omitempty"`
+	UpdatedAt         string  `json:"updated_at,omitempty"`
+}
+
+func (c *Client) ListGameBuilds(ctx context.Context, gameID, channel string) ([]*GameBuild, error) {
+	var out struct {
+		Builds []*GameBuild `json:"builds"`
+	}
+	path := "/api/games/" + gameID + "/builds"
+	if channel != "" {
+		path += "?channel=" + channel
+	}
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Builds, nil
+}
+
+func (c *Client) RegisterGameBuild(ctx context.Context, build *GameBuild) (*GameBuild, error) {
+	var out GameBuild
+	if err := c.do(ctx, http.MethodPost, "/api/games/"+build.Game.Id+"/builds", build, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) GetGameBuild(ctx context.Context, gameID, buildID string) (*GameBuild, error) {
+	var out GameBuild
+	if err := c.do(ctx, http.MethodGet, "/api/games/"+gameID+"/builds/"+buildID, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // ---------------------------------------------------------------------------

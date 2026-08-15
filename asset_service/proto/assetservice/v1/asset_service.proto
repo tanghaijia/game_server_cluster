@@ -6,6 +6,7 @@ import "assetservice/v1/snapshot.proto";
 import "assetservice/v1/game.proto";
 
 service AssetService {
+  rpc ListGameBuilds(ListGameBuildsRequest) returns (ListGameBuildsResponse);
   rpc ResolveGameBuild(ResolveGameBuildRequest) returns (ResolveGameBuildResponse);
   rpc RegisterGameBuild(RegisterGameBuildRequest) returns (RegisterGameBuildResponse);
   rpc GetGameBuild(GetGameBuildRequest) returns (GetGameBuildResponse);
@@ -22,6 +23,15 @@ service AssetService {
   rpc RegisterModManifest(RegisterModManifestRequest) returns (RegisterModManifestResponse);
   rpc GetModManifest(GetModManifestRequest) returns (GetModManifestResponse);
   rpc CheckBuildModCompatibility(CheckBuildModCompatibilityRequest) returns (CheckBuildModCompatibilityResponse);
+}
+
+message ListGameBuildsRequest {
+  string game_id = 1;
+  optional string channel = 2;
+}
+
+message ListGameBuildsResponse {
+  repeated GameBuild builds = 1;
 }
 
 message ResolveGameBuildRequest {

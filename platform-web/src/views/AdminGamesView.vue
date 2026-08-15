@@ -40,6 +40,7 @@
             <td class="px-4 py-3 font-mono text-xs">{{ g.ContainerConfigID || '-' }}</td>
             <td class="px-4 py-3 space-x-2">
               <button class="rounded-md border px-3 py-1 text-xs hover:bg-muted" @click="startEdit(g)">编辑</button>
+              <button class="rounded-md border px-3 py-1 text-xs hover:bg-muted" @click="openBuilds(g.ID)">构建</button>
               <button class="rounded-md border px-3 py-1 text-xs text-red-500 hover:bg-muted" @click="onDelete(g.ID)">删除</button>
             </td>
           </tr>
@@ -55,6 +56,8 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+
+import { useRouter } from 'vue-router'
 
 import { createGame, deleteGame, listGames, updateGame, type Game } from '@/api/admin'
 
@@ -101,6 +104,12 @@ async function onSubmit() {
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '操作失败'
   }
+}
+
+const router = useRouter()
+
+function openBuilds(id: string) {
+  router.push({ name: 'admin-game-builds', params: { gameId: id } })
 }
 
 async function onDelete(id: string) {

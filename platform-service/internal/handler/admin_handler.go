@@ -1,4 +1,4 @@
-package handler
+﻿package handler
 
 import (
 	"errors"
@@ -49,6 +49,11 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	// 游戏资料（多游戏平台）
 	group.PUT("/games/:id/profile", h.UpdateGameProfile)
 	group.POST("/games/:id/icon", h.UploadGameIcon)
+
+	// game_build 管理（资产版本）
+	group.GET("/games/:id/builds", h.ListGameBuilds)
+	group.POST("/games/:id/builds", h.RegisterGameBuild)
+	group.GET("/games/:id/builds/:buildId", h.GetGameBuild)
 
 	// 文件会话（管理员可对任意实例）
 	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
@@ -333,4 +338,65 @@ func (h *AdminHandler) UploadGameIcon(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, prof)
+}
+
+// ------------------------- game_build 管理 -------------------------
+
+// ListGameBuilds 列出某游戏构建版本（?channel= 过滤）
+func (h *AdminHandler) ListGameBuilds(c *gin.Context) {
+	builds, err := h.controller.ListGameBuilds(c.Request.Context(), c.Param("id"), c.Query("channel"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"game_id": c.Param("id"), "builds": builds})
+}
+
+type registerGameBuildRequest struct {
+	BuildID           string `json:"build_id"`
+	Channel           string `json:"channel"`
+	AdapterID         string `json:"adapter_id"`
+	AdapterVersion    string `json:"adapter_version"`
+	UpstreamVersion   string `json:"upstream_version"`
+	ArtifactURI       string `json:"artifact_uri"`
+	ArtifactImageName string `json:"artifact_image_name"`
+	ArtifactImageTag  string `json:"artifact_image_tag"`
+}
+
+// RegisterGameBuild 注册新构建
+func (h *AdminHandler) RegisterGameBuild(c *gin.Context) {
+	var req registerGameBuildRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	if req.BuildID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "build_id is required"}); return
+	}
+	strPtr := func(s string) *string {
+		if s == "" { return nil }
+		return &s
+	}
+	build, err := h.controller.RegisterGameBuild(c.Request.Context(), &controller.GameBuild{
+		BuildId:           req.BuildID,
+		Game:              &struct{ Id string `json:"id"` }{Id: c.Param("id")},
+		Channel:           strPtr(req.Channel),
+		AdapterId:         req.AdapterID,
+		AdapterVersion:    strPtr(req.AdapterVersion),
+		UpstreamVersion:   strPtr(req.UpstreamVersion),
+		ArtifactUri:       strPtr(req.ArtifactURI),
+		ArtifactImageName: strPtr(req.ArtifactImageName),
+		ArtifactImageTag:  strPtr(req.ArtifactImageTag),
+	})
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusCreated, build)
+}
+
+// GetGameBuild 构建详情
+func (h *AdminHandler) GetGameBuild(c *gin.Context) {
+	build, err := h.controller.GetGameBuild(c.Request.Context(), c.Param("id"), c.Param("buildId"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, build)
 }

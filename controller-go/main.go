@@ -153,7 +153,7 @@ func main() {
 	// ---------------------------------------------------------------
 	router := gin.Default()
 	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
-	handler.NewGameHandler(gameUseCase).RegisterRoutes(router)
+	handler.NewGameHandler(gameUseCase, assetClient).RegisterRoutes(router)
 	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
