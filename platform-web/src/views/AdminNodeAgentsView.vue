@@ -29,6 +29,7 @@
             <th class="px-4 py-3">节点 ID</th>
             <th class="px-4 py-3">端口</th>
             <th class="px-4 py-3">状态</th>
+            <th class="px-4 py-3">存活</th>
             <th class="px-4 py-3">操作</th>
           </tr>
         </thead>
@@ -41,6 +42,19 @@
               <span class="rounded px-2 py-0.5 text-xs" :class="a.Status === 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'">
                 {{ a.Status === 1 ? 'Enabled' : 'Disabled' }}
               </span>
+            </td>
+            <td class="px-4 py-3">
+              <span
+                v-if="a.Status === 1"
+                class="rounded px-2 py-0.5 text-xs"
+                :class="a.Alive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+              >
+                {{ a.Alive ? '存活' : '失联' }}
+              </span>
+              <span v-else class="text-xs text-muted-foreground">-</span>
+              <div v-if="a.Alive && a.LastHeartbeatAt" class="mt-0.5 text-xs text-muted-foreground">
+                心跳 {{ fmtTime(a.LastHeartbeatAt) }}
+              </div>
             </td>
             <td class="px-4 py-3">
               <button
@@ -60,7 +74,7 @@
             </td>
           </tr>
           <tr v-if="!agents.length">
-            <td colspan="5" class="px-4 py-8 text-center text-muted-foreground">暂无 node_agent</td>
+            <td colspan="6" class="px-4 py-8 text-center text-muted-foreground">暂无 node_agent</td>
           </tr>
         </tbody>
       </table>
@@ -76,6 +90,8 @@ import { createNodeAgent, listNodeAgents, setNodeAgentEnabled, type NodeAgent } 
 
 const agents = ref<NodeAgent[]>([])
 const error = ref('')
+
+const fmtTime = (t: string) => new Date(t).toLocaleString()
 const form = reactive({ name: '', nodeId: '', port: 9090 })
 
 async function load() {

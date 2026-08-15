@@ -2,10 +2,12 @@ package biz
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"controller-go/internal/client/nodeagent"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
-	"testing"
 )
 
 type mockInstanceRepo struct {
@@ -33,6 +35,10 @@ func (m *mockInstanceRepo) ListAll(ctx context.Context) ([]*entity.GameInstance,
 	return nil, nil
 }
 
+func (m *mockInstanceRepo) ListByGame(ctx context.Context, gameID string) ([]*entity.GameInstance, error) {
+	return nil, nil
+}
+
 func (m *mockInstanceRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
@@ -52,6 +58,10 @@ func (m *mockNodeAgentRepo) ListEnabledIDs(ctx context.Context) ([]string, error
 
 func (m *mockNodeAgentRepo) ListAll(ctx context.Context) ([]*entity.NodeAgent, error) {
 	return nil, nil
+}
+
+func (m *mockNodeAgentRepo) UpdateHealth(ctx context.Context, agentID string, alive bool, at time.Time) error {
+	return nil
 }
 
 var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
@@ -105,6 +115,10 @@ func (m *mockGameContainerConfigRepo) GetByID(ctx context.Context, id string) (*
 			{Protocol: entity.TCP, BeginPort: 1000, ExcerptLength: 2},
 		},
 	}, nil
+}
+
+func (m *mockGameContainerConfigRepo) Delete(ctx context.Context, id string) error {
+	return nil
 }
 
 var _ repository.GameContainerConfigRepository = (*mockGameContainerConfigRepo)(nil)

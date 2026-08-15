@@ -140,10 +140,12 @@ func (c *Client) GetNode(ctx context.Context, id string) (*Node, error) {
 // ---------------------------------------------------------------------------
 
 type NodeAgent struct {
-	ID     string `json:"ID"`
-	NodeId string `json:"NodeId"`
-	Port   int32  `json:"Port"`
-	Status int32  `json:"Status"` // 0=Disabled 1=Enabled
+	ID              string  `json:"ID"`
+	NodeId          string  `json:"NodeId"`
+	Port            int32   `json:"Port"`
+	Status          int32   `json:"Status"` // 0=Disabled 1=Enabled
+	Alive           bool    `json:"Alive"`             // 存活检测（controller 心跳探测）
+	LastHeartbeatAt *string `json:"LastHeartbeatAt"`
 }
 
 func (c *Client) CreateNodeAgent(ctx context.Context, name, nodeID string, port int32) (*NodeAgent, error) {

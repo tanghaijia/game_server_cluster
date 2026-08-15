@@ -25,6 +25,8 @@ export interface NodeAgent {
   NodeId: string
   Port: number
   Status: number // 0=Disabled 1=Enabled
+  Alive: boolean // 存活检测结果（controller 心跳探测）
+  LastHeartbeatAt?: string
 }
 
 export interface SteamBranch {

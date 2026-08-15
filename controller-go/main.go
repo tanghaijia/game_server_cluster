@@ -131,6 +131,15 @@ func main() {
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
 
+	// node_agent 存活检测：周期探测心跳，调度器过滤失联节点
+	healthMonitor := biz.NewNodeAgentHealthMonitor(
+		nodeAgentRepo, nodeRepo, nodeAgentClients, scheduler,
+		time.Duration(cfg.HeartbeatProbeTimeoutMs)*time.Millisecond,
+		cfg.HeartbeatFailThreshold,
+	)
+	healthMonitor.Start(ctx, time.Duration(cfg.HeartbeatCheckIntervalSec)*time.Second)
+	slog.Info("NodeAgentHealthMonitor 已启动", "interval_sec", cfg.HeartbeatCheckIntervalSec)
+
 	// 启动 GameCache 后台循环（分支同步 + Enable 分支缓存下载/更新）
 	gameCacheManager.Start(ctx, time.Duration(cfg.GameCacheReconcileInterval)*time.Second)
 

@@ -2,6 +2,8 @@ package gorm
 
 import (
 	"context"
+	"time"
+
 	"controller-go/internal/entity"
 
 	"gorm.io/gorm"
@@ -46,4 +48,10 @@ func (r *NodeAgentRepo) ListAll(ctx context.Context) ([]*entity.NodeAgent, error
 		return nil, err
 	}
 	return agents, nil
+}
+
+func (r *NodeAgentRepo) UpdateHealth(ctx context.Context, agentID string, alive bool, at time.Time) error {
+	return r.db.WithContext(ctx).Model(&entity.NodeAgent{}).
+		Where("id = ?", agentID).
+		Updates(map[string]any{"alive": alive, "last_heartbeat_at": at}).Error
 }

@@ -89,6 +89,7 @@ func (h *NodeAgentHandler) RegisterRoutes(router *gin.Engine) {
 	group := router.Group("/api/node-agents")
 	group.POST("", h.CreateNodeAgent)
 	group.GET("", h.ListNodeAgents)
+	group.GET("/health", h.ListNodeAgentHealth)
 	group.POST("/:id/enable", h.EnableNodeAgent)
 	group.POST("/:id/disable", h.DisableNodeAgent)
 }
@@ -117,6 +118,15 @@ func (h *NodeAgentHandler) CreateNodeAgent(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, agent)
+}
+
+// ListNodeAgentHealth 列出全部 node_agent 存活状态（管理员查看节点健康）
+func (h *NodeAgentHandler) ListNodeAgentHealth(c *gin.Context) {
+	health, err := h.nodeAgentUseCase.ListNodeAgentHealth(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+	}
+	c.JSON(http.StatusOK, gin.H{"node_agents": health})
 }
 
 // ListNodeAgents 列出全部 node_agent

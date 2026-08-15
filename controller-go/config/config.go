@@ -28,6 +28,11 @@ type Config struct {
 	// 实例文件管理（M2）：与 node_agent 共享的 HMAC 密钥 + 文件服务端口偏移
 	NodeAgentFileSecret     string
 	NodeAgentFilePortOffset int
+
+	// node_agent 存活检测（心跳探测）
+	HeartbeatCheckIntervalSec int
+	HeartbeatProbeTimeoutMs   int
+	HeartbeatFailThreshold    int
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -48,6 +53,12 @@ func Load() *Config {
 		// 文件服务端口 = node_agent gRPC 端口 + offset。
 		// node_agent 文件服务默认监听 50054（= gRPC 50052 + 2，避开 asset_service 的 50053）
 		NodeAgentFilePortOffset: getEnvInt("NODE_AGENT_FILE_PORT_OFFSET", 2),
+
+		// node_agent 存活检测
+		HeartbeatCheckIntervalSec: getEnvInt("HEARTBEAT_CHECK_INTERVAL_SEC", 10),
+		HeartbeatProbeTimeoutMs:   getEnvInt("HEARTBEAT_PROBE_TIMEOUT_MS", 5000),
+		// 连续失败多少次才标记失联（防启动/重连瞬态误报）
+		HeartbeatFailThreshold:    getEnvInt("HEARTBEAT_FAIL_THRESHOLD", 2),
 	}
 }
 

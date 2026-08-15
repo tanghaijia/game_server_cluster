@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"time"
+
 	"controller-go/internal/entity"
 )
 
@@ -13,4 +15,6 @@ type NodeAgentRepository interface {
 	ListEnabledIDs(ctx context.Context) ([]string, error)
 	// ListAll 查询全部 node_agent
 	ListAll(ctx context.Context) ([]*entity.NodeAgent, error)
+	// UpdateHealth 更新存活状态与最近心跳时间（心跳探测用）
+	UpdateHealth(ctx context.Context, agentID string, alive bool, at time.Time) error
 }
