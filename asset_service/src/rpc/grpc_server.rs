@@ -550,6 +550,10 @@ fn map_snapshot_status_to_proto(value: &SnapshotStatus) -> i32 {
 }
 
 fn parse_time(value: &str) -> Result<DateTime<Utc>, Status> {
+    if value.is_empty() {
+        // Registration path: timestamps are assigned by the server.
+        return Ok(Utc::now());
+    }
     DateTime::parse_from_rfc3339(value)
         .map(|v| v.with_timezone(&Utc))
         .map_err(|_| Status::invalid_argument(format!("invalid RFC3339 time: {value}")))

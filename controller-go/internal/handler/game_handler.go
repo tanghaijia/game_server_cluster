@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"errors"
@@ -163,6 +163,8 @@ func (h *GameHandler) RegisterGameBuild(c *gin.Context) {
 			ArtifactUri:        optionalString(req.ArtifactURI),
 			ArtifactImageName:  optionalString(req.ArtifactImageName),
 			ArtifactImageTag:   optionalString(req.ArtifactImageTag),
+			// asset_service 的 rpc 层要求 status 非 0；新注册默认 Available（asset_service 内部也会置 Available）
+			Status:             assetservicev1.BuildStatus_BUILD_STATUS_AVAILABLE,
 		},
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-﻿package controller
+package controller
 
 import (
 	"bytes"
@@ -265,12 +265,32 @@ func (c *Client) ListGameBuilds(ctx context.Context, gameID, channel string) ([]
 	return out.Builds, nil
 }
 
-func (c *Client) RegisterGameBuild(ctx context.Context, build *GameBuild) (*GameBuild, error) {
+// RegisterGameBuild 注册新构建。controller 的注册接口是平铺字段（build_id + game_id），
+// 这里显式拼平铺 body，避免 proto 风格嵌套导致 game_id 解析为空。
+func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *GameBuild) (*GameBuild, error) {
+	body := map[string]string{
+		"build_id":            build.BuildId,
+		"game_id":             gameID,
+		"channel":             derefStr(build.Channel),
+		"adapter_id":          build.AdapterId,
+		"adapter_version":     derefStr(build.AdapterVersion),
+		"upstream_version":    derefStr(build.UpstreamVersion),
+		"artifact_uri":        derefStr(build.ArtifactUri),
+		"artifact_image_name": derefStr(build.ArtifactImageName),
+		"artifact_image_tag":  derefStr(build.ArtifactImageTag),
+	}
 	var out GameBuild
-	if err := c.do(ctx, http.MethodPost, "/api/games/"+build.Game.Id+"/builds", build, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/api/games/"+gameID+"/builds", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 func (c *Client) GetGameBuild(ctx context.Context, gameID, buildID string) (*GameBuild, error) {

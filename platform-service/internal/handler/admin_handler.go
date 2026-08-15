@@ -1,4 +1,4 @@
-﻿package handler
+package handler
 
 import (
 	"errors"
@@ -375,7 +375,7 @@ func (h *AdminHandler) RegisterGameBuild(c *gin.Context) {
 		if s == "" { return nil }
 		return &s
 	}
-	build, err := h.controller.RegisterGameBuild(c.Request.Context(), &controller.GameBuild{
+	build, err := h.controller.RegisterGameBuild(c.Request.Context(), c.Param("id"), &controller.GameBuild{
 		BuildId:           req.BuildID,
 		Game:              &struct{ Id string `json:"id"` }{Id: c.Param("id")},
 		Channel:           strPtr(req.Channel),
