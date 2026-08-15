@@ -63,7 +63,7 @@ trap stop_server SIGTERM SIGINT
 # 端口注入：改写 /data/serverconfig.xml 的 ServerPort（幂等；模板默认 26900）
 if [ -f "${CONFIG_FILE}" ] && [ "${SERVER_PORT}" != "26900" ]; then
   log "SDTD_SERVER_PORT=${SERVER_PORT} -> rewrite ${CONFIG_FILE} ServerPort"
-  sed -i "s|<property name=\"ServerPort\" value=\"[0-9]*\"/>|<property name=\"ServerPort\" value=\"${SERVER_PORT}\"/>|" "${CONFIG_FILE}"
+  sed -i "s|<property name=\"ServerPort\"[[:space:]]*value=\"[0-9]*\"/>|<property name=\"ServerPort\" value=\"${SERVER_PORT}\"/>|" "${CONFIG_FILE}"
 fi
 
 BIN="$(find_server_bin)"
