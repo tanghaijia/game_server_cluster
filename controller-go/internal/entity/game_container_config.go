@@ -6,6 +6,15 @@ type GameContainerConfig struct {
 	PortMode            GameContainerPortMode      `gorm:"column:port_mode"`
 	InjectGamePort      bool                       `gorm:"column:inject_game_port"` // 端口注入：游戏端口 = 分配的宿主端口（identity），通过 env 通告给 adapter
 	PortExcerpt         []GameContainerPortExcerpt `gorm:"foreignKey:GameContainerConfigID"`
+
+	// 资源默认值（3.1 来源优先级第二层，D8，000017 迁移）；实例创建时可覆盖
+	CPURequestMilli    int64 `gorm:"column:cpu_request_milli"`
+	MemoryRequestBytes int64 `gorm:"column:memory_request_bytes"`
+	DiskRequestBytes   int64 `gorm:"column:disk_request_bytes"`
+	BandwidthRxMbps    int64 `gorm:"column:bandwidth_rx_mbps"`
+	BandwidthTxMbps    int64 `gorm:"column:bandwidth_tx_mbps"`
+	// 单核应用声明（3.1 声明规范）：调度校验整核（≥1000m 且 %1000==0），启用单核主频评分
+	SingleThreaded bool `gorm:"column:single_threaded"`
 }
 
 func (GameContainerConfig) TableName() string {

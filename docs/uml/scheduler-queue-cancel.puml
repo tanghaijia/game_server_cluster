@@ -1,0 +1,50 @@
+@startuml
+' 排队唤醒与取消
+' 设计依据：docs/scheduler-design.md §2.4.2 / §2.4.3 / §8 / §7.4
+title 排队唤醒与取消
+
+actor Client
+participant "QueueWaker" as Waker
+participant "ReconcileDispatcher" as Dispatcher
+participant "Scheduler" as Scheduler
+database "PostgreSQL" as DB
+participant "NodeAgent" as Agent
+participant "其他实例" as Other
+
+== 排队中（承接主流程 Outcome=Queued） ==
+note over DB : scheduling_queue 存在实例 A\n(status=Queued, wake_at, priority)
+
+== 唤醒触发（S14） ==
+alt 事件触发
+    Other -> Waker : 实例停止完成（资源释放）→ Wake()
+    Agent -> Waker : 健康恢复 → Wake()
+    DB -> Waker : game-cache 转 AVAILABLE → Wake()
+else 定时扫描（默认 5s）
+    Waker -> DB : ListDue(now)\nORDER BY priority ASC, queued_at ASC
+end
+
+Waker -> Dispatcher : RequestDispatch(instance)\n（同轮去重 + 每轮唤醒上限）
+Dispatcher -> Scheduler : Schedule(instance)
+Scheduler -> DB : 基于最新资源视图重算（S18）
+alt 调度成功
+    Scheduler --> Dispatcher : {Outcome:Scheduled, NodeAgentID}
+    Dispatcher -> DB : DELETE scheduling_queue\nstatus=Scheduling → ... → Running
+else 仍资源不足
+    Scheduler --> Dispatcher : {Outcome:Queued}
+    Dispatcher -> DB : wake_at = now + backoff(attempts)\nattempts++（15s→30s→1m→…→5m）
+    alt attempts 达 30 分钟超时
+        Dispatcher -> DB : status=Failed(reason=queue_timeout)
+    end
+end
+
+== 取消（D5 / D10 / S17） ==
+Client -> Dispatcher : POST /api/game-instances/:id/cancel
+Dispatcher -> DB : 校验 status=Queued（状态守卫）
+alt 校验通过
+    Dispatcher -> DB : DELETE scheduling_queue\nstatus=Stopped, cancelled=true
+    Dispatcher --> Client : 200 已取消（幂等）
+else 已在调度中 / 非排队状态
+    Dispatcher --> Client : 409 状态不允许
+end
+note over Dispatcher : 在途调度尝试完成后检查 cancelled 标记，\n已取消则回滚预留/端口（设计注记 D10）
+@enduml

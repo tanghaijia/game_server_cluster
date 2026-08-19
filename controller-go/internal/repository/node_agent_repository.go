@@ -17,4 +17,6 @@ type NodeAgentRepository interface {
 	ListAll(ctx context.Context) ([]*entity.NodeAgent, error)
 	// UpdateHealth 更新存活状态与最近心跳时间（心跳探测用）
 	UpdateHealth(ctx context.Context, agentID string, alive bool, at time.Time) error
+	// UpdateHealthStatus 更新健康状态机（9.3，S23）
+	UpdateHealthStatus(ctx context.Context, agentID string, status entity.NodeAgentHealthStatus) error
 }

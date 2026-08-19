@@ -20,6 +20,7 @@ const (
 	StatusStopping
 	StatusCleaning
 	StatusStopped
+	StatusQueued
 	Failed
 )
 
@@ -43,6 +44,8 @@ func (s InstanceStatus) String() string {
 		return "cleaning"
 	case StatusStopped:
 		return "stopped"
+	case StatusQueued:
+		return "queued"
 	case Failed:
 		return "failed"
 	default:
@@ -77,11 +80,23 @@ func ParseInstanceStatus(s string) (InstanceStatus, bool) {
 		return StatusCleaning, true
 	case "stopped":
 		return StatusStopped, true
+	case "queued":
+		return StatusQueued, true
 	case "failed":
 		return Failed, true
 	default:
 		return 0, false
 	}
+}
+
+// ResourceRequest 实例资源需求（3.1）：request 用于容量判定，limit 不属于调度输入。
+// 语义对齐 K8s requests：cpu_milli 为时间片需求（1000m = 独占 1 核）。
+type ResourceRequest struct {
+	CPUMilli        int64 `json:"cpu_milli"`
+	MemoryBytes     int64 `json:"memory_bytes"`
+	DiskBytes       int64 `json:"disk_bytes"`
+	BandwidthRxMbps int64 `json:"bandwidth_rx_mbps"`
+	BandwidthTxMbps int64 `json:"bandwidth_tx_mbps"`
 }
 
 type GameInstance struct {
@@ -93,6 +108,15 @@ type GameInstance struct {
 	CreateTime      time.Time      `gorm:"column:create_time"`
 	UpdateTime      time.Time      `gorm:"column:update_time"`
 	GameBuildId     string         `gorm:"column:game_build_id"`
+
+	// 调度字段（000014 迁移）
+	Region      string           `gorm:"column:region"` // R3：区域偏好；空 = 任意区域（S40）
+	Priority    int              `gorm:"column:priority;default:100"` // D7：数值越小越优先
+	ResourceReq *ResourceRequest `gorm:"column:resource_request;serializer:json"`
+	// 排队字段（R8，P2）
+	QueuedReason string     `gorm:"column:queued_reason"`
+	QueuedAt     *time.Time `gorm:"column:queued_at"`
+	Cancelled    bool       `gorm:"column:cancelled"` // D10：取消标记
 }
 
 func (GameInstance) TableName() string {

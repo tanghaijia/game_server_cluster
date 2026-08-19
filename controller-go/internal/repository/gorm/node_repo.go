@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"context"
+	"time"
 
 	"controller-go/internal/entity"
 
@@ -36,4 +37,17 @@ func (r *NodeRepo) ListAll(ctx context.Context) ([]*entity.Node, error) {
 		return nil, err
 	}
 	return nodes, nil
+}
+
+func (r *NodeRepo) UpdateDynamicUsage(ctx context.Context, nodeID string, u entity.NodeDynamicUsage, reportedAt time.Time) error {
+	return r.db.WithContext(ctx).Model(&entity.Node{}).
+		Where("id = ?", nodeID).
+		Updates(map[string]any{
+			"cpu_used_milli":    u.CPUUsedMilli,
+			"memory_used_bytes": u.MemoryUsedBytes,
+			"disk_used_bytes":   u.DiskUsedBytes,
+			"net_rx_bps":        u.NetRxBps,
+			"net_tx_bps":        u.NetTxBps,
+			"usage_reported_at": reportedAt,
+		}).Error
 }

@@ -55,3 +55,9 @@ func (r *NodeAgentRepo) UpdateHealth(ctx context.Context, agentID string, alive 
 		Where("id = ?", agentID).
 		Updates(map[string]any{"alive": alive, "last_heartbeat_at": at}).Error
 }
+
+func (r *NodeAgentRepo) UpdateHealthStatus(ctx context.Context, agentID string, status entity.NodeAgentHealthStatus) error {
+	return r.db.WithContext(ctx).Model(&entity.NodeAgent{}).
+		Where("id = ?", agentID).
+		Update("health_status", status).Error
+}

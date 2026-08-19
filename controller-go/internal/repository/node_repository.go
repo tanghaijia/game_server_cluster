@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"controller-go/internal/entity"
 )
@@ -12,4 +13,6 @@ type NodeRepository interface {
 	GetByID(id string) (*entity.Node, error)
 	// ListAll 查询全部节点
 	ListAll(ctx context.Context) ([]*entity.Node, error)
+	// UpdateDynamicUsage 更新节点动态资源（ResourceSampler 心跳上报写入）
+	UpdateDynamicUsage(ctx context.Context, nodeID string, u entity.NodeDynamicUsage, reportedAt time.Time) error
 }

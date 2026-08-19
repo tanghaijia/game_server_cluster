@@ -1,0 +1,73 @@
+@startuml
+' 调度主流程：创建 → filter/score → 预留事务 → 启动
+' 设计依据：docs/scheduler-design.md §2.2 / §2.4.1 / §7.1 / §7.3
+title 调度主流程（创建 → filter/score → 预留事务 → 启动）
+
+actor Client
+participant "GameInstanceHandler" as Handler
+participant "ReconcileDispatcher" as Dispatcher
+participant "Scheduler\n(ResourceAwareScheduler)" as Scheduler
+database "PostgreSQL" as DB
+participant "NodeAgent" as Agent
+
+== 创建实例 ==
+Client -> Handler : POST /api/game-instances\n{game_id, game_build_id, region?, priority?, resources?}
+Handler -> DB : INSERT game_instances\n(status=Stopped)
+Handler --> Client : 201 Created
+
+== 启动 ==
+Client -> Handler : POST /api/game-instances/:id/start
+Handler -> Dispatcher : StartGameInstance()\nstatus=Pending, RequestDispatch(instance)
+activate Dispatcher
+Dispatcher -> DB : UPDATE status=Pending
+Dispatcher -> DB : UPDATE status=Scheduling
+
+== 调度决策：filter → score（§2.2） ==
+Dispatcher -> Scheduler : Schedule(instance)
+activate Scheduler
+Scheduler -> DB : 加载候选视图\n(enabled agent × node 容量/预留/占用\n× 端口占用 × game-cache 快照)
+Scheduler -> Scheduler : filter 硬约束 H1-H5\n逐个节点判定并记录排除原因
+alt 无候选节点
+    alt 仅因资源/端口不足（可恢复 → 排队）
+        Scheduler --> Dispatcher : {Outcome:Queued, Reason, Excluded[]}
+        Dispatcher -> DB : status=Queued\nINSERT scheduling_queue{priority, wake_at}
+        Dispatcher --> Handler : 202 已排队（原因 + 排除明细）
+    else 存在结构性原因（无 cache / 区域强制不可达 / 配置错误）
+        Scheduler --> Dispatcher : {Outcome:Failed, ReasonCode, Excluded[]}
+        Dispatcher -> DB : status=Failed
+        Dispatcher --> Handler : 调度失败（结构化原因）
+    end
+    note over Dispatcher : 本次调度结束；排队实例等待\nQueueWaker 唤醒或用户取消
+else 有候选节点
+    Scheduler -> Scheduler : score 软偏好 P1-P4\n取评分最高节点 N
+end
+
+== 预留事务（R9 防超卖，§7.1/§7.3） ==
+Scheduler -> DB : BEGIN
+Scheduler -> DB : SELECT nodes WHERE id=N FOR UPDATE
+Scheduler -> DB : 复核 H3 allocatable / H4 端口占用
+alt 复核通过
+    Scheduler -> DB : UPDATE nodes SET\ncpu/mem/disk_reserved += A.request
+    Scheduler -> DB : INSERT game_container_port_mappings\n(端口分配落库)
+    Scheduler -> DB : UPDATE game_instances\nSET node_agent_id=N, status=PreparingBuild
+    Scheduler -> DB : COMMIT
+    Scheduler --> Dispatcher : {Outcome:Scheduled, NodeAgentID:N}
+else 复核失败（并发被抢占）
+    Scheduler -> DB : ROLLBACK（预留不生效）
+    Scheduler -> Scheduler : 重试 filter/score ≤3 次
+    alt 仍失败
+        Scheduler --> Dispatcher : {Outcome:Queued}（转排队）
+    end
+end
+
+== 实例生命周期（后续阶段） ==
+Dispatcher -> Agent : PrepareGameBuild(build_id)
+Agent --> Dispatcher : OperationId
+Dispatcher -> Dispatcher : PollingResult 轮询（可重试/超时）
+Dispatcher -> Agent : RestoringSnapshot / Starting
+Agent --> Dispatcher : 运行正常
+Dispatcher -> DB : status=Running
+Dispatcher --> Handler : 返回连接地址（ip:port）
+deactivate Scheduler
+deactivate Dispatcher
+@enduml
