@@ -705,7 +705,8 @@ func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, inst
 	d.releaseReservation(ctx, instance)
 	instance.Status = entity.StatusStopped
 	instance.NodeAgentID = nil
-	d.instanceRepo.UpdateStatus(ctx, instance)
+	// Save 全字段持久化（UpdateStatus 只更新 status 列，会丢 node_agent_id 清空）
+	d.instanceRepo.Save(ctx, instance)
 	if _, err := d.gameContainerPortMapper.ReleaseMapPortByInstanceId(ctx, instance.ID); err != nil {
 		slog.Error("[PortMapper] ReleaseMapPortByInstanceId fail",
 			"instanceId", instance.ID, "err", err)

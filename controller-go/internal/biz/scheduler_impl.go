@@ -31,6 +31,7 @@ type ResourceAwareScheduler struct {
 	cacheProvider       CacheStatusProvider
 	queueManager        *QueueManager
 	eventBus            *SchedulerEventBus
+	statRepo            repository.SchedulerStatRepository // 000023：调度统计持久化（重启不归零）
 
 	weights           ScoreWeights
 	utilizationTarget float64
@@ -39,7 +40,7 @@ type ResourceAwareScheduler struct {
 	historyWindow     time.Duration
 	healthStaleWindow time.Duration
 
-	// 统计（debug/指标，S29）
+	// 统计（debug/指标，S29）：内存仅作实时快速读与无 DB 时的兜底，权威在 statRepo
 	mu       sync.Mutex
 	attempts map[string]int64
 }
@@ -57,6 +58,7 @@ func NewResourceAwareScheduler(
 	cacheProvider CacheStatusProvider,
 	queueManager *QueueManager,
 	eventBus *SchedulerEventBus,
+	statRepo repository.SchedulerStatRepository,
 	weights ScoreWeights,
 	utilizationTarget float64,
 	regionForce bool,
@@ -92,6 +94,7 @@ func NewResourceAwareScheduler(
 		cacheProvider:       cacheProvider,
 		queueManager:        queueManager,
 		eventBus:            eventBus,
+		statRepo:            statRepo,
 		weights:             weights,
 		utilizationTarget:   utilizationTarget,
 		regionForce:         regionForce,
@@ -431,14 +434,34 @@ func failed(code ScheduleFailCode, reason string) *ScheduleResult {
 	return &ScheduleResult{Outcome: OutcomeFailed, ReasonCode: code, Reason: reason}
 }
 
+// record 记录一次调度出口（S29 指标）：
+// 内存 map 累加（实时快速读/兜底）+ 双写 DB（scheduler_stats 表，重启不归零）。
+// DB 写失败仅记日志，不影响调度热路径。
 func (s *ResourceAwareScheduler) record(outcome string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.attempts[outcome]++
+	s.mu.Unlock()
+
+	if s.statRepo != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := s.statRepo.Incr(ctx, outcome); err != nil {
+			slog.Error("[Scheduler] 统计持久化失败", "outcome", outcome, "err", err)
+		}
+	}
 }
 
-// Stats 调度统计（debug/指标，S29）
+// Stats 调度统计（debug/指标，S29）：DB 持久化值为权威（重启后不归零）。
+// 若 DB 不可用回退内存快照。内存增量与 DB 的关系：每次 record 双写，
+// 因此 DB 已包含全部历史与当前计数，内存仅作兜底。
 func (s *ResourceAwareScheduler) Stats() map[string]int64 {
+	if s.statRepo != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if m, err := s.statRepo.All(ctx); err == nil && len(m) > 0 {
+			return m
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make(map[string]int64, len(s.attempts))

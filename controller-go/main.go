@@ -96,6 +96,8 @@ func main() {
 	// 调度事件总线（S30 观测）：调度器/队列/压力/健康/缓存发布事件；双写内存 + DB 持久化（重启可回溯）
 	eventRepo := repogorm.NewSchedulerEventRepo(db)
 	eventBus := biz.NewSchedulerEventBus(cfg.EventBufferSize, eventRepo)
+	// 调度统计持久化（S29 指标）：scheduled/queued/failed 计数落库，重启不归零
+	statRepo := repogorm.NewSchedulerStatRepo(db)
 	// game-cache 视图（§10）：快照供 H5 判定，周期刷新（替代调度时实时 gRPC 查询）
 	nodeCacheView := biz.NewNodeCacheView(gameCacheManager, nodeAgentRepo, steamBranchRepo, gameRepo, eventBus)
 
@@ -124,6 +126,7 @@ func main() {
 		nodeCacheView,
 		queueManager,
 		eventBus,
+		statRepo,
 		schedulerWeights,
 		cfg.SchedulerUtilizationTarget,
 		cfg.SchedulerRegionForce,

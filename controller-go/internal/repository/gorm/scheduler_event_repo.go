@@ -44,3 +44,9 @@ func (r *SchedulerEventRepo) PruneBefore(ctx context.Context, before time.Time) 
 	res := r.db.WithContext(ctx).Where("occurred_at < ?", before).Delete(&entity.SchedulerEventRow{})
 	return res.RowsAffected, res.Error
 }
+
+func (r *SchedulerEventRepo) Count(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&entity.SchedulerEventRow{}).Count(&n).Error
+	return n, err
+}

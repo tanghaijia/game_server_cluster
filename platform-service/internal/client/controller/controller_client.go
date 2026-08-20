@@ -240,8 +240,13 @@ func (c *Client) DeleteNode(ctx context.Context, id string) error {
 }
 
 // ObserveForward 转发调度观测请求到 controller /api/observe/*（管理员观测，走 admin 鉴权）
-func (c *Client) ObserveForward(ctx context.Context, method, subpath string, body, out any) error {
-	return c.do(ctx, method, "/api/observe"+subpath, body, out)
+// query 为原始 query string（如 "hours=24&limit=100"），透传给 controller（空串不附加）。
+func (c *Client) ObserveForward(ctx context.Context, method, subpath, query string, body, out any) error {
+	fullPath := "/api/observe" + subpath
+	if query != "" {
+		fullPath += "?" + query
+	}
+	return c.do(ctx, method, fullPath, body, out)
 }
 
 // ---------------------------------------------------------------------------

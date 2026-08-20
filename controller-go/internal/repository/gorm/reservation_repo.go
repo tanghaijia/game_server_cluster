@@ -3,6 +3,7 @@ package gorm
 import (
 	"context"
 	"errors"
+	"time"
 
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
@@ -83,6 +84,7 @@ func (r *ReservationRepo) TryReserve(ctx context.Context, req repository.Reserve
 			Updates(map[string]any{
 				"node_agent_id": req.NodeAgentID,
 				"status":        req.NewStatus,
+				"update_time":   time.Now(),
 			}).Error; err != nil {
 			return err
 		}

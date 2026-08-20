@@ -216,7 +216,12 @@ func (uc *ObserverUseCase) SchedulerStats(ctx context.Context) SchedulerStats {
 		st.QueueLen = n
 	}
 	if uc.eventBus != nil {
-		st.EventCount = uc.eventBus.Len()
+		// 事件数优先取 DB 持久化总数（重启后不归零）；DB 不可用回退内存缓冲长度
+		if n, ok := uc.eventBus.DBCount(ctx); ok {
+			st.EventCount = int(n)
+		} else {
+			st.EventCount = uc.eventBus.Len()
+		}
 	}
 	return st
 }

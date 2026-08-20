@@ -2,6 +2,8 @@ package gorm
 
 import (
 	"context"
+	"time"
+
 	"controller-go/internal/entity"
 
 	"gorm.io/gorm"
@@ -16,6 +18,7 @@ func NewGameInstanceRepo(db *gorm.DB) *GameInstanceRepo {
 }
 
 func (r *GameInstanceRepo) Save(ctx context.Context, instance *entity.GameInstance) error {
+	instance.UpdateTime = time.Now()
 	return r.db.WithContext(ctx).Save(instance).Error
 }
 
@@ -31,7 +34,10 @@ func (r *GameInstanceRepo) GetByID(ctx context.Context, id string) (*entity.Game
 func (r *GameInstanceRepo) UpdateStatus(ctx context.Context, instance *entity.GameInstance) error {
 	return r.db.WithContext(ctx).Model(&entity.GameInstance{}).
 		Where("id = ?", instance.ID).
-		Update("status", instance.Status).Error
+		Updates(map[string]any{
+			"status":      instance.Status,
+			"update_time": time.Now(),
+		}).Error
 }
 
 func (r *GameInstanceRepo) ListByStatuses(ctx context.Context, statuses ...entity.InstanceStatus) ([]*entity.GameInstance, error) {

@@ -179,3 +179,16 @@ func (b *SchedulerEventBus) Len() int {
 	defer b.mu.RUnlock()
 	return len(b.events)
 }
+
+// DBCount 持久化事件总数（观测看板"事件数"用，重启后不归零）；repo 为 nil 时回退内存 Len。
+func (b *SchedulerEventBus) DBCount(ctx context.Context) (int64, bool) {
+	if b.repo == nil {
+		return int64(b.Len()), false
+	}
+	n, err := b.repo.Count(ctx)
+	if err != nil {
+		slog.Error("SchedulerEventBus 查询事件总数失败", "err", err)
+		return int64(b.Len()), false
+	}
+	return n, true
+}

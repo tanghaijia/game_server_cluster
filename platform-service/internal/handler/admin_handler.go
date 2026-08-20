@@ -278,6 +278,7 @@ func (h *AdminHandler) UpdateContainerConfig(c *gin.Context) {
 
 // ObserveForward 透传 /api/admin/observe/* 到 controller /api/observe/*（管理员鉴权已由路由组中间件完成）。
 // 响应体原样透传；非 2xx 统一映射为 500（404 单独映射）。
+// 注意：必须透传原始 query string（如 events?hours=24），否则 controller 读不到 hours/limit 等参数。
 func (h *AdminHandler) ObserveForward(c *gin.Context) {
 	sub := c.Param("path") // 如 /nodes、/nodes/1/history、/scheduler/preview
 	var body any
@@ -288,7 +289,7 @@ func (h *AdminHandler) ObserveForward(c *gin.Context) {
 		}
 	}
 	var out json.RawMessage
-	if err := h.controller.ObserveForward(c.Request.Context(), c.Request.Method, sub, body, &out); err != nil {
+	if err := h.controller.ObserveForward(c.Request.Context(), c.Request.Method, sub, c.Request.URL.RawQuery, body, &out); err != nil {
 		if errors.Is(err, controller.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return

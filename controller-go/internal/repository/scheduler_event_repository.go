@@ -15,4 +15,6 @@ type SchedulerEventRepository interface {
 	ListSince(ctx context.Context, since time.Time, typ string, limit int) ([]*entity.SchedulerEventRow, error)
 	// PruneBefore 清理早于保留时间的事件（保留策略，默认 7 天）
 	PruneBefore(ctx context.Context, before time.Time) (int64, error)
+	// Count 统计持久化事件总数（观测看板"事件数"，重启后不归零）
+	Count(ctx context.Context) (int64, error)
 }

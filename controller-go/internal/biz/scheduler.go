@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"encoding/json"
 
 	"controller-go/internal/entity"
 )
@@ -14,6 +15,25 @@ const (
 	OutcomeQueued
 	OutcomeFailed
 )
+
+// String 可读名称（观测/审计输出用）
+func (o ScheduleOutcome) String() string {
+	switch o {
+	case OutcomeScheduled:
+		return "scheduled"
+	case OutcomeQueued:
+		return "queued"
+	case OutcomeFailed:
+		return "failed"
+	default:
+		return "unknown"
+	}
+}
+
+// MarshalJSON 让调度出口在 JSON 中输出字符串（观测接口契约：scheduled/queued/failed）
+func (o ScheduleOutcome) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
 
 // ScheduleFailCode 失败原因码（F1 结构化原因）
 type ScheduleFailCode int
