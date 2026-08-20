@@ -105,7 +105,7 @@ func (uc *ObserverUseCase) NodesOverview(ctx context.Context) ([]*NodeOverview, 
 			MemCapacityBytes:    memoryCapacityBytes(n),
 			MemUsedBytes:        n.MemoryUsedBytes,
 			MemReservedBytes:    n.MemoryReservedBytes,
-			BandwidthRatio:      bandwidthRatio(n),
+			BandwidthRatio:      bandwidthRatio(n, 0, 0), // 观测页用预留视图（评分侧用 P95，见 candidate.go）
 		}
 		cap := ComputeCapacity(n, uc.utilizationTarget)
 		ov.CPUAllocatableMilli = cap.CPUAllocatableMilli
@@ -187,10 +187,13 @@ func (uc *ObserverUseCase) QueueOverview(ctx context.Context) ([]*QueueItemOverv
 	return out, nil
 }
 
-// Events 调度事件流（最新在前）
-func (uc *ObserverUseCase) Events(limit int, typ SchedulerEventType) []SchedulerEvent {
+// Events 调度事件流（S30）：hours>0 时从 DB 查持久化历史（重启后可回溯），否则读内存实时缓冲。
+func (uc *ObserverUseCase) Events(ctx context.Context, limit int, typ SchedulerEventType, hours int) []SchedulerEvent {
 	if uc.eventBus == nil {
 		return nil
+	}
+	if hours > 0 {
+		return uc.eventBus.History(ctx, time.Now().Add(-time.Duration(hours)*time.Hour), string(typ), limit)
 	}
 	return uc.eventBus.Recent(limit, typ)
 }
@@ -241,10 +244,11 @@ func (uc *ObserverUseCase) PreviewSchedule(ctx context.Context, req PreviewReque
 		}
 	}
 	inst := &entity.GameInstance{
-		GameID:      req.GameID,
-		GameBuildId: buildID,
-		Region:      req.Region,
-		ResourceReq: req.Resources,
+		GameID:           req.GameID,
+		GameBuildId:      buildID,
+		Region:           req.Region,
+		ResourceReq:      req.Resources,
+		ResourceOverride: req.Resources != nil, // 试调度传入的资源视为显式覆盖
 	}
 	return uc.scheduler.Preview(ctx, inst)
 }

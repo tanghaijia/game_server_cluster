@@ -35,7 +35,12 @@
     <div class="grid grid-cols-3 gap-6">
       <!-- 节点资源总览 -->
       <div class="col-span-2 rounded-lg border">
-        <div class="border-b px-4 py-3 text-sm font-medium">节点资源总览</div>
+        <div class="flex items-baseline justify-between border-b px-4 py-3">
+          <span class="text-sm font-medium">节点资源总览</span>
+          <span class="text-[11px] text-muted-foreground">
+            占用 = 心跳实际值 · 预留 = 已调度实例 request 之和（逻辑账本）· 可用 = 容量×80% − 预留（逻辑可分配量，不含实际占用，实际负载由压力状态兜底）
+          </span>
+        </div>
         <div class="max-h-96 overflow-auto">
           <table class="w-full text-xs">
             <thead class="sticky top-0 bg-background">
@@ -44,9 +49,9 @@
                 <th class="px-3 py-2">IP/地域</th>
                 <th class="px-3 py-2">健康</th>
                 <th class="px-3 py-2">压力</th>
-                <th class="px-3 py-2">CPU 可用/占用/预留</th>
-                <th class="px-3 py-2">内存 可用/占用/预留</th>
-                <th class="px-3 py-2">带宽余量</th>
+                <th class="px-3 py-2" title="格式：可用 / 占用 / 预留。可用=容量×80%−预留（逻辑可分配量）；占用=心跳实际值；预留=已调度实例 request 之和">CPU 可用/占用/预留</th>
+                <th class="px-3 py-2" title="格式：可用 / 占用 / 预留。可用=容量×80%−预留（逻辑可分配量）；占用=心跳实际值；预留=已调度实例 request 之和">内存 可用/占用/预留</th>
+                <th class="px-3 py-2" title="带宽余量 = min(上限−已预留带宽, 上限−当前实际bps) / 上限（百分比）">带宽余量</th>
                 <th class="px-3 py-2"></th>
               </tr>
             </thead>
@@ -378,7 +383,8 @@ async function loadAll() {
 
 async function loadEvents() {
   try {
-    events.value = await observeEvents(100, eventFilter.value || undefined)
+    // 默认查最近 24h 持久化历史（重启后仍可回溯，S30）
+    events.value = await observeEvents(100, eventFilter.value || undefined, 24)
   } catch {
     /* 忽略 */
   }

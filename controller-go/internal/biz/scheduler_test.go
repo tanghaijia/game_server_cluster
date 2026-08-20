@@ -84,6 +84,35 @@ func TestComputeScore_Deterministic(t *testing.T) {
 	}
 }
 
+// TestResolveRequest_ConfigPriority 资源需求优先级（000021 修复）：
+// 调度写回的快照（ResourceOverride=false）不覆盖 config 当前值；
+// 仅创建时显式指定（ResourceOverride=true）覆盖。
+func TestResolveRequest_ConfigPriority(t *testing.T) {
+	s := &ResourceAwareScheduler{}
+	config := &entity.GameContainerConfig{
+		CPURequestMilli: 2000, MemoryRequestBytes: 3 << 30, DiskRequestBytes: 20 << 30,
+		BandwidthRxMbps: 80, BandwidthTxMbps: 80,
+	}
+	// 场景1：实例快照（调度写回，override=false）→ config 当前值优先（config 改 3G 生效）
+	inst := &entity.GameInstance{ResourceReq: &entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30}}
+	req := s.resolveRequest(inst, config)
+	if req.MemoryBytes != 3<<30 {
+		t.Errorf("快照不应覆盖 config：内存 = %d, 期望 3GiB", req.MemoryBytes)
+	}
+	if req.CPUMilli != 2000 {
+		t.Errorf("快照不应覆盖 config：cpu = %d, 期望 2000m", req.CPUMilli)
+	}
+	// 场景2：创建时显式指定（override=true）→ 覆盖 config
+	inst2 := &entity.GameInstance{ResourceReq: &entity.ResourceRequest{MemoryBytes: 4 << 30}, ResourceOverride: true}
+	req2 := s.resolveRequest(inst2, config)
+	if req2.MemoryBytes != 4<<30 {
+		t.Errorf("显式指定应覆盖 config：内存 = %d, 期望 4GiB", req2.MemoryBytes)
+	}
+	if req2.CPUMilli != 2000 {
+		t.Errorf("未指定的字段应用 config：cpu = %d, 期望 2000m", req2.CPUMilli)
+	}
+}
+
 // TestCapacityLimit 单位换算与 headroom
 func TestCapacityLimit(t *testing.T) {
 	node := &entity.Node{CoreNum: 4, MemorySize: 16384}
@@ -98,26 +127,44 @@ func TestCapacityLimit(t *testing.T) {
 	}
 }
 
-// TestBandwidthRatio 带宽余量评分（§3.5/D6）：limit − max(预留, 当前bps) 双向取小归一化
+// TestBandwidthRatio 带宽余量评分（§3.5/D6）：headroom = limit − max(预留, 窗口P95占用) 双向取小归一化
 func TestBandwidthRatio(t *testing.T) {
 	// 上限 1000Mbps，无预留、无占用 → 余量 1.0
 	n := &entity.Node{NetRxLimitMbps: 1000, NetTxLimitMbps: 1000}
-	if got := bandwidthRatio(n); got != 1.0 {
+	if got := bandwidthRatio(n, 0, 0); got != 1.0 {
 		t.Errorf("bandwidthRatio 空节点 = %v, 期望 1.0", got)
 	}
 	// 预留 500Mbps → rx/tx 余量 0.5
 	n.BandwidthRxReservedMbps = 500
 	n.BandwidthTxReservedMbps = 500
-	if got := bandwidthRatio(n); got != 0.5 {
+	if got := bandwidthRatio(n, 0, 0); got != 0.5 {
 		t.Errorf("bandwidthRatio 预留后 = %v, 期望 0.5", got)
 	}
-	// 当前占用 900Mbps（> 预留）→ rx 余量 0.1；tx 仍 0.5 → 取小 0.1
-	n.NetRxBps = 900_000_000 / 8 // 900Mbps = 112.5MB/s（bps→Mbps 换算 ×8/1e6）
-	if got := bandwidthRatio(n); got != 0.1 {
-		t.Errorf("bandwidthRatio 占用后 = %v, 期望 0.1", got)
+	// 窗口 P95 占用 900Mbps（> 预留）→ rx 余量 0.1；tx 仍 0.5 → 取小 0.1
+	if got := bandwidthRatio(n, 900, 0); got != 0.1 {
+		t.Errorf("bandwidthRatio P95 占用后 = %v, 期望 0.1", got)
+	}
+	// 瞬时突发不影响：P95=200（预留 500 更大）→ 0.5
+	if got := bandwidthRatio(n, 200, 200); got != 0.5 {
+		t.Errorf("bandwidthRatio P95 低于预留 = %v, 期望 0.5", got)
 	}
 	// 未配置上限 → 0（不影响评分）
-	if got := bandwidthRatio(&entity.Node{}); got != 0 {
+	if got := bandwidthRatio(&entity.Node{}, 0, 0); got != 0 {
 		t.Errorf("bandwidthRatio 无上限 = %v, 期望 0", got)
+	}
+}
+
+// TestBandwidthP95 P95 计算
+func TestBandwidthP95(t *testing.T) {
+	samples := []*entity.NodeResourceSample{
+		{NetRxBps: 0}, {NetRxBps: 0}, {NetRxBps: 0},
+		{NetRxBps: 900_000_000 / 8}, {NetRxBps: 900_000_000 / 8}, {NetRxBps: 900_000_000 / 8},
+	}
+	rx, tx := bandwidthP95(samples)
+	if rx != 900 { // 900Mbps
+		t.Errorf("rx P95 = %v, 期望 900Mbps", rx)
+	}
+	if tx != 0 {
+		t.Errorf("tx P95 = %v, 期望 0", tx)
 	}
 }

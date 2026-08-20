@@ -54,28 +54,44 @@ func NewGameInstanceUseCase(
 	}
 }
 
+// CreateInstanceOptions 创建实例的可选参数（region/priority/资源显式覆盖）
+type CreateInstanceOptions struct {
+	GameBuildID string
+	Region      string
+	Priority    int // 0 = 默认 100
+	Resources   *entity.ResourceRequest // 显式指定资源（覆盖 config 默认，ResourceOverride=true）
+}
+
 /**
 * 创建一个GameInstance，状态会被初始化为StatusStopped。
 * buildID 为空时，以 "public" 作为 channel 调 asset_service 解析该 channel 的可用构建。
 **/
-func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID, buildID string) (*entity.GameInstance, error) {
+func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID string, opts CreateInstanceOptions) (*entity.GameInstance, error) {
 	if gameID == "" {
 		return nil, errors.New("game_id is required")
 	}
 
-	build, err := uc.resolveBuild(ctx, gameID, buildID)
+	build, err := uc.resolveBuild(ctx, gameID, opts.GameBuildID)
 	if err != nil {
 		return nil, err
 	}
 
+	priority := opts.Priority
+	if priority <= 0 {
+		priority = 100 // D7 默认
+	}
 	instance := &entity.GameInstance{
-		ID:              newGameInstanceID(),
-		GameID:          gameID,
-		Status:          entity.StatusStopped,
-		GameBuildId:     build.GetBuildId(),
-		LastPendingTime: time.Time{},
-		CreateTime:      time.Now(),
-		UpdateTime:      time.Now(),
+		ID:               newGameInstanceID(),
+		GameID:           gameID,
+		Status:           entity.StatusStopped,
+		GameBuildId:      build.GetBuildId(),
+		LastPendingTime:  time.Time{},
+		CreateTime:       time.Now(),
+		UpdateTime:       time.Now(),
+		Region:           opts.Region,
+		Priority:         priority,
+		ResourceReq:      opts.Resources,
+		ResourceOverride: opts.Resources != nil, // 创建时显式指定 → 覆盖 config 默认（000021）
 	}
 	err = uc.instanceRepo.Save(ctx, instance)
 	if err != nil {

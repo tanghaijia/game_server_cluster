@@ -93,8 +93,9 @@ func main() {
 	// ---------------------------------------------------------------
 	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
 	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
-	// 调度事件总线（S30 观测）：调度器/队列/压力/健康/缓存发布事件
-	eventBus := biz.NewSchedulerEventBus(cfg.EventBufferSize)
+	// 调度事件总线（S30 观测）：调度器/队列/压力/健康/缓存发布事件；双写内存 + DB 持久化（重启可回溯）
+	eventRepo := repogorm.NewSchedulerEventRepo(db)
+	eventBus := biz.NewSchedulerEventBus(cfg.EventBufferSize, eventRepo)
 	// game-cache 视图（§10）：快照供 H5 判定，周期刷新（替代调度时实时 gRPC 查询）
 	nodeCacheView := biz.NewNodeCacheView(gameCacheManager, nodeAgentRepo, steamBranchRepo, gameRepo, eventBus)
 
@@ -183,6 +184,10 @@ func main() {
 
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
+
+	// 调度事件持久化消费者（批量 flush + 定期清理）
+	eventBus.Start(ctx)
+	slog.Info("SchedulerEventBus 已启动（事件持久化）")
 
 	// 排队唤醒器（定时扫描 + 事件）
 	queueWaker.Start(ctx, time.Duration(cfg.QueueScanIntervalSec)*time.Second)

@@ -80,7 +80,7 @@ func (h *ObserverHandler) QueueOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"queue": qs, "len": len(qs)})
 }
 
-// Events 调度事件流（?type=&limit=）
+// Events 调度事件流（?type=&limit=&hours=；hours>0 查 DB 历史，否则内存实时）
 func (h *ObserverHandler) Events(c *gin.Context) {
 	limit := 100
 	if l := c.Query("limit"); l != "" {
@@ -88,9 +88,15 @@ func (h *ObserverHandler) Events(c *gin.Context) {
 			limit = n
 		}
 	}
+	hours := 0
+	if hh := c.Query("hours"); hh != "" {
+		if n, err := strconv.Atoi(hh); err == nil && n > 0 {
+			hours = n
+		}
+	}
 	typ := biz.SchedulerEventType(c.Query("type"))
-	events := h.observerUseCase.Events(limit, typ)
-	c.JSON(http.StatusOK, gin.H{"events": events})
+	events := h.observerUseCase.Events(c.Request.Context(), limit, typ, hours)
+	c.JSON(http.StatusOK, gin.H{"events": events, "source": map[bool]string{true: "db", false: "memory"}[hours > 0]})
 }
 
 // SchedulerStats 调度统计

@@ -107,8 +107,10 @@ export async function observeQueue(): Promise<QueueItem[]> {
   return resp.data.queue
 }
 
-export async function observeEvents(limit = 100, type?: string): Promise<SchedulerEvent[]> {
-  const resp = await http.get('/admin/observe/events', { params: { limit, ...(type ? { type } : {}) } })
+export async function observeEvents(limit = 100, type?: string, hours?: number): Promise<SchedulerEvent[]> {
+  const resp = await http.get('/admin/observe/events', {
+    params: { limit, ...(type ? { type } : {}), ...(hours ? { hours } : {}) },
+  })
   return resp.data.events
 }
 

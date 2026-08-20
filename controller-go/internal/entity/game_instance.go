@@ -113,6 +113,8 @@ type GameInstance struct {
 	Region      string           `gorm:"column:region"` // R3：区域偏好；空 = 任意区域（S40）
 	Priority    int              `gorm:"column:priority;default:100"` // D7：数值越小越优先
 	ResourceReq *ResourceRequest `gorm:"column:resource_request;serializer:json"`
+	// 000021 迁移：创建时用户显式指定资源（覆盖 config 默认）；false = 调度写回的快照（仅释放用）
+	ResourceOverride bool `gorm:"column:resource_override"`
 	// 排队字段（R8，P2）
 	QueuedReason string     `gorm:"column:queued_reason"`
 	QueuedAt     *time.Time `gorm:"column:queued_at"`

@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"time"
 
@@ -66,31 +67,35 @@ func (s *ResourceAwareScheduler) loadCandidates(ctx context.Context) ([]*NodeCan
 			Capacity: ComputeCapacity(node, s.utilizationTarget),
 		}
 		// 历史利用率（评分 history_score；采样缺失视为 0 占用，保守不过分惩罚）
+		// 带宽余量（§3.5/D6）：headroom = min(上限−已预留, 上限−窗口P95占用)，P95 平滑瞬时波动
 		if samples, err := s.sampleRepo.ListSince(ctx, fmtID(node.Id), since); err == nil && len(samples) > 0 {
 			c.HistoryUtil = avgUtilization(samples, node)
+			rxP95, txP95 := bandwidthP95(samples)
+			c.BandwidthRatio = bandwidthRatio(node, rxP95, txP95)
+		} else {
+			c.BandwidthRatio = bandwidthRatio(node, 0, 0)
 		}
-		// 带宽余量占比（评分 bandwidth_score，§3.5/D6 软约束）
-		c.BandwidthRatio = bandwidthRatio(node)
 		cands = append(cands, c)
 	}
 	return cands, nil
 }
 
-// bandwidthRatio 带宽余量占比（0..1）：headroom = limit − max(已预留, 当前占用bps→Mbps)；
+// bandwidthRatio 带宽余量占比（0..1）：headroom = limit − max(已预留带宽, 窗口P95占用)；
 // 双向（rx/tx）取小归一化（§3.5）。未配置带宽上限返回 0（不影响评分）。
-func bandwidthRatio(n *entity.Node) float64 {
+// 用 P95（而非瞬时值）避免 game-cache 下载等突发流量导致余量跳变。
+func bandwidthRatio(n *entity.Node, rxP95Mbps, txP95Mbps float64) float64 {
 	rxLimit := float64(n.NetRxLimitMbps)
 	txLimit := float64(n.NetTxLimitMbps)
 	if rxLimit <= 0 || txLimit <= 0 {
 		return 0
 	}
 	rxUsed := float64(n.BandwidthRxReservedMbps)
-	if cur := float64(n.NetRxBps) * 8 / 1e6; cur > rxUsed {
-		rxUsed = cur
+	if rxP95Mbps > rxUsed {
+		rxUsed = rxP95Mbps
 	}
 	txUsed := float64(n.BandwidthTxReservedMbps)
-	if cur := float64(n.NetTxBps) * 8 / 1e6; cur > txUsed {
-		txUsed = cur
+	if txP95Mbps > txUsed {
+		txUsed = txP95Mbps
 	}
 	rxRatio := (rxLimit - rxUsed) / rxLimit
 	txRatio := (txLimit - txUsed) / txLimit
@@ -98,6 +103,29 @@ func bandwidthRatio(n *entity.Node) float64 {
 		return clamp01(rxRatio)
 	}
 	return clamp01(txRatio)
+}
+
+// bandwidthP95 采样窗口内 net_rx/tx_bps 的 P95（换算 Mbps）
+func bandwidthP95(samples []*entity.NodeResourceSample) (rxMbps, txMbps float64) {
+	if len(samples) == 0 {
+		return 0, 0
+	}
+	rx := make([]float64, len(samples))
+	tx := make([]float64, len(samples))
+	for i, s := range samples {
+		rx[i] = float64(s.NetRxBps) * 8 / 1e6
+		tx[i] = float64(s.NetTxBps) * 8 / 1e6
+	}
+	return percentile95(rx), percentile95(tx)
+}
+
+// percentile95 第 95 百分位
+func percentile95(v []float64) float64 {
+	if len(v) == 0 {
+		return 0
+	}
+	sort.Float64s(v)
+	return v[int(float64(len(v)-1)*0.95)]
 }
 
 // avgUtilization 窗口内 cpu/mem 均值利用率的较大者（history_score 输入）

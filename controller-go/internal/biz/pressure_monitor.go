@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -23,10 +24,12 @@ type PressureMonitor struct {
 	criticalPct   float64
 	observePeriods int
 	recoverPeriods int
-	window        time.Duration // 采样观测窗口（history window，3.4）
+	recentWindowN int    // 观察窗：取最近 N 个采样做判定（升级与恢复共用，防振荡）
+	window        time.Duration // 拉取采样的时间范围（历史窗口，3.4）
 
 	mu     sync.Mutex
-	counts map[string]int // nodeID -> 连续超阈轮数
+	counts map[string]int // nodeID -> 连续超阈轮数（升级计数）
+	downs  map[string]int // nodeID -> 连续低于阈值轮数（恢复计数，S14）
 }
 
 func NewPressureMonitor(
@@ -62,8 +65,10 @@ func NewPressureMonitor(
 		criticalPct:     criticalPct,
 		observePeriods:  observePeriods,
 		recoverPeriods:  recoverPeriods,
+		recentWindowN:   observePeriods, // 观察窗 = 升级所需轮数（对称，防振荡）
 		window:          window,
 		counts:          make(map[string]int),
+		downs:           make(map[string]int),
 	}
 }
 
@@ -107,54 +112,82 @@ func (m *PressureMonitor) evaluateNode(ctx context.Context, n *entity.Node, sinc
 		return // 无采样（节点未上报），保持现状
 	}
 
-	// 最近窗口占用率（cpu/mem 取较大者）
-	util := latestUtilization(samples, n)
+	// 观察窗：最近 N 个采样（升级与恢复共用同一窗口，天然互斥 → 无 Normal↔Critical 振荡）
+	recent := lastNSamples(samples, m.recentWindowN)
+	util := latestUtilization(recent, n)
 	nodeID := fmtID(n.Id)
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	status, up, down := pressureStep(util, n.PressureStatus, m.counts[nodeID], m.downs[nodeID],
+		m.warningPct, m.criticalPct, m.observePeriods, m.recoverPeriods)
+	m.counts[nodeID] = up
+	m.downs[nodeID] = down
+	m.mu.Unlock()
 
-	count := m.counts[nodeID]
-	status := n.PressureStatus
-
-	switch {
-	case util >= m.criticalPct:
-		count++
-		if count >= m.observePeriods && status != entity.PressureCritical {
-			m.transition(ctx, nodeID, entity.PressureCritical)
-		}
-	case util >= m.warningPct:
-		count++
-		if count >= m.observePeriods && status != entity.PressureWarning {
-			m.transition(ctx, nodeID, entity.PressureWarning)
-		}
-	default:
-		if count > 0 {
-			count--
-		}
-		if count == 0 && status != entity.PressureNormal {
-			m.transition(ctx, nodeID, entity.PressureNormal)
-		}
+	if status != n.PressureStatus {
+		m.transition(ctx, nodeID, status, util)
 	}
-	if count <= 0 {
-		count = 0
-	}
-	m.counts[nodeID] = count
 }
 
-func (m *PressureMonitor) transition(ctx context.Context, nodeID string, status entity.NodePressureStatus) {
+// pressureStep 一步压力状态判定（纯函数，可单测）：
+// 升级/恢复共用同一 util（最近 N 个采样峰值）——util 高则只可能升级、低则只可能恢复，
+// 不会出现"同一观察窗内升了又降"的振荡。
+func pressureStep(
+	util float64,
+	status entity.NodePressureStatus,
+	up, down int,
+	warningPct, criticalPct float64,
+	observePeriods, recoverPeriods int,
+) (entity.NodePressureStatus, int, int) {
+	switch {
+	case util >= criticalPct:
+		up++
+		down = 0
+		if up >= observePeriods && status != entity.PressureCritical {
+			status = entity.PressureCritical
+		}
+	case util >= warningPct:
+		up++
+		down = 0
+		if up >= observePeriods && status != entity.PressureWarning {
+			status = entity.PressureWarning
+		}
+	default:
+		up = 0
+		if status != entity.PressureNormal {
+			down++
+			if down >= recoverPeriods {
+				status = entity.PressureNormal
+				down = 0
+			}
+		}
+	}
+	return status, up, down
+}
+
+func (m *PressureMonitor) transition(ctx context.Context, nodeID string, status entity.NodePressureStatus, util float64) {
 	if err := m.nodeRepo.UpdatePressureStatus(ctx, nodeID, status); err != nil {
 		slog.Error("PressureMonitor 更新压力状态失败", "nodeId", nodeID, "err", err)
 		return
 	}
-	slog.Info("PressureMonitor 节点压力状态变化", "nodeId", nodeID, "status", pressureStatusName(status))
+	detail := fmt.Sprintf("压力状态 → %s（最近 %d 个采样峰值 %.0f%%；阈值 Warning=%v%% Critical=%v%%）",
+		pressureStatusName(status), m.recentWindowN, util, m.warningPct, m.criticalPct)
+	slog.Info("PressureMonitor 节点压力状态变化", "nodeId", nodeID, "status", pressureStatusName(status), "util", util)
 	if m.eventBus != nil {
 		m.eventBus.Publish(SchedulerEvent{Type: EventNodePressureChanged, OccurredAt: time.Now(),
-			NodeAgentID: nodeID, Detail: "压力状态 → " + pressureStatusName(status)})
+			NodeAgentID: nodeID, Detail: detail})
 	}
 }
 
-// latestUtilization 窗口内最近采样的 cpu/mem 占用率较大者（0..1 比例）
+// lastNSamples 取最近 n 个采样（ListSince 时间升序，末尾为最新）
+func lastNSamples(samples []*entity.NodeResourceSample, n int) []*entity.NodeResourceSample {
+	if len(samples) <= n {
+		return samples
+	}
+	return samples[len(samples)-n:]
+}
+
+// latestUtilization 观察窗内 cpu/mem 占用率峰值（0..100）
 func latestUtilization(samples []*entity.NodeResourceSample, node *entity.Node) float64 {
 	if len(samples) == 0 {
 		return 0

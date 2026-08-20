@@ -95,14 +95,58 @@ func (m *mockNodeRepo) Delete(ctx context.Context, id string) error { return nil
 
 var _ repository.NodeRepository = (*mockNodeRepo)(nil)
 
-type mockReservationRepo struct{}
+type mockReservationRepo struct {
+	releaseCount int
+}
 
 func (m *mockReservationRepo) TryReserve(ctx context.Context, req repository.ReserveTxRequest) error { return nil }
 func (m *mockReservationRepo) Release(ctx context.Context, nodeID string, req entity.ResourceRequest) error {
+	m.releaseCount++
 	return nil
 }
 
 var _ repository.ReservationRepository = (*mockReservationRepo)(nil)
+
+// TestFailedInstance_NoReleaseOnScheduleFailure 调度失败不应改变预留的回归测试：
+// 调度阶段失败（Scheduling→Failed）本次未扣减预留——即使实例残留上次的绑定，
+// FailedInstance 也不得释放（否则"调度失败但节点预留变化"）；并清空绑定。
+func TestFailedInstance_NoReleaseOnScheduleFailure(t *testing.T) {
+	repo := &mockInstanceRepo{saveFunc: func(ctx context.Context, inst *entity.GameInstance) error { return nil }}
+	resv := &mockReservationRepo{}
+	rd := NewReconcileDispatcher(
+		repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, resv,
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100, nil),
+		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
+		GameContainerPortMapper{},
+	)
+
+	// 调度阶段失败：status=Scheduling + 残留上次绑定 → 不得释放
+	agentID := "node-agent-1"
+	inst := &entity.GameInstance{
+		ID: "inst-sched-fail", Status: entity.StatusScheduling,
+		NodeAgentID:  &agentID,
+		ResourceReq:  &entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30},
+	}
+	rd.FailedInstance(context.Background(), inst)
+	if resv.releaseCount != 0 {
+		t.Fatalf("调度阶段失败不应释放预留, releaseCount=%d", resv.releaseCount)
+	}
+	if inst.NodeAgentID != nil {
+		t.Fatalf("失败后应清空 NodeAgentID")
+	}
+
+	// 阶段失败（PreparingBuild）：已成功绑定并扣减 → 应释放
+	inst2 := &entity.GameInstance{
+		ID: "inst-phase-fail", Status: entity.StatusPreparingBuild,
+		NodeAgentID: &agentID,
+		ResourceReq: &entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30},
+	}
+	rd.FailedInstance(context.Background(), inst2)
+	if resv.releaseCount != 1 {
+		t.Fatalf("阶段失败应释放预留, releaseCount=%d", resv.releaseCount)
+	}
+}
 
 type mockQueueRepo struct{}
 
@@ -261,7 +305,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		sch,
 		&mockReservationRepo{},
 		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
-		NewSchedulerEventBus(100),
+		NewSchedulerEventBus(100, nil),
 		nodeagent.NewClientRegistry(),
 		nil,
 		&mockGameRepo{},

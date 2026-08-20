@@ -468,10 +468,17 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 }
 
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
-	// 释放预留（7.2 挂点：调度/阶段失败回滚）。
-	d.releaseReservation(ctx, instance)
+	// 释放预留（7.2）：仅当实例已绑定节点且失败发生在"调度成功之后"（阶段失败/运行中失败）。
+	// 调度阶段失败（Scheduling→Failed）本次从未成功绑定/扣减——不应释放任何预留，
+	// 否则会误释放实例残留的上次预留（NodeAgentID/ResourceReq 未清时），
+	// 表现为"实例调度失败，但节点预留发生了变化"。
+	if instance.NodeAgentID != nil && instance.ResourceReq != nil &&
+		instance.Status != entity.StatusScheduling {
+		d.releaseReservation(ctx, instance)
+	}
 	instance.Status = entity.Failed
-	// Save 全字段落库（含 fail_reason，供前端展示失败原因）
+	instance.NodeAgentID = nil // 失败后不再绑定节点（预留已释放或从未扣减）
+	// Save 全字段落库（含 fail_reason、NodeAgentID 清理）
 	d.instanceRepo.Save(ctx, instance)
 	if d.eventBus != nil {
 		d.eventBus.Publish(SchedulerEvent{Type: EventInstanceFailed, OccurredAt: time.Now(),
@@ -497,6 +504,11 @@ func (d *ReconcileDispatcher) releaseReservation(ctx context.Context, instance *
 		if err := d.reservationRepo.Release(ctx, agent.NodeId, *instance.ResourceReq); err != nil {
 			slog.Error("[ReconcileDispatcher] 释放预留失败",
 				"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID, "err", err)
+		} else {
+			slog.Info("[ReconcileDispatcher] 释放预留",
+				"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID,
+				"nodeId", agent.NodeId, "cpuMilli", instance.ResourceReq.CPUMilli,
+				"memBytes", instance.ResourceReq.MemoryBytes)
 		}
 	}
 }

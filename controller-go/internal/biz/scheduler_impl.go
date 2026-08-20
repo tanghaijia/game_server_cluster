@@ -102,7 +102,10 @@ func NewResourceAwareScheduler(
 	}
 }
 
-// resolveRequest 解析实例资源需求（3.1）：实例显式 > config 默认 > 系统默认
+// resolveRequest 解析实例资源需求（3.1）：
+// 优先级 = 创建时显式指定（ResourceOverride=true）> game_container_config 当前值 > 系统默认。
+// 调度成功写回的快照（ResourceReq，ResourceOverride=false）仅用于释放预留，不覆盖 config 后续变更
+// （否则修改 config 不会影响已创建实例的调度预留）。
 func (s *ResourceAwareScheduler) resolveRequest(instance *entity.GameInstance, config *entity.GameContainerConfig) entity.ResourceRequest {
 	req := entity.ResourceRequest{
 		CPUMilli:        config.CPURequestMilli,
@@ -111,7 +114,8 @@ func (s *ResourceAwareScheduler) resolveRequest(instance *entity.GameInstance, c
 		BandwidthRxMbps: config.BandwidthRxMbps,
 		BandwidthTxMbps: config.BandwidthTxMbps,
 	}
-	if instance.ResourceReq != nil {
+	// 仅创建时显式指定才覆盖 config（000021）
+	if instance.ResourceReq != nil && instance.ResourceOverride {
 		if instance.ResourceReq.CPUMilli > 0 {
 			req.CPUMilli = instance.ResourceReq.CPUMilli
 		}
@@ -246,6 +250,11 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 		s.record("scheduled")
 		s.publishEvent(EventInstanceScheduled, instance.ID, best.Agent.ID,
 			fmt.Sprintf("score=%.2f", best.Score))
+		slog.Info("[Scheduler] 预留扣减",
+			"instanceId", instance.ID, "nodeAgentId", best.Agent.ID,
+			"nodeId", fmtID(best.Node.Id),
+			"cpuMilli", req.CPUMilli, "memBytes", req.MemoryBytes, "diskBytes", req.DiskBytes,
+			"bwRxMbps", req.BandwidthRxMbps, "bwTxMbps", req.BandwidthTxMbps)
 		res := &ScheduleResult{
 			Outcome:     OutcomeScheduled,
 			NodeAgentID: best.Agent.ID,

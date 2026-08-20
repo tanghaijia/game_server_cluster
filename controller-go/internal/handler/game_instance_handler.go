@@ -37,8 +37,11 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 }
 
 type createGameInstanceRequest struct {
-	GameID      string `json:"game_id"`
-	GameBuildID string `json:"game_build_id"`
+	GameID      string                `json:"game_id"`
+	GameBuildID string                `json:"game_build_id"`
+	Region      string                `json:"region,omitempty"`               // R3 区域偏好
+	Priority    int                   `json:"priority,omitempty"`             // D7 优先级（默认 100）
+	Resources   *entity.ResourceRequest `json:"resources,omitempty"`          // 显式资源覆盖（创建时指定生效）
 }
 
 // CreateGameInstance 新建 game_instance，初始状态为 StatusStopped。
@@ -54,7 +57,12 @@ func (h *GameInstanceHandler) CreateGameInstance(c *gin.Context) {
 		return
 	}
 
-	instance, err := h.gameInstanceUseCase.CreateGameInstance(c.Request.Context(), req.GameID, req.GameBuildID)
+	instance, err := h.gameInstanceUseCase.CreateGameInstance(c.Request.Context(), req.GameID, biz.CreateInstanceOptions{
+		GameBuildID: req.GameBuildID,
+		Region:      req.Region,
+		Priority:    req.Priority,
+		Resources:   req.Resources,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
