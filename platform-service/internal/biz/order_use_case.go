@@ -158,6 +158,7 @@ type UserInstance struct {
 	Status         string `json:"status"`
 	NodeAgent      string `json:"node_agent,omitempty"`
 	ConnectAddress string `json:"connect_address,omitempty"` // node_ip:game_host_port（running 实例）
+	FailReason     string `json:"fail_reason,omitempty"`     // 失败原因（failed 实例展示）
 }
 
 // ListInstances 返回订单关联的实例列表。userID 为空表示全部（管理员）；gameID 非空按游戏过滤。
@@ -186,6 +187,7 @@ func (uc *OrderUseCase) ListInstances(ctx context.Context, userID, gameID string
 		ui := UserInstance{OrderID: o.ID, InstanceID: o.InstanceID, GameID: o.GameID}
 		if inst, err := uc.controller.GetGameInstance(ctx, o.InstanceID); err == nil && inst != nil {
 			ui.Status = inst.Status
+			ui.FailReason = inst.FailReason
 			if inst.NodeAgentID != nil {
 				ui.NodeAgent = *inst.NodeAgentID
 			}

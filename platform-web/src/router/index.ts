@@ -74,6 +74,12 @@ const router = createRouter({
           component: () => import('@/views/AdminBranchesView.vue'),
           meta: { requiresAuth: true, roles: ['admin'] },
         },
+        {
+          path: 'admin/observe',
+          name: 'admin-observe',
+          component: () => import('@/views/AdminSchedulerObserveView.vue'),
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
       ],
     },
   ],

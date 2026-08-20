@@ -19,6 +19,7 @@ type GameInstance struct {
 	NodeAgentID *string `json:"NodeAgentID"`
 	Status      string  `json:"Status"`
 	GameBuildId string  `json:"GameBuildId"`
+	FailReason  string  `json:"FailReason"` // 失败原因（调度/阶段失败等，前端展示）
 }
 
 // Client controller-go HTTP 客户端（ADR-0001：platform-service 编排 controller）
@@ -39,6 +40,63 @@ func NewClient(baseURL string) *Client {
 
 // ErrNotFound controller 返回 404（资源不存在）
 var ErrNotFound = errors.New("controller: not found")
+
+// ContainerConfig 游戏容器配置（controller 返回，PascalCase JSON）
+type ContainerConfig struct {
+	ID                  string `json:"ID"`
+	ContainerServerPath string `json:"ContainerServerPath"`
+	PortMode            int    `json:"PortMode"` // 0=NAT 1=HOST
+	InjectGamePort      bool   `json:"InjectGamePort"`
+	CPURequestMilli     int64  `json:"CPURequestMilli"`
+	MemoryRequestBytes  int64  `json:"MemoryRequestBytes"`
+	DiskRequestBytes    int64  `json:"DiskRequestBytes"`
+	BandwidthRxMbps     int64  `json:"BandwidthRxMbps"`
+	BandwidthTxMbps     int64  `json:"BandwidthTxMbps"`
+	SingleThreaded      bool   `json:"SingleThreaded"`
+	PortExcerpt         []struct {
+		Protocol      int  `json:"Protocol"` // 0=tcp 1=udp
+		BeginPort     uint `json:"BeginPort"`
+		ExcerptLength uint `json:"ExcerptLength"`
+		IsGamePort    bool `json:"IsGamePort"`
+	} `json:"PortExcerpt"`
+}
+
+// ContainerConfigUpdate 容器配置更新（snake_case 输入，与 controller 对齐）
+type ContainerConfigUpdate struct {
+	ContainerServerPath *string `json:"container_server_path"`
+	PortMode            *int    `json:"port_mode"`
+	InjectGamePort      *bool   `json:"inject_game_port"`
+	CPURequestMilli     *int64  `json:"cpu_request_milli"`
+	MemoryRequestBytes  *int64  `json:"memory_request_bytes"`
+	DiskRequestBytes    *int64  `json:"disk_request_bytes"`
+	BandwidthRxMbps     *int64  `json:"bandwidth_rx_mbps"`
+	BandwidthTxMbps     *int64  `json:"bandwidth_tx_mbps"`
+	SingleThreaded      *bool   `json:"single_threaded"`
+	PortExcerpts        []struct {
+		Protocol      int  `json:"protocol"`
+		BeginPort     uint `json:"begin_port"`
+		ExcerptLength uint `json:"excerpt_length"`
+		IsGamePort    bool `json:"is_game_port"`
+	} `json:"port_excerpts"`
+}
+
+// GetContainerConfig 获取游戏容器配置
+func (c *Client) GetContainerConfig(ctx context.Context, gameID string) (*ContainerConfig, error) {
+	var cfg ContainerConfig
+	if err := c.do(ctx, http.MethodGet, "/api/games/"+gameID+"/container-config", nil, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// UpdateContainerConfig 更新游戏容器配置（端口片段整体替换）
+func (c *Client) UpdateContainerConfig(ctx context.Context, gameID string, u ContainerConfigUpdate) (*ContainerConfig, error) {
+	var cfg ContainerConfig
+	if err := c.do(ctx, http.MethodPut, "/api/games/"+gameID+"/container-config", u, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
 
 // CreateGameInstance 在 controller 上创建实例（初始 stopped）
 func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID string) (*GameInstance, error) {
@@ -124,6 +182,8 @@ type Node struct {
 	StorageSize     int64   `json:"StorageSize"`
 	Location        string  `json:"Location"`
 	ServiceProvider string  `json:"ServiceProvider"`
+	NetRxLimitMbps  int     `json:"NetRxLimitMbps"` // 带宽上限（调度评分）
+	NetTxLimitMbps  int     `json:"NetTxLimitMbps"`
 }
 
 func (c *Client) CreateNode(ctx context.Context, ip string) (*Node, error) {
@@ -150,6 +210,38 @@ func (c *Client) GetNode(ctx context.Context, id string) (*Node, error) {
 		return nil, err
 	}
 	return &n, nil
+}
+
+// NodeUpdate 节点可编辑字段（指针字段 = 仅更新非 nil 项，与 controller 对齐）
+type NodeUpdate struct {
+	IP              *string  `json:"ip"`
+	CoreNum         *int     `json:"core_num"`
+	CoreFrequency   *float64 `json:"core_frequency"`
+	MemorySize      *int64   `json:"memory_size"`
+	StorageSize     *int64   `json:"storage_size"`
+	Location        *string  `json:"location"`
+	ServiceProvider *string  `json:"service_provider"`
+	NetRxLimitMbps  *int     `json:"net_rx_limit_mbps"`
+	NetTxLimitMbps  *int     `json:"net_tx_limit_mbps"`
+}
+
+// UpdateNode 更新节点配置（非 nil 字段生效）
+func (c *Client) UpdateNode(ctx context.Context, id string, u NodeUpdate) (*Node, error) {
+	var n Node
+	if err := c.do(ctx, http.MethodPut, "/api/nodes/"+id, u, &n); err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// DeleteNode 删除节点（controller 对被 node_agent 引用的节点返回 409）
+func (c *Client) DeleteNode(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodDelete, "/api/nodes/"+id, nil, nil)
+}
+
+// ObserveForward 转发调度观测请求到 controller /api/observe/*（管理员观测，走 admin 鉴权）
+func (c *Client) ObserveForward(ctx context.Context, method, subpath string, body, out any) error {
+	return c.do(ctx, method, "/api/observe"+subpath, body, out)
 }
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ type StaleReservationReaper struct {
 	instanceRepo    repository.GameInstanceRepository
 	nodeAgentRepo   repository.NodeAgentRepository
 	reservationRepo repository.ReservationRepository
+	eventBus        *SchedulerEventBus
 	timeout         time.Duration
 }
 
@@ -24,6 +25,7 @@ func NewStaleReservationReaper(
 	instanceRepo repository.GameInstanceRepository,
 	nodeAgentRepo repository.NodeAgentRepository,
 	reservationRepo repository.ReservationRepository,
+	eventBus *SchedulerEventBus,
 	timeout time.Duration,
 ) *StaleReservationReaper {
 	if timeout <= 0 {
@@ -33,6 +35,7 @@ func NewStaleReservationReaper(
 		instanceRepo:    instanceRepo,
 		nodeAgentRepo:   nodeAgentRepo,
 		reservationRepo: reservationRepo,
+		eventBus:        eventBus,
 		timeout:         timeout,
 	}
 }
@@ -73,11 +76,15 @@ func (r *StaleReservationReaper) reconcileOnce(ctx context.Context) {
 				if err := r.reservationRepo.Release(ctx, agent.NodeId, *inst.ResourceReq); err != nil {
 					slog.Error("StaleReservationReaper 释放预留失败",
 						"instanceId", inst.ID, "nodeAgentId", *inst.NodeAgentID, "err", err)
+				} else if r.eventBus != nil {
+					r.eventBus.Publish(SchedulerEvent{Type: EventReservationReleased, OccurredAt: time.Now(),
+						InstanceID: inst.ID, NodeAgentID: *inst.NodeAgentID, Detail: "中间态卡死，释放预留"})
 				}
 			}
 		}
 		inst.Status = entity.Failed
-		if err := r.instanceRepo.UpdateStatus(ctx, inst); err != nil {
+		inst.FailReason = "中间态卡死，预留超时释放（stale_reservation）"
+		if err := r.instanceRepo.Save(ctx, inst); err != nil {
 			slog.Error("StaleReservationReaper 置失败状态失败", "instanceId", inst.ID, "err", err)
 			continue
 		}

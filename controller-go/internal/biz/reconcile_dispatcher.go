@@ -26,6 +26,7 @@ type ReconcileDispatcher struct {
 	scheduler               Scheduler
 	reservationRepo         repository.ReservationRepository
 	queueManager            *QueueManager
+	eventBus                *SchedulerEventBus
 	nodeAgentClients        *nodeagent.ClientRegistry
 	assetClient             *assetservice.AssetServiceFaceClient
 	gameRepo                repository.GameRepository
@@ -47,6 +48,7 @@ func NewReconcileDispatcher(
 	scheduler Scheduler,
 	reservationRepo repository.ReservationRepository,
 	queueManager *QueueManager,
+	eventBus *SchedulerEventBus,
 	nodeAgentClients *nodeagent.ClientRegistry,
 	assetClient *assetservice.AssetServiceFaceClient,
 	gameRepo repository.GameRepository,
@@ -61,6 +63,7 @@ func NewReconcileDispatcher(
 		scheduler:               scheduler,
 		reservationRepo:         reservationRepo,
 		queueManager:            queueManager,
+		eventBus:                eventBus,
 		nodeAgentClients:        nodeAgentClients,
 		assetClient:             assetClient,
 		gameRepo:                gameRepo,
@@ -210,7 +213,12 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 					_ = d.queueManager.Cancel(ctx, instance.ID)
 					instance.Status = entity.Failed
 					instance.QueuedReason = "queue_timeout"
+					instance.FailReason = "排队超时（30 分钟），未获调度"
 					d.instanceRepo.Save(ctx, instance)
+					if d.eventBus != nil {
+						d.eventBus.Publish(SchedulerEvent{Type: EventInstanceQueueTimeout, OccurredAt: time.Now(),
+							InstanceID: instance.ID, Detail: "排队超时（30 分钟）"})
+					}
 					slog.Warn("[Scheduler] 排队超时，实例调度失败",
 						"instanceId", instance.ID, "reason", result.Reason)
 					return nil
@@ -224,6 +232,7 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		default: // OutcomeFailed
 			slog.Warn("[Scheduler] 调度失败",
 				"instanceId", instance.ID, "code", result.ReasonCode, "reason", result.Reason)
+			instance.FailReason = result.Reason
 			d.FailedInstance(ctx, instance)
 		}
 	case entity.StatusPreparingBuild:
@@ -462,7 +471,21 @@ func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *enti
 	// 释放预留（7.2 挂点：调度/阶段失败回滚）。
 	d.releaseReservation(ctx, instance)
 	instance.Status = entity.Failed
-	d.instanceRepo.UpdateStatus(ctx, instance)
+	// Save 全字段落库（含 fail_reason，供前端展示失败原因）
+	d.instanceRepo.Save(ctx, instance)
+	if d.eventBus != nil {
+		d.eventBus.Publish(SchedulerEvent{Type: EventInstanceFailed, OccurredAt: time.Now(),
+			InstanceID: instance.ID,
+			NodeAgentID: derefStr(instance.NodeAgentID),
+			Detail:     instance.FailReason})
+	}
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // releaseReservation 扣回预留（幂等：仅当已绑定节点且记录了资源需求时执行）
@@ -551,6 +574,7 @@ func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance 
 		slog.Error("[NodeAgentClients] "+opName+" fail",
 			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err)
 	}
+	instance.FailReason = opName + " 失败: " + err.Error()
 	d.FailedInstance(ctx, instance)
 }
 
@@ -677,6 +701,10 @@ func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, inst
 	// 资源释放 → 唤醒排队（S14）
 	if d.resourceReleasedHook != nil {
 		d.resourceReleasedHook()
+	}
+	if d.eventBus != nil {
+		d.eventBus.Publish(SchedulerEvent{Type: EventInstanceStopped, OccurredAt: time.Now(),
+			InstanceID: instance.ID, Detail: "实例停止（释放预留与端口）"})
 	}
 }
 

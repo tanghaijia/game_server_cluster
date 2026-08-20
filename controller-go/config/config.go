@@ -64,6 +64,9 @@ type Config struct {
 
 	// game-cache 快照刷新周期（§10，P3）
 	CacheViewRefreshSec int
+
+	// 调度事件缓冲容量（S30 观测）
+	EventBufferSize int
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -121,6 +124,9 @@ func Load() *Config {
 
 		// game-cache 快照刷新周期（§10）
 		CacheViewRefreshSec: getEnvInt("CACHE_VIEW_REFRESH_SEC", 30),
+
+		// 调度事件缓冲容量（S30）
+		EventBufferSize: getEnvInt("EVENT_BUFFER_SIZE", 1000),
 	}
 }
 

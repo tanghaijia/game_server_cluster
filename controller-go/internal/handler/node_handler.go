@@ -25,6 +25,8 @@ func (h *NodeHandler) RegisterRoutes(router *gin.Engine) {
 	group.POST("", h.CreateNode)
 	group.GET("", h.ListNodes)
 	group.GET("/:id", h.GetNode)
+	group.PUT("/:id", h.UpdateNode)
+	group.DELETE("/:id", h.DeleteNode)
 }
 
 type createNodeRequest struct {
@@ -73,6 +75,38 @@ func (h *NodeHandler) GetNode(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, node)
+}
+
+// UpdateNode 更新节点配置（非 nil 字段生效）
+func (h *NodeHandler) UpdateNode(c *gin.Context) {
+	var req biz.NodeUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	node, err := h.nodeUseCase.UpdateNode(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, node)
+}
+
+// DeleteNode 删除节点（被 node_agent 引用时拒绝）
+func (h *NodeHandler) DeleteNode(c *gin.Context) {
+	if err := h.nodeUseCase.DeleteNode(c.Request.Context(), c.Param("id")); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // NodeAgentHandler 提供 NodeAgent 相关的 HTTP 接口

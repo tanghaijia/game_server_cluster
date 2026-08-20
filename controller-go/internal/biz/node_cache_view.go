@@ -17,17 +17,28 @@ type CacheSnapshotFetcher interface {
 	GetNodeCache(ctx context.Context, nodeAgentID, gameID, branchName string) (*nodeagentv1.GameCache, error)
 }
 
+// CacheEntry 单个 (game, branch) 在节点上的缓存状态（快照条目）
+type CacheEntry struct {
+	GameID           string  `json:"game_id"`
+	Branch           string  `json:"branch"`
+	Available        bool    `json:"available"` // status == AVAILABLE（H5 判定）
+	Status           string  `json:"status"`    // available/downloading/removed/unavailable/missing
+	BuildID          string  `json:"build_id"`
+	DownloadProgress float32 `json:"download_progress"`
+}
+
 // NodeCacheView game-cache 视图（§10）：进程内快照，周期刷新；
-// 调度 H5 判定从快照读取（避免每次调度实时 gRPC 查询 node_agent）。
-// 与 GameCacheManager 职责分离：它负责"把缓存推送到节点"，本视图只负责"知道谁有缓存"。
+// 调度 H5 判定与管理员观测（节点缓存状态）共用。
+// 与 GameCacheManager 职责分离：它负责"把缓存推送到节点"，本视图只负责"知道谁有缓存、什么状态"。
 type NodeCacheView struct {
-	mu        sync.RWMutex
-	available map[string]map[string]bool // agentID -> "gameID:branchName" -> AVAILABLE
+	mu       sync.RWMutex
+	snapshot map[string]map[string]*CacheEntry // agentID -> "gameID:branchName" -> entry
 
 	fetcher    CacheSnapshotFetcher
 	agentRepo  repository.NodeAgentRepository
 	branchRepo repository.SteamBranchRepository
 	gameRepo   repository.GameRepository
+	eventBus   *SchedulerEventBus
 
 	// 缓存状态变化（转 AVAILABLE）回调：唤醒排队（S14）
 	onCacheReady func()
@@ -38,13 +49,15 @@ func NewNodeCacheView(
 	agentRepo repository.NodeAgentRepository,
 	branchRepo repository.SteamBranchRepository,
 	gameRepo repository.GameRepository,
+	eventBus *SchedulerEventBus,
 ) *NodeCacheView {
 	return &NodeCacheView{
-		available:  make(map[string]map[string]bool),
+		snapshot:   make(map[string]map[string]*CacheEntry),
 		fetcher:    fetcher,
 		agentRepo:  agentRepo,
 		branchRepo: branchRepo,
 		gameRepo:   gameRepo,
+		eventBus:   eventBus,
 	}
 }
 
@@ -101,12 +114,12 @@ func (v *NodeCacheView) refreshOnce(ctx context.Context) {
 		}
 	}
 
-	snapshot := make(map[string]map[string]bool, len(agentIDs))
+	snapshot := make(map[string]map[string]*CacheEntry, len(agentIDs))
 	for _, agentID := range agentIDs {
-		m := make(map[string]bool)
+		m := make(map[string]*CacheEntry)
 		for gameID, branches := range enabledBranches {
 			for _, branch := range branches {
-				m[gameID+":"+branch] = v.fetchAvailable(ctx, agentID, gameID, branch)
+				m[gameID+":"+branch] = v.fetchEntry(ctx, agentID, gameID, branch)
 			}
 		}
 		snapshot[agentID] = m
@@ -114,37 +127,59 @@ func (v *NodeCacheView) refreshOnce(ctx context.Context) {
 
 	v.mu.Lock()
 	changed := v.diff(snapshot)
-	v.available = snapshot
+	v.snapshot = snapshot
 	v.mu.Unlock()
 
 	if changed && v.onCacheReady != nil {
 		slog.Info("NodeCacheView 检测到缓存状态变化，唤醒排队")
 		v.onCacheReady()
 	}
+	if changed && v.eventBus != nil {
+		v.eventBus.Publish(SchedulerEvent{Type: EventCacheReady, OccurredAt: time.Now(),
+			Detail: "game-cache 状态变化（部分转 AVAILABLE）"})
+	}
 }
 
-func (v *NodeCacheView) fetchAvailable(ctx context.Context, agentID, gameID, branch string) bool {
+func (v *NodeCacheView) fetchEntry(ctx context.Context, agentID, gameID, branch string) *CacheEntry {
+	entry := &CacheEntry{GameID: gameID, Branch: branch, Status: "missing"}
 	gc, err := v.fetcher.GetNodeCache(ctx, agentID, gameID, branch)
 	if err != nil {
-		return false // 查询失败视为无缓存（保守）
+		// 查询失败视为无缓存（保守），状态标记 missing
+		return entry
 	}
-	return gc != nil && gc.GetStatus() == nodeagentv1.GameCacheStatus_AVAILABLE
+	if gc == nil {
+		return entry
+	}
+	entry.BuildID = gc.GetBuildId()
+	entry.DownloadProgress = gc.GetDownloadProgress()
+	switch gc.GetStatus() {
+	case nodeagentv1.GameCacheStatus_AVAILABLE:
+		entry.Available = true
+		entry.Status = "available"
+	case nodeagentv1.GameCacheStatus_DOWNLOADING:
+		entry.Status = "downloading"
+	case nodeagentv1.GameCacheStatus_REMOVED:
+		entry.Status = "removed"
+	default:
+		entry.Status = "unavailable"
+	}
+	return entry
 }
 
 // diff 比较新旧快照，返回是否有任何节点缓存转为可用
-func (v *NodeCacheView) diff(next map[string]map[string]bool) bool {
+func (v *NodeCacheView) diff(next map[string]map[string]*CacheEntry) bool {
 	for agentID, m := range next {
-		old, ok := v.available[agentID]
+		old, ok := v.snapshot[agentID]
 		if !ok {
-			for _, avail := range m {
-				if avail {
+			for _, e := range m {
+				if e.Available {
 					return true
 				}
 			}
 			continue
 		}
-		for key, avail := range m {
-			if avail && !old[key] {
+		for key, e := range m {
+			if e.Available && (old[key] == nil || !old[key].Available) {
 				return true
 			}
 		}
@@ -157,11 +192,27 @@ func (v *NodeCacheView) diff(next map[string]map[string]bool) bool {
 func (v *NodeCacheView) CacheAvailable(ctx context.Context, agentID, gameID, branchName string) (bool, error) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	m, ok := v.available[agentID]
+	m, ok := v.snapshot[agentID]
 	if !ok {
 		return false, nil
 	}
-	return m[gameID+":"+branchName], nil
+	e := m[gameID+":"+branchName]
+	return e != nil && e.Available, nil
+}
+
+// ListSnapshot 返回全量快照（管理员观测：某节点上所有 game/branch 的缓存状态）
+func (v *NodeCacheView) ListSnapshot() map[string][]*CacheEntry {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	out := make(map[string][]*CacheEntry, len(v.snapshot))
+	for agentID, m := range v.snapshot {
+		entries := make([]*CacheEntry, 0, len(m))
+		for _, e := range m {
+			entries = append(entries, e)
+		}
+		out[agentID] = entries
+	}
+	return out
 }
 
 var _ CacheStatusProvider = (*NodeCacheView)(nil)

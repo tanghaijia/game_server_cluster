@@ -30,6 +30,7 @@ type ResourceAwareScheduler struct {
 	portMapper          *GameContainerPortMapper
 	cacheProvider       CacheStatusProvider
 	queueManager        *QueueManager
+	eventBus            *SchedulerEventBus
 
 	weights           ScoreWeights
 	utilizationTarget float64
@@ -55,6 +56,7 @@ func NewResourceAwareScheduler(
 	portMapper *GameContainerPortMapper,
 	cacheProvider CacheStatusProvider,
 	queueManager *QueueManager,
+	eventBus *SchedulerEventBus,
 	weights ScoreWeights,
 	utilizationTarget float64,
 	regionForce bool,
@@ -89,6 +91,7 @@ func NewResourceAwareScheduler(
 		portMapper:          portMapper,
 		cacheProvider:       cacheProvider,
 		queueManager:        queueManager,
+		eventBus:            eventBus,
 		weights:             weights,
 		utilizationTarget:   utilizationTarget,
 		regionForce:         regionForce,
@@ -139,7 +142,10 @@ func (s *ResourceAwareScheduler) resolveRequest(instance *entity.GameInstance, c
 }
 
 // resolveBranch 解析实例 game_build 对应的 steam 分支名（H5 判定用）。
-// 找不到返回空串（视为无缓存，节点全部被 H5 排除）。
+// 1) 优先：分支 last_build_id 精确匹配实例 build；
+// 2) 回退：该 game 任一 Enable 分支（缓存按 (game, branch) 组织，build 版本差异由启动流程处理；
+//    避免"分支表有记录但 build 非最新"时误判无缓存导致调度失败）。
+// 分支表完全没有该 game 的 Enable 记录时返回空串（视为无缓存，需先同步分支）。
 func (s *ResourceAwareScheduler) resolveBranch(ctx context.Context, instance *entity.GameInstance) string {
 	branches, err := s.steamBranchRepo.ListByGame(ctx, instance.GameID)
 	if err != nil {
@@ -147,6 +153,11 @@ func (s *ResourceAwareScheduler) resolveBranch(ctx context.Context, instance *en
 	}
 	for _, b := range branches {
 		if fmt.Sprintf("%d", b.LastBuildId) == instance.GameBuildId {
+			return b.BranchName
+		}
+	}
+	for _, b := range branches {
+		if b.Status == entity.Enable {
 			return b.BranchName
 		}
 	}
@@ -168,6 +179,7 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 	// 单核应用 request 声明校验（3.1 声明规范）：整核且 ≥ 1000m
 	if config.SingleThreaded && (req.CPUMilli < 1000 || req.CPUMilli%1000 != 0) {
 		s.record("failed")
+		s.publishEvent(EventInstanceScheduleFailed, instance.ID, "", "单核应用 cpu_milli 必须为整核（≥1000 且 %1000==0）")
 		return failed(FailCodeConfigError, "单核应用 cpu_milli 必须为整核（≥1000 且 %1000==0）"), nil
 	}
 
@@ -193,6 +205,11 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 
 		if len(eligible) == 0 {
 			res := s.classifyNoCandidate(instance, candidates, allResourceOnly, branch)
+			if res.Outcome == OutcomeQueued {
+				s.publishEvent(EventInstanceQueued, instance.ID, "", res.Reason)
+			} else {
+				s.publishEvent(EventInstanceScheduleFailed, instance.ID, "", res.Reason)
+			}
 			s.audit(instance, res, time.Since(start))
 			return res, nil
 		}
@@ -227,6 +244,8 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 		}
 
 		s.record("scheduled")
+		s.publishEvent(EventInstanceScheduled, instance.ID, best.Agent.ID,
+			fmt.Sprintf("score=%.2f", best.Score))
 		res := &ScheduleResult{
 			Outcome:     OutcomeScheduled,
 			NodeAgentID: best.Agent.ID,
@@ -241,6 +260,20 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 
 	s.record("failed")
 	return failed(FailCodeResourceShortage, "预留冲突重试达上限"), nil
+}
+
+// publishEvent 发布调度事件（观测 S30；eventBus 为空时忽略）
+func (s *ResourceAwareScheduler) publishEvent(typ SchedulerEventType, instanceID, nodeAgentID, detail string) {
+	if s.eventBus == nil {
+		return
+	}
+	s.eventBus.Publish(SchedulerEvent{
+		Type:        typ,
+		OccurredAt:  time.Now(),
+		InstanceID:  instanceID,
+		NodeAgentID: nodeAgentID,
+		Detail:      detail,
+	})
 }
 
 // audit 调度审计日志（F2/S28）：输入需求、出口、得分、排除明细、耗时
@@ -406,6 +439,91 @@ func (s *ResourceAwareScheduler) Stats() map[string]int64 {
 	return out
 }
 
+// PreviewNode 试调度单个节点的判定结果（观测用，F2 可解释性）
+type PreviewNode struct {
+	NodeAgentID string   `json:"node_agent_id"`
+	NodeID      string   `json:"node_id"`
+	IP          string   `json:"ip"`
+	Location    string   `json:"location"`
+	Eligible    bool     `json:"eligible"`          // 通过全部硬约束 H1-H6
+	Reasons     []string `json:"reasons,omitempty"` // 排除原因明细
+	Score       float64  `json:"score"`             // 软偏好得分（eligible 时有效）
+}
+
+// PreviewResult 试调度结果（观测/调试）
+type PreviewResult struct {
+	Outcome  ScheduleOutcome `json:"outcome"` // scheduled / queued / failed
+	Reason   string          `json:"reason"`
+	Selected string          `json:"selected,omitempty"` // 最优节点（scheduled 时）
+	Nodes    []PreviewNode   `json:"nodes"`              // 全部候选判定明细
+}
+
+// Preview 试调度干跑（观测/调试）：执行 filter(H1-H6) + score 但不预留、不落库、不污染统计。
+// 管理员可借此理解"为什么选/不选某节点"（F2）。
+func (s *ResourceAwareScheduler) Preview(ctx context.Context, instance *entity.GameInstance) (*PreviewResult, error) {
+	game, err := s.gameRepo.GetByID(ctx, instance.GameID)
+	if err != nil {
+		return nil, fmt.Errorf("load game: %w", err)
+	}
+	config, err := s.containerConfigRepo.GetByID(ctx, game.ContainerConfigID)
+	if err != nil {
+		return nil, fmt.Errorf("load container config: %w", err)
+	}
+	req := s.resolveRequest(instance, config)
+	branch := s.resolveBranch(ctx, instance)
+
+	candidates, err := s.loadCandidates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &PreviewResult{Nodes: make([]PreviewNode, 0, len(candidates))}
+	var eligible []*NodeCandidate
+	for _, c := range candidates {
+		pn := PreviewNode{
+			NodeAgentID: c.Agent.ID,
+			NodeID:      fmtID(c.Node.Id),
+			IP:          c.Node.Ip,
+			Location:    c.Node.Location,
+		}
+		if s.applyConstraints(ctx, c, instance, game, branch, req) {
+			pn.Eligible = true
+			eligible = append(eligible, c)
+		} else {
+			pn.Reasons = c.Reasons
+		}
+		res.Nodes = append(res.Nodes, pn)
+	}
+
+	if len(eligible) == 0 {
+		allResourceOnly := true
+		for _, c := range candidates {
+			if c.Excluded && !isResourceOnlyReasons(c.Reasons) {
+				allResourceOnly = false
+				break
+			}
+		}
+		if allResourceOnly {
+			res.Outcome = OutcomeQueued
+			res.Reason = "资源/端口不足（可排队，P2 等待唤醒）"
+		} else {
+			res.Outcome = OutcomeFailed
+			res.Reason = "存在结构性排除原因（无缓存/未启用/不健康/区域强制等）"
+		}
+		return res, nil
+	}
+
+	best := s.pickBest(ctx, eligible, instance, config)
+	for i := range res.Nodes {
+		if res.Nodes[i].NodeAgentID == best.Agent.ID {
+			res.Nodes[i].Score = best.Score
+		}
+	}
+	res.Outcome = OutcomeScheduled
+	res.Selected = best.Agent.ID
+	return res, nil
+}
+
 // CancelQueued 取消排队（D5 + D10）：仅 queued 状态允许；
 // 移除队列行 + 实例置 stopped + cancelled 标记（幂等：非排队状态返回 ErrNotQueued）。
 func (s *ResourceAwareScheduler) CancelQueued(ctx context.Context, instanceID string) error {
@@ -423,6 +541,7 @@ func (s *ResourceAwareScheduler) CancelQueued(ctx context.Context, instanceID st
 	inst.Cancelled = true
 	inst.QueuedReason = ""
 	inst.QueuedAt = nil
+	s.publishEvent(EventInstanceQueuedCancelled, instanceID, "", "用户取消排队")
 	return s.instanceRepo.Save(ctx, inst)
 }
 

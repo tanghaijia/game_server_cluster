@@ -11,4 +11,6 @@ type GameContainerConfigRepository interface {
 	GetByID(ctx context.Context, id string) (*entity.GameContainerConfig, error)
 	// Delete 删除容器配置及其端口片段
 	Delete(ctx context.Context, id string) error
+	// ReplacePortExcerpts 整体替换配置的端口片段（删旧插新，事务内）
+	ReplacePortExcerpts(ctx context.Context, configID string, excerpts []entity.GameContainerPortExcerpt) error
 }

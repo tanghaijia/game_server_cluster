@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -32,6 +34,8 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.GET("/nodes", h.ListNodes)
 	group.POST("/nodes", h.CreateNode)
 	group.GET("/nodes/:id", h.GetNode)
+	group.PUT("/nodes/:id", h.UpdateNode)
+	group.DELETE("/nodes/:id", h.DeleteNode)
 
 	// node_agent
 	group.GET("/node-agents", h.ListNodeAgents)
@@ -45,6 +49,13 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.GET("/games/:id", h.GetGame)
 	group.PUT("/games/:id", h.UpdateGame)
 	group.DELETE("/games/:id", h.DeleteGame)
+
+	// 游戏容器配置（端口/资源默认值，图形化配置）
+	group.GET("/games/:id/container-config", h.GetContainerConfig)
+	group.PUT("/games/:id/container-config", h.UpdateContainerConfig)
+
+	// 调度观测（转发 controller /api/observe/*，管理员鉴权）
+	group.Any("/observe/*path", h.ObserveForward)
 
 	// 游戏资料（多游戏平台）
 	group.PUT("/games/:id/profile", h.UpdateGameProfile)
@@ -108,6 +119,32 @@ func (h *AdminHandler) GetNode(c *gin.Context) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, node)
+}
+
+// UpdateNode 更新节点配置（非 nil 字段生效）
+func (h *AdminHandler) UpdateNode(c *gin.Context) {
+	var req controller.NodeUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	node, err := h.controller.UpdateNode(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, node)
+}
+
+// DeleteNode 删除节点（controller 对仍被 node_agent 引用的节点返回 409）
+func (h *AdminHandler) DeleteNode(c *gin.Context) {
+	if err := h.controller.DeleteNode(c.Request.Context(), c.Param("id")); err != nil {
+		if errors.Is(err, controller.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
 // ------------------------- NodeAgent -------------------------
@@ -213,10 +250,58 @@ func (h *AdminHandler) DeleteGame(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
+// ------------------------- Game ContainerConfig -------------------------
+
+// GetContainerConfig 获取游戏容器配置（端口/资源默认值）
+func (h *AdminHandler) GetContainerConfig(c *gin.Context) {
+	cfg, err := h.controller.GetContainerConfig(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, cfg)
+}
+
+// UpdateContainerConfig 更新游戏容器配置（端口片段整体替换）
+func (h *AdminHandler) UpdateContainerConfig(c *gin.Context) {
+	var req controller.ContainerConfigUpdate
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	cfg, err := h.controller.UpdateContainerConfig(c.Request.Context(), c.Param("id"), req)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, cfg)
+}
+
+// ------------------------- 调度观测转发 -------------------------
+
+// ObserveForward 透传 /api/admin/observe/* 到 controller /api/observe/*（管理员鉴权已由路由组中间件完成）。
+// 响应体原样透传；非 2xx 统一映射为 500（404 单独映射）。
+func (h *AdminHandler) ObserveForward(c *gin.Context) {
+	sub := c.Param("path") // 如 /nodes、/nodes/1/history、/scheduler/preview
+	var body any
+	if c.Request.Body != nil && c.Request.ContentLength > 0 {
+		b, err := io.ReadAll(c.Request.Body)
+		if err == nil && len(b) > 0 {
+			body = json.RawMessage(b)
+		}
+	}
+	var out json.RawMessage
+	if err := h.controller.ObserveForward(c.Request.Context(), c.Request.Method, sub, body, &out); err != nil {
+		if errors.Is(err, controller.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(http.StatusOK, "application/json", out)
+}
+
 // ------------------------- SteamBranch -------------------------
 
-func (h *AdminHandler) ListBranches(c *gin.Context) {
-	branches, err := h.controller.ListBranches(c.Request.Context(), c.Param("id"))
+func (h *AdminHandler) ListBranches(c *gin.Context) {	branches, err := h.controller.ListBranches(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		fail(c, err); return
 	}

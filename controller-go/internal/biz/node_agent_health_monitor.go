@@ -26,6 +26,7 @@ type NodeAgentHealthMonitor struct {
 	sampleRepo       repository.NodeResourceSampleRepository
 	nodeAgentClients *nodeagent.ClientRegistry
 	scheduler        *ResourceAwareScheduler
+	eventBus         *SchedulerEventBus
 	probeTimeout     time.Duration
 	failThreshold    int
 	degradedPct      float64 // 自检指标达此值 → degraded（9.2）
@@ -38,6 +39,7 @@ func NewNodeAgentHealthMonitor(
 	sampleRepo repository.NodeResourceSampleRepository,
 	nodeAgentClients *nodeagent.ClientRegistry,
 	scheduler *ResourceAwareScheduler,
+	eventBus *SchedulerEventBus,
 	probeTimeout time.Duration,
 	failThreshold int,
 	degradedPct float64,
@@ -54,6 +56,7 @@ func NewNodeAgentHealthMonitor(
 		sampleRepo:       sampleRepo,
 		nodeAgentClients: nodeAgentClients,
 		scheduler:        scheduler,
+		eventBus:         eventBus,
 		probeTimeout:     probeTimeout,
 		failThreshold:    failThreshold,
 		degradedPct:      degradedPct,
@@ -132,6 +135,29 @@ func (m *NodeAgentHealthMonitor) markUnhealthy(ctx context.Context, agentID stri
 	if err := m.nodeAgentRepo.UpdateHealthStatus(ctx, agentID, entity.HealthUnhealthy); err != nil {
 		slog.Error("NodeAgentHealthMonitor 更新健康状态失败", "agent", agentID, "err", err)
 	}
+	m.publishHealthChange(agentID, entity.HealthUnhealthy)
+}
+
+// publishHealthChange 健康状态变化事件（S30）
+func (m *NodeAgentHealthMonitor) publishHealthChange(agentID string, status entity.NodeAgentHealthStatus) {
+	if m.eventBus == nil {
+		return
+	}
+	m.eventBus.Publish(SchedulerEvent{Type: EventNodeHealthChanged, OccurredAt: time.Now(),
+		NodeAgentID: agentID, Detail: "健康状态 → " + healthStatusName(status)})
+}
+
+func healthStatusName(s entity.NodeAgentHealthStatus) string {
+	switch s {
+	case entity.HealthHealthy:
+		return "healthy"
+	case entity.HealthDegraded:
+		return "degraded"
+	case entity.HealthUnhealthy:
+		return "unhealthy"
+	default:
+		return "unknown"
+	}
 }
 
 func (m *NodeAgentHealthMonitor) mark(ctx context.Context, agentID string, alive bool) {
@@ -154,6 +180,9 @@ func (m *NodeAgentHealthMonitor) applyHeartbeat(ctx context.Context, agent *enti
 	}
 	if err := m.nodeAgentRepo.UpdateHealthStatus(ctx, agent.ID, status); err != nil {
 		slog.Error("NodeAgentHealthMonitor 更新健康状态失败", "agent", agent.ID, "err", err)
+	} else if status != agent.HealthStatus {
+		// 健康状态变化（healthy ↔ degraded）→ 事件（S30）
+		m.publishHealthChange(agent.ID, status)
 	}
 	if hb == nil {
 		return

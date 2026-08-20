@@ -30,7 +30,16 @@
             <td class="px-4 py-3 font-mono text-xs">{{ inst.order_id }}</td>
             <td class="px-4 py-3 font-mono text-xs">{{ inst.instance_id }}</td>
             <td class="px-4 py-3">
-              <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ statusText(inst.status) }}</span>
+              <span
+                class="rounded px-2 py-0.5 text-xs"
+                :class="inst.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-muted'"
+                :title="inst.fail_reason || undefined"
+              >
+                {{ statusText(inst.status) }}
+              </span>
+              <span v-if="inst.status === 'failed' && inst.fail_reason" class="mt-1 block max-w-[240px] truncate text-[11px] text-red-500" :title="inst.fail_reason">
+                原因：{{ inst.fail_reason }}
+              </span>
             </td>
             <td class="px-4 py-3 text-xs">{{ inst.node_agent ?? '-' }}</td>
             <td class="px-4 py-3 text-xs">

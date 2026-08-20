@@ -117,6 +117,9 @@ type GameInstance struct {
 	QueuedReason string     `gorm:"column:queued_reason"`
 	QueuedAt     *time.Time `gorm:"column:queued_at"`
 	Cancelled    bool       `gorm:"column:cancelled"` // D10：取消标记
+
+	// 失败原因（000020 迁移）：调度/阶段失败、排队超时、卡死哨兵写入，前端展示
+	FailReason string `gorm:"column:fail_reason"`
 }
 
 func (GameInstance) TableName() string {

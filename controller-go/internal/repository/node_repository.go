@@ -17,4 +17,6 @@ type NodeRepository interface {
 	UpdateDynamicUsage(ctx context.Context, nodeID string, u entity.NodeDynamicUsage, reportedAt time.Time) error
 	// UpdatePressureStatus 更新节点压力状态（PressureMonitor，3.3）
 	UpdatePressureStatus(ctx context.Context, nodeID string, status entity.NodePressureStatus) error
+	// Delete 删除节点（调用方负责引用校验）
+	Delete(ctx context.Context, id string) error
 }

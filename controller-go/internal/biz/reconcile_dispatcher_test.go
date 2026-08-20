@@ -91,6 +91,8 @@ func (m *mockNodeRepo) UpdatePressureStatus(ctx context.Context, nodeID string, 
 	return nil
 }
 
+func (m *mockNodeRepo) Delete(ctx context.Context, id string) error { return nil }
+
 var _ repository.NodeRepository = (*mockNodeRepo)(nil)
 
 type mockReservationRepo struct{}
@@ -170,6 +172,10 @@ func (m *mockGameContainerConfigRepo) GetByID(ctx context.Context, id string) (*
 }
 
 func (m *mockGameContainerConfigRepo) Delete(ctx context.Context, id string) error {
+	return nil
+}
+
+func (m *mockGameContainerConfigRepo) ReplacePortExcerpts(ctx context.Context, configID string, excerpts []entity.GameContainerPortExcerpt) error {
 	return nil
 }
 
@@ -255,6 +261,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		sch,
 		&mockReservationRepo{},
 		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100),
 		nodeagent.NewClientRegistry(),
 		nil,
 		&mockGameRepo{},

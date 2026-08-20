@@ -57,3 +57,7 @@ func (r *NodeRepo) UpdatePressureStatus(ctx context.Context, nodeID string, stat
 		Where("id = ?", nodeID).
 		Update("pressure_status", status).Error
 }
+
+func (r *NodeRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&entity.Node{}, "id = ?", id).Error
+}

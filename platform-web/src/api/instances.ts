@@ -7,6 +7,7 @@ export interface UserInstance {
   status: string
   node_agent?: string
   connect_address?: string
+  fail_reason?: string
 }
 
 export async function myInstances(gameId?: string): Promise<UserInstance[]> {
@@ -47,6 +48,7 @@ export function statusText(status: string | undefined): string {
   const map: Record<string, string> = {
     pending: '等待调度',
     scheduling: '调度中',
+    queued: '排队中',
     preparing_build: '准备构建',
     restoring_snapshot: '还原快照',
     starting: '启动中',
@@ -58,4 +60,10 @@ export function statusText(status: string | undefined): string {
     unknown: '状态未知（controller 不可达）',
   }
   return map[s] ?? (status || '未知')
+}
+
+// 是否中间态（启动后轮询等待的目标：离开中间态即停）
+export function isTransitionalStatus(status: string | undefined): boolean {
+  const s = (status ?? '').trim().toLowerCase()
+  return ['pending', 'scheduling', 'queued', 'preparing_build', 'restoring_snapshot', 'starting', 'stopping', 'cleaning'].includes(s)
 }

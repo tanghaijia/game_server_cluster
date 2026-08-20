@@ -140,7 +140,9 @@ func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID
 	}
 
 	instance.Status = entity.StatusPending
-	err = uc.instanceRepo.UpdateStatus(ctx, instance)
+	instance.FailReason = "" // 重新启动清失败原因
+	// Save 全字段（确保 fail_reason 清除落库）
+	err = uc.instanceRepo.Save(ctx, instance)
 	if err != nil {
 		return err
 	}
@@ -201,7 +203,8 @@ func (uc *GameInstanceUseCase) RetryGameInstance(ctx context.Context, instanceID
 	}
 
 	instance.Status = entity.StatusPending
-	if err := uc.instanceRepo.UpdateStatus(ctx, instance); err != nil {
+	instance.FailReason = "" // 重试清失败原因
+	if err := uc.instanceRepo.Save(ctx, instance); err != nil {
 		return err
 	}
 	return uc.ReconcileDispatcher.RequestDispatch(ctx, instance)

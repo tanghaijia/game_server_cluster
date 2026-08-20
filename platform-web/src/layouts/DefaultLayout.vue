@@ -68,6 +68,7 @@ const menu = computed(() => {
       { to: '/admin/nodes', label: '节点管理' },
       { to: '/admin/node-agents', label: 'NodeAgent 管理' },
       { to: '/admin/branches', label: '分支管理' },
+      { to: '/admin/observe', label: '调度观测' },
     )
   }
   return items

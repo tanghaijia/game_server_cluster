@@ -15,8 +15,9 @@ import (
 // 低于阈值连续 recoverPeriods 轮 → 恢复 Normal。
 // "持续 N 周期"是防抖核心：CPU 瞬时尖峰不触发迁移，波动被观测窗口吸收。
 type PressureMonitor struct {
-	nodeRepo    repository.NodeRepository
-	sampleRepo  repository.NodeResourceSampleRepository
+	nodeRepo   repository.NodeRepository
+	sampleRepo repository.NodeResourceSampleRepository
+	eventBus   *SchedulerEventBus
 
 	warningPct    float64
 	criticalPct   float64
@@ -31,6 +32,7 @@ type PressureMonitor struct {
 func NewPressureMonitor(
 	nodeRepo repository.NodeRepository,
 	sampleRepo repository.NodeResourceSampleRepository,
+	eventBus *SchedulerEventBus,
 	warningPct float64,
 	criticalPct float64,
 	observePeriods int,
@@ -55,6 +57,7 @@ func NewPressureMonitor(
 	return &PressureMonitor{
 		nodeRepo:        nodeRepo,
 		sampleRepo:      sampleRepo,
+		eventBus:        eventBus,
 		warningPct:      warningPct,
 		criticalPct:     criticalPct,
 		observePeriods:  observePeriods,
@@ -145,6 +148,10 @@ func (m *PressureMonitor) transition(ctx context.Context, nodeID string, status 
 		return
 	}
 	slog.Info("PressureMonitor 节点压力状态变化", "nodeId", nodeID, "status", pressureStatusName(status))
+	if m.eventBus != nil {
+		m.eventBus.Publish(SchedulerEvent{Type: EventNodePressureChanged, OccurredAt: time.Now(),
+			NodeAgentID: nodeID, Detail: "压力状态 → " + pressureStatusName(status)})
+	}
 }
 
 // latestUtilization 窗口内最近采样的 cpu/mem 占用率较大者（0..1 比例）

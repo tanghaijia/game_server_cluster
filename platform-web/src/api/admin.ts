@@ -18,6 +18,20 @@ export interface Node {
   StorageSize: number
   Location: string
   ServiceProvider: string
+  NetRxLimitMbps?: number // 带宽上限（调度评分）
+  NetTxLimitMbps?: number
+}
+
+export interface NodeUpdate {
+  ip?: string
+  core_num?: number
+  core_frequency?: number
+  memory_size?: number
+  storage_size?: number
+  location?: string
+  service_provider?: string
+  net_rx_limit_mbps?: number
+  net_tx_limit_mbps?: number
 }
 
 export interface NodeAgent {
@@ -50,6 +64,15 @@ export async function listNodes(): Promise<Node[]> {
 export async function createNode(ip: string): Promise<Node> {
   const resp = await http.post('/admin/nodes', { ip })
   return resp.data
+}
+
+export async function updateNode(id: number, data: NodeUpdate): Promise<Node> {
+  const resp = await http.put('/admin/nodes/' + id, data)
+  return resp.data
+}
+
+export async function deleteNode(id: number): Promise<void> {
+  await http.delete('/admin/nodes/' + id)
 }
 
 // ---- NodeAgent ----
@@ -88,6 +111,57 @@ export async function updateGame(id: string, data: { name: string; app_id?: stri
 
 export async function deleteGame(id: string): Promise<void> {
   await http.delete('/admin/games/' + id)
+}
+
+// ---- 游戏容器配置（端口/资源默认值，图形化配置） ----
+
+export interface ContainerPortExcerpt {
+  Protocol: number // 0=tcp 1=udp
+  BeginPort: number
+  ExcerptLength: number
+  IsGamePort: boolean
+}
+
+export interface ContainerConfig {
+  ID: string
+  ContainerServerPath: string
+  PortMode: number // 0=NAT 1=HOST
+  InjectGamePort: boolean
+  CPURequestMilli: number
+  MemoryRequestBytes: number
+  DiskRequestBytes: number
+  BandwidthRxMbps: number
+  BandwidthTxMbps: number
+  SingleThreaded: boolean
+  PortExcerpt: ContainerPortExcerpt[]
+}
+
+export interface ContainerConfigUpdate {
+  container_server_path?: string
+  port_mode?: number
+  inject_game_port?: boolean
+  cpu_request_milli?: number
+  memory_request_bytes?: number
+  disk_request_bytes?: number
+  bandwidth_rx_mbps?: number
+  bandwidth_tx_mbps?: number
+  single_threaded?: boolean
+  port_excerpts?: Array<{
+    protocol: number
+    begin_port: number
+    excerpt_length: number
+    is_game_port: boolean
+  }>
+}
+
+export async function getContainerConfig(gameId: string): Promise<ContainerConfig> {
+  const resp = await http.get('/admin/games/' + gameId + '/container-config')
+  return resp.data
+}
+
+export async function updateContainerConfig(gameId: string, data: ContainerConfigUpdate): Promise<ContainerConfig> {
+  const resp = await http.put('/admin/games/' + gameId + '/container-config', data)
+  return resp.data
 }
 
 // ---- SteamBranch ----

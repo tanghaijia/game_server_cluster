@@ -23,7 +23,16 @@
             <td class="px-4 py-3 font-mono text-xs">{{ inst.instance_id }}</td>
             <td class="px-4 py-3">{{ inst.game_id }}</td>
             <td class="px-4 py-3">
-              <span class="rounded bg-muted px-2 py-0.5 text-xs">{{ statusText(inst.status) }}</span>
+              <span
+                class="rounded px-2 py-0.5 text-xs"
+                :class="inst.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-muted'"
+                :title="inst.fail_reason || undefined"
+              >
+                {{ statusText(inst.status) }}
+              </span>
+              <span v-if="inst.status === 'failed' && inst.fail_reason" class="mt-1 block max-w-[240px] truncate text-[11px] text-red-500" :title="inst.fail_reason">
+                原因：{{ inst.fail_reason }}
+              </span>
             </td>
             <td class="px-4 py-3 text-xs">{{ inst.node_agent ?? '-' }}</td>
             <td class="px-4 py-3 text-xs">
@@ -62,6 +71,7 @@ import { useRouter } from 'vue-router'
 import {
   allInstances,
   instanceActions,
+  isTransitionalStatus,
   startOrderInstance,
   statusText,
   stopOrderInstance,
@@ -109,7 +119,16 @@ async function onAction(inst: UserInstance, act: { label: string; action: 'start
     } else {
       await stopOrderInstance(inst.order_id)
     }
-    setTimeout(load, 800)
+    await load()
+    // 启动是异步的：轮询等待实例离开中间态（最多 15s），捕获调度失败（此前失败对前端无感知）
+    if (act.action === 'start') {
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        await load()
+        const cur = instances.value.find((x) => x.instance_id === inst.instance_id)
+        if (!cur || !isTransitionalStatus(cur.status)) break
+      }
+    }
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '操作失败（controller 是否已启动？）'
   } finally {

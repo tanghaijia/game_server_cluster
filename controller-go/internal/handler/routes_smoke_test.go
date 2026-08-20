@@ -16,6 +16,7 @@ func TestAllRoutesRegister(t *testing.T) {
 	NewNodeAgentHandler(nil).RegisterRoutes(r)
 	NewGameCacheHandler(nil).RegisterRoutes(r)
 	NewDebugHandler(nil).RegisterRoutes(r)
+	NewObserverHandler(nil).RegisterRoutes(r)
 
 	if len(r.Routes()) == 0 {
 		t.Fatal("no routes registered")

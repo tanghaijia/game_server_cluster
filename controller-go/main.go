@@ -93,8 +93,10 @@ func main() {
 	// ---------------------------------------------------------------
 	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
 	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
+	// 调度事件总线（S30 观测）：调度器/队列/压力/健康/缓存发布事件
+	eventBus := biz.NewSchedulerEventBus(cfg.EventBufferSize)
 	// game-cache 视图（§10）：快照供 H5 判定，周期刷新（替代调度时实时 gRPC 查询）
-	nodeCacheView := biz.NewNodeCacheView(gameCacheManager, nodeAgentRepo, steamBranchRepo, gameRepo)
+	nodeCacheView := biz.NewNodeCacheView(gameCacheManager, nodeAgentRepo, steamBranchRepo, gameRepo, eventBus)
 
 	schedulerWeights := biz.DefaultScoreWeights()
 	if cfg.SchedulerScoreWeights != "" {
@@ -120,6 +122,7 @@ func main() {
 		gameContainerPortMapper,
 		nodeCacheView,
 		queueManager,
+		eventBus,
 		schedulerWeights,
 		cfg.SchedulerUtilizationTarget,
 		cfg.SchedulerRegionForce,
@@ -139,6 +142,7 @@ func main() {
 		scheduler,
 		reservationRepo,
 		queueManager,
+		eventBus,
 		nodeAgentClients,
 		assetClient,
 		gameRepo,
@@ -161,10 +165,15 @@ func main() {
 	gameUseCase := biz.NewGameUseCase(gameRepo, steamBranchRepo, gameInstanceRepo, containerPortMappingRepo, gameContainerConfigRepo, businessClient)
 	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, gameRepo, gameContainerConfigRepo, dispatcher, scheduler, queueManager, assetClient)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
-	nodeUseCase := biz.NewNodeUseCase(nodeRepo)
+	nodeUseCase := biz.NewNodeUseCase(nodeRepo, nodeAgentRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
 	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
 	fileSessionIssuer := biz.NewFileSessionIssuer(cfg.NodeAgentFileSecret, 30*time.Minute)
+	observerUseCase := biz.NewObserverUseCase(
+		scheduler, nodeRepo, nodeAgentRepo, sampleRepo, queueRepo, gameInstanceRepo,
+		gameRepo, gameContainerConfigRepo, steamBranchRepo, eventBus,
+		cfg.SchedulerUtilizationTarget, nodeCacheView,
+	)
 
 	// ---------------------------------------------------------------
 	// 8. 启动后台组件
@@ -181,7 +190,7 @@ func main() {
 
 	// node_agent 存活检测 + 健康状态机 + 资源采样（3.4/§9）
 	healthMonitor := biz.NewNodeAgentHealthMonitor(
-		nodeAgentRepo, nodeRepo, sampleRepo, nodeAgentClients, scheduler,
+		nodeAgentRepo, nodeRepo, sampleRepo, nodeAgentClients, scheduler, eventBus,
 		time.Duration(cfg.HeartbeatProbeTimeoutMs)*time.Millisecond,
 		cfg.HeartbeatFailThreshold,
 		cfg.HealthDegradedPct,
@@ -191,7 +200,7 @@ func main() {
 
 	// 节点压力状态机（3.3）
 	pressureMonitor := biz.NewPressureMonitor(
-		nodeRepo, sampleRepo,
+		nodeRepo, sampleRepo, eventBus,
 		cfg.PressureWarningPct, cfg.PressureCriticalPct,
 		cfg.PressureObservePeriods, cfg.PressureRecoverPeriods,
 		time.Duration(cfg.SchedulerHistoryWindowSec)*time.Second,
@@ -201,7 +210,7 @@ func main() {
 
 	// 中间态卡死哨兵（7.4）
 	reaper := biz.NewStaleReservationReaper(
-		gameInstanceRepo, nodeAgentRepo, reservationRepo,
+		gameInstanceRepo, nodeAgentRepo, reservationRepo, eventBus,
 		time.Duration(cfg.StaleReservationTimeoutMin)*time.Minute,
 	)
 	reaper.Start(ctx, time.Duration(cfg.StaleReservationScanSec)*time.Second)
@@ -225,11 +234,13 @@ func main() {
 	router := gin.Default()
 	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
 	handler.NewGameHandler(gameUseCase, assetClient).RegisterRoutes(router)
+	handler.NewGameContainerConfigHandler(biz.NewGameContainerConfigUseCase(gameRepo, gameContainerConfigRepo)).RegisterRoutes(router)
 	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
 	handler.NewFileSessionHandler(gameInstanceUseCase, nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
+	handler.NewObserverHandler(observerUseCase).RegisterRoutes(router)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
