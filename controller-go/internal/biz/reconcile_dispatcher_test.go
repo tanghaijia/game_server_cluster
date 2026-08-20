@@ -8,6 +8,8 @@ import (
 	"controller-go/internal/client/nodeagent"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 type mockInstanceRepo struct {
@@ -99,6 +101,26 @@ func (m *mockReservationRepo) Release(ctx context.Context, nodeID string, req en
 }
 
 var _ repository.ReservationRepository = (*mockReservationRepo)(nil)
+
+type mockQueueRepo struct{}
+
+func (m *mockQueueRepo) Enqueue(ctx context.Context, q *entity.SchedulingQueue) error { return nil }
+func (m *mockQueueRepo) Dequeue(ctx context.Context, instanceID string) error         { return nil }
+func (m *mockQueueRepo) Get(ctx context.Context, instanceID string) (*entity.SchedulingQueue, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+func (m *mockQueueRepo) UpdateWake(ctx context.Context, instanceID string, wakeAt time.Time, attempts int) error {
+	return nil
+}
+func (m *mockQueueRepo) ListDue(ctx context.Context, now time.Time) ([]*entity.SchedulingQueue, error) {
+	return nil, nil
+}
+func (m *mockQueueRepo) ListAll(ctx context.Context) ([]*entity.SchedulingQueue, error) {
+	return nil, nil
+}
+func (m *mockQueueRepo) Count(ctx context.Context) (int64, error) { return 0, nil }
+
+var _ repository.SchedulingQueueRepository = (*mockQueueRepo)(nil)
 
 type mockScheduler struct {
 	scheduleFunc func(ctx context.Context, inst *entity.GameInstance) (*ScheduleResult, error)
@@ -232,6 +254,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		&mockNodeRepo{},
 		sch,
 		&mockReservationRepo{},
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
 		nodeagent.NewClientRegistry(),
 		nil,
 		&mockGameRepo{},

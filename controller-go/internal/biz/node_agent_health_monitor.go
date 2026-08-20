@@ -163,6 +163,8 @@ func (m *NodeAgentHealthMonitor) applyHeartbeat(ctx context.Context, agent *enti
 		CPUUsedMilli:    int64(float64(cpuCapacityMilli(node)) * float64(hb.GetCpuUsagePct()) / 100),
 		MemoryUsedBytes: int64(float64(memoryCapacityBytes(node)) * float64(hb.GetMemoryUsagePct()) / 100),
 		DiskUsedBytes:   int64(float64(diskCapacityBytes(node)) * float64(hb.GetDiskUsagePct()) / 100),
+		NetRxBps:        int64(hb.GetNetRxBps()),
+		NetTxBps:        int64(hb.GetNetTxBps()),
 	}
 	if err := m.nodeRepo.UpdateDynamicUsage(ctx, agent.NodeId, usage, time.Now()); err != nil {
 		slog.Error("NodeAgentHealthMonitor 更新动态资源失败", "agent", agent.ID, "err", err)
@@ -173,6 +175,8 @@ func (m *NodeAgentHealthMonitor) applyHeartbeat(ctx context.Context, agent *enti
 		CPUUsedMilli:    usage.CPUUsedMilli,
 		MemoryUsedBytes: usage.MemoryUsedBytes,
 		DiskUsedBytes:   usage.DiskUsedBytes,
+		NetRxBps:        usage.NetRxBps,
+		NetTxBps:        usage.NetTxBps,
 	}); err != nil {
 		slog.Error("NodeAgentHealthMonitor 追加采样失败", "agent", agent.ID, "err", err)
 	}

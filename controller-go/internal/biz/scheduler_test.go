@@ -97,3 +97,27 @@ func TestCapacityLimit(t *testing.T) {
 		t.Errorf("capacityLimit = %d, 期望 3200", got)
 	}
 }
+
+// TestBandwidthRatio 带宽余量评分（§3.5/D6）：limit − max(预留, 当前bps) 双向取小归一化
+func TestBandwidthRatio(t *testing.T) {
+	// 上限 1000Mbps，无预留、无占用 → 余量 1.0
+	n := &entity.Node{NetRxLimitMbps: 1000, NetTxLimitMbps: 1000}
+	if got := bandwidthRatio(n); got != 1.0 {
+		t.Errorf("bandwidthRatio 空节点 = %v, 期望 1.0", got)
+	}
+	// 预留 500Mbps → rx/tx 余量 0.5
+	n.BandwidthRxReservedMbps = 500
+	n.BandwidthTxReservedMbps = 500
+	if got := bandwidthRatio(n); got != 0.5 {
+		t.Errorf("bandwidthRatio 预留后 = %v, 期望 0.5", got)
+	}
+	// 当前占用 900Mbps（> 预留）→ rx 余量 0.1；tx 仍 0.5 → 取小 0.1
+	n.NetRxBps = 900_000_000 / 8 // 900Mbps = 112.5MB/s（bps→Mbps 换算 ×8/1e6）
+	if got := bandwidthRatio(n); got != 0.1 {
+		t.Errorf("bandwidthRatio 占用后 = %v, 期望 0.1", got)
+	}
+	// 未配置上限 → 0（不影响评分）
+	if got := bandwidthRatio(&entity.Node{}); got != 0 {
+		t.Errorf("bandwidthRatio 无上限 = %v, 期望 0", got)
+	}
+}

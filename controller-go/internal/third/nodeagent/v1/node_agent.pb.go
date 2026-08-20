@@ -2306,6 +2306,8 @@ type NodeHeartbeat struct {
 	MemoryUsagePct   float32                `protobuf:"fixed32,3,opt,name=memory_usage_pct,json=memoryUsagePct,proto3" json:"memory_usage_pct,omitempty"`
 	DiskUsagePct     float32                `protobuf:"fixed32,4,opt,name=disk_usage_pct,json=diskUsagePct,proto3" json:"disk_usage_pct,omitempty"`
 	RunningInstances uint32                 `protobuf:"varint,5,opt,name=running_instances,json=runningInstances,proto3" json:"running_instances,omitempty"`
+	NetRxBps         uint64                 `protobuf:"varint,6,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"` // P3 带宽上报（与 node_agent proto 同步）
+	NetTxBps         uint64                 `protobuf:"varint,7,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"` // P3 带宽上报（与 node_agent proto 同步）
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2371,6 +2373,20 @@ func (x *NodeHeartbeat) GetDiskUsagePct() float32 {
 func (x *NodeHeartbeat) GetRunningInstances() uint32 {
 	if x != nil {
 		return x.RunningInstances
+	}
+	return 0
+}
+
+func (x *NodeHeartbeat) GetNetRxBps() uint64 {
+	if x != nil {
+		return x.NetRxBps
+	}
+	return 0
+}
+
+func (x *NodeHeartbeat) GetNetTxBps() uint64 {
+	if x != nil {
+		return x.NetTxBps
 	}
 	return 0
 }

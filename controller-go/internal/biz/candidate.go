@@ -69,9 +69,35 @@ func (s *ResourceAwareScheduler) loadCandidates(ctx context.Context) ([]*NodeCan
 		if samples, err := s.sampleRepo.ListSince(ctx, fmtID(node.Id), since); err == nil && len(samples) > 0 {
 			c.HistoryUtil = avgUtilization(samples, node)
 		}
+		// 带宽余量占比（评分 bandwidth_score，§3.5/D6 软约束）
+		c.BandwidthRatio = bandwidthRatio(node)
 		cands = append(cands, c)
 	}
 	return cands, nil
+}
+
+// bandwidthRatio 带宽余量占比（0..1）：headroom = limit − max(已预留, 当前占用bps→Mbps)；
+// 双向（rx/tx）取小归一化（§3.5）。未配置带宽上限返回 0（不影响评分）。
+func bandwidthRatio(n *entity.Node) float64 {
+	rxLimit := float64(n.NetRxLimitMbps)
+	txLimit := float64(n.NetTxLimitMbps)
+	if rxLimit <= 0 || txLimit <= 0 {
+		return 0
+	}
+	rxUsed := float64(n.BandwidthRxReservedMbps)
+	if cur := float64(n.NetRxBps) * 8 / 1e6; cur > rxUsed {
+		rxUsed = cur
+	}
+	txUsed := float64(n.BandwidthTxReservedMbps)
+	if cur := float64(n.NetTxBps) * 8 / 1e6; cur > txUsed {
+		txUsed = cur
+	}
+	rxRatio := (rxLimit - rxUsed) / rxLimit
+	txRatio := (txLimit - txUsed) / txLimit
+	if rxRatio < txRatio {
+		return clamp01(rxRatio)
+	}
+	return clamp01(txRatio)
 }
 
 // avgUtilization 窗口内 cpu/mem 均值利用率的较大者（history_score 输入）

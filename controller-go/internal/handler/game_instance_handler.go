@@ -30,6 +30,7 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 	group.GET("/:id/connect", h.GetInstanceConnect)
 	group.POST("/:id/start", h.StartGameInstance)
 	group.POST("/:id/stop", h.StopGameInstance)
+	group.POST("/:id/cancel", h.CancelGameInstance)
 	group.POST("/:id/retry", h.RetryGameInstance)
 	group.POST("/:id/dispatch", h.ForceDispatch)
 	group.DELETE("/:id", h.DeleteGameInstance)
@@ -162,6 +163,24 @@ func (h *GameInstanceHandler) RetryGameInstance(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "retrying"})
+}
+
+// CancelGameInstance 取消排队（D5）：移除出队，实例保持 stopped。仅 queued 状态允许。
+func (h *GameInstanceHandler) CancelGameInstance(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.gameInstanceUseCase.CancelGameInstance(c.Request.Context(), id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		if errors.Is(err, biz.ErrNotQueued) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "cancelled"})
 }
 
 // ForceDispatch 跳过状态校验，强制把实例压入调度队列（调试用）

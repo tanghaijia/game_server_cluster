@@ -65,6 +65,7 @@ func main() {
 	steamBranchRepo := repogorm.NewSteamBranchRepo(db)
 	sampleRepo := repogorm.NewNodeResourceSampleRepo(db)
 	reservationRepo := repogorm.NewReservationRepo(db)
+	queueRepo := repogorm.NewSchedulingQueueRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -92,6 +93,8 @@ func main() {
 	// ---------------------------------------------------------------
 	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
 	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
+	// game-cache 视图（§10）：快照供 H5 判定，周期刷新（替代调度时实时 gRPC 查询）
+	nodeCacheView := biz.NewNodeCacheView(gameCacheManager, nodeAgentRepo, steamBranchRepo, gameRepo)
 
 	schedulerWeights := biz.DefaultScoreWeights()
 	if cfg.SchedulerScoreWeights != "" {
@@ -99,16 +102,24 @@ func main() {
 			slog.Error("解析调度评分权重失败，使用默认权重", "err", err)
 		}
 	}
+	queueManager := biz.NewQueueManager(
+		queueRepo,
+		time.Duration(cfg.QueueBackoffBaseSec)*time.Second,
+		time.Duration(cfg.QueueBackoffMaxSec)*time.Second,
+		time.Duration(cfg.QueueTimeoutMin)*time.Minute,
+	)
 	scheduler := biz.NewResourceAwareScheduler(
 		nodeAgentRepo,
 		nodeRepo,
+		gameInstanceRepo,
 		sampleRepo,
 		reservationRepo,
 		gameRepo,
 		gameContainerConfigRepo,
 		steamBranchRepo,
 		gameContainerPortMapper,
-		gameCacheManager,
+		nodeCacheView,
+		queueManager,
 		schedulerWeights,
 		cfg.SchedulerUtilizationTarget,
 		cfg.SchedulerRegionForce,
@@ -127,6 +138,7 @@ func main() {
 		nodeRepo,
 		scheduler,
 		reservationRepo,
+		queueManager,
 		nodeAgentClients,
 		assetClient,
 		gameRepo,
@@ -134,11 +146,20 @@ func main() {
 		*gameContainerPortMapper,
 	)
 
+	// 排队唤醒器（P2，§8.3）
+	queueWaker := biz.NewQueueWaker(
+		queueRepo, gameInstanceRepo, dispatcher, cfg.QueueMaxWakePerRound,
+	)
+	// 实例停止释放资源 → 事件唤醒排队（S14）
+	dispatcher.SetResourceReleasedHook(queueWaker.Wake)
+	// 缓存就绪（转 AVAILABLE）→ 事件唤醒排队（S14/§10）
+	nodeCacheView.SetOnCacheReady(queueWaker.Wake)
+
 	// ---------------------------------------------------------------
 	// 7. Use Cases
 	// ---------------------------------------------------------------
 	gameUseCase := biz.NewGameUseCase(gameRepo, steamBranchRepo, gameInstanceRepo, containerPortMappingRepo, gameContainerConfigRepo, businessClient)
-	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, gameRepo, gameContainerConfigRepo, dispatcher, assetClient)
+	gameInstanceUseCase := biz.NewGameInstanceUseCase(gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, gameRepo, gameContainerConfigRepo, dispatcher, scheduler, queueManager, assetClient)
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	nodeUseCase := biz.NewNodeUseCase(nodeRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
@@ -153,6 +174,10 @@ func main() {
 
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
+
+	// 排队唤醒器（定时扫描 + 事件）
+	queueWaker.Start(ctx, time.Duration(cfg.QueueScanIntervalSec)*time.Second)
+	slog.Info("QueueWaker 已启动", "scan_interval_sec", cfg.QueueScanIntervalSec)
 
 	// node_agent 存活检测 + 健康状态机 + 资源采样（3.4/§9）
 	healthMonitor := biz.NewNodeAgentHealthMonitor(
@@ -184,6 +209,10 @@ func main() {
 
 	// 启动 GameCache 后台循环（分支同步 + Enable 分支缓存下载/更新）
 	gameCacheManager.Start(ctx, time.Duration(cfg.GameCacheReconcileInterval)*time.Second)
+
+	// game-cache 快照刷新（§10）
+	nodeCacheView.Start(ctx, time.Duration(cfg.CacheViewRefreshSec)*time.Second)
+	slog.Info("NodeCacheView 已启动", "refresh_sec", cfg.CacheViewRefreshSec)
 
 	// 恢复上次未完成的实例调度
 	if err := dispatcher.Recover(ctx); err != nil {

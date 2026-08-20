@@ -287,6 +287,8 @@ where
                 memory_usage_pct: heartbeat.memory_usage_pct,
                 disk_usage_pct: heartbeat.disk_usage_pct,
                 running_instances: heartbeat.running_instances,
+                net_rx_bps: heartbeat.net_rx_bps,
+                net_tx_bps: heartbeat.net_tx_bps,
             }),
         }))
     }

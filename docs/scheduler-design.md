@@ -754,9 +754,9 @@ ResourceReportStaleFactor   int     // 3（陈旧 = 3×上报周期）
 
 | 阶段 | 内容 | 验收 |
 |---|---|---|
-| P1 资源调度闭环 | 000012/000013/000017 迁移；candidate/constraint/scoring/reservation；Scheduler 接口改造；dispatcher 分流；health 状态机；StaleReservationReaper | 资源不足 → Failed（暂不排队）；预留防超卖单测；**预留生命周期全路径释放测试**（调度→运行→停止/失败/卡死超时）；debug 可见排除明细 |
-| P2 排队与取消 | 000014/000015；queue/waker；cancel API；优先级/退避/超时；删除联动 | 资源不足 → Queued → 资源释放后自动恢复；取消/超时路径正确 |
-| P3 完善 | 带宽评分、NodeCacheView 快照、指标/审计、配置化收尾 | 全部 S/N 需求项 traceable 通过 |
+| P1 资源调度闭环 | 000012/000013/000017 迁移；candidate/constraint/scoring/reservation；Scheduler 接口改造；dispatcher 分流；health 状态机；StaleReservationReaper | ✅ 已完成：资源不足 → Failed；预留防超卖单测；预留生命周期全路径释放；debug 可见排除明细 |
+| P2 排队与取消 | 000014/000015；queue/waker；cancel API；优先级/退避/超时；删除联动 | ✅ 已完成：资源不足 → Queued → 资源释放/事件唤醒后自动恢复；取消/超时路径正确 |
+| P3 完善 | 带宽评分、NodeCacheView 快照、指标/审计、配置化收尾 | ✅ 已完成：带宽评分闭环（Rust 心跳上报 + 预留扣减）；NodeCacheView 快照 + 缓存就绪事件唤醒；调度审计日志（duration/明细）；node_agent 磁盘取最满盘 + running_instances 真实值 |
 
 P1 不引入排队（保持现状失败语义），先把"资源感知 + 预留一致性 + 预留生命周期"做实；P2 才引入 R8 的排队，风险最小。
 

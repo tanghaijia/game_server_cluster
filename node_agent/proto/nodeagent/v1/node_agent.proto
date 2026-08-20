@@ -247,6 +247,8 @@ message NodeHeartbeat {
   float memory_usage_pct = 3;
   float disk_usage_pct = 4;
   uint32 running_instances = 5;
+  uint64 net_rx_bps = 6; // 网络接收速率（字节/秒），P3 带宽评分数据源
+  uint64 net_tx_bps = 7; // 网络发送速率（字节/秒）
 }
 
 message Game {

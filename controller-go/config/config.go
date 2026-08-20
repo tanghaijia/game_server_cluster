@@ -54,6 +54,16 @@ type Config struct {
 	// 中间态卡死哨兵（7.4）
 	StaleReservationTimeoutMin int
 	StaleReservationScanSec    int
+
+	// 排队（P2，§8）
+	QueueScanIntervalSec int
+	QueueBackoffBaseSec  int
+	QueueBackoffMaxSec   int
+	QueueTimeoutMin      int
+	QueueMaxWakePerRound int
+
+	// game-cache 快照刷新周期（§10，P3）
+	CacheViewRefreshSec int
 }
 
 // Load 从环境变量加载配置，未设置时使用默认值
@@ -101,6 +111,16 @@ func Load() *Config {
 		// 中间态卡死哨兵（7.4）
 		StaleReservationTimeoutMin: getEnvInt("STALE_RESERVATION_TIMEOUT_MIN", 10),
 		StaleReservationScanSec:    getEnvInt("STALE_RESERVATION_SCAN_SEC", 60),
+
+		// 排队（P2，§8/D9）
+		QueueScanIntervalSec: getEnvInt("QUEUE_SCAN_INTERVAL_SEC", 5),
+		QueueBackoffBaseSec:  getEnvInt("QUEUE_BACKOFF_BASE_SEC", 15),
+		QueueBackoffMaxSec:   getEnvInt("QUEUE_BACKOFF_MAX_SEC", 300),
+		QueueTimeoutMin:      getEnvInt("QUEUE_TIMEOUT_MIN", 30),
+		QueueMaxWakePerRound: getEnvInt("QUEUE_MAX_WAKE_PER_ROUND", 50),
+
+		// game-cache 快照刷新周期（§10）
+		CacheViewRefreshSec: getEnvInt("CACHE_VIEW_REFRESH_SEC", 30),
 	}
 }
 

@@ -16,14 +16,16 @@ import (
 
 // GameInstanceUseCase 业务逻辑执行器
 type GameInstanceUseCase struct {
-	instanceRepo        repository.GameInstanceRepository
-	portMappingRepo     repository.ContainerPortMappingRepository
-	nodeAgentRepo       repository.NodeAgentRepository
-	nodeRepo            repository.NodeRepository
-	gameRepo            repository.GameRepository
+	instanceRepo            repository.GameInstanceRepository
+	portMappingRepo         repository.ContainerPortMappingRepository
+	nodeAgentRepo           repository.NodeAgentRepository
+	nodeRepo                repository.NodeRepository
+	gameRepo                repository.GameRepository
 	gameContainerConfigRepo repository.GameContainerConfigRepository
-	ReconcileDispatcher *ReconcileDispatcher
-	assetClient         *assetservice.AssetServiceFaceClient
+	ReconcileDispatcher     *ReconcileDispatcher
+	scheduler               Scheduler
+	queueManager            *QueueManager
+	assetClient             *assetservice.AssetServiceFaceClient
 }
 
 func NewGameInstanceUseCase(
@@ -34,6 +36,8 @@ func NewGameInstanceUseCase(
 	gameRepo repository.GameRepository,
 	gameContainerConfigRepo repository.GameContainerConfigRepository,
 	reconcileDispatcher *ReconcileDispatcher,
+	scheduler Scheduler,
+	queueManager *QueueManager,
 	assetClient *assetservice.AssetServiceFaceClient,
 ) *GameInstanceUseCase {
 	return &GameInstanceUseCase{
@@ -44,6 +48,8 @@ func NewGameInstanceUseCase(
 		gameRepo:                gameRepo,
 		gameContainerConfigRepo: gameContainerConfigRepo,
 		ReconcileDispatcher:     reconcileDispatcher,
+		scheduler:               scheduler,
+		queueManager:            queueManager,
 		assetClient:             assetClient,
 	}
 }
@@ -215,20 +221,32 @@ func (uc *GameInstanceUseCase) ForceDispatch(ctx context.Context, instanceID str
 
 /**
 * 删除 GameInstance（仅允许非调度中/非运行中的实例）：
-* 先清理其端口映射，再删除实例记录。
+* 先清理其端口映射，再删除实例记录。排队中（Queued）实例删除时联动出队（S38）。
 **/
 func (uc *GameInstanceUseCase) DeleteGameInstance(ctx context.Context, instanceID string) error {
 	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
 	if err != nil {
 		return err
 	}
-	if isDispatchableStatus(instance.Status) {
+	if instance.Status == entity.StatusQueued {
+		// 删除隐含取消排队（S38）
+		if err := uc.queueManager.Cancel(ctx, instanceID); err != nil {
+			return fmt.Errorf("cancel queue: %w", err)
+		}
+	} else if isDispatchableStatus(instance.Status) {
 		return fmt.Errorf("instance is in dispatchable state %s, stop it first", instance.Status)
 	}
 	if err := uc.portMappingRepo.DeleteByInstanceId(ctx, instanceID); err != nil {
 		return fmt.Errorf("delete instance port mappings: %w", err)
 	}
 	return uc.instanceRepo.Delete(ctx, instanceID)
+}
+
+/**
+* 取消排队（D5）：移除出队，实例保持 stopped。仅 queued 状态允许（状态守卫）。
+**/
+func (uc *GameInstanceUseCase) CancelGameInstance(ctx context.Context, instanceID string) error {
+	return uc.scheduler.CancelQueued(ctx, instanceID)
 }
 
 /**

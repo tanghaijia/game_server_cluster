@@ -25,6 +25,7 @@ type ReconcileDispatcher struct {
 	nodeRepo                repository.NodeRepository
 	scheduler               Scheduler
 	reservationRepo         repository.ReservationRepository
+	queueManager            *QueueManager
 	nodeAgentClients        *nodeagent.ClientRegistry
 	assetClient             *assetservice.AssetServiceFaceClient
 	gameRepo                repository.GameRepository
@@ -34,6 +35,9 @@ type ReconcileDispatcher struct {
 	// 自动重试计数(进程内):instanceID -> 连续重试次数,成功后清零
 	retryMu              sync.Mutex
 	operationRetryCounts map[string]int
+
+	// 资源释放事件回调（S14：实例停止释放资源后唤醒排队）
+	resourceReleasedHook func()
 }
 
 func NewReconcileDispatcher(
@@ -42,6 +46,7 @@ func NewReconcileDispatcher(
 	nodeRepo repository.NodeRepository,
 	scheduler Scheduler,
 	reservationRepo repository.ReservationRepository,
+	queueManager *QueueManager,
 	nodeAgentClients *nodeagent.ClientRegistry,
 	assetClient *assetservice.AssetServiceFaceClient,
 	gameRepo repository.GameRepository,
@@ -55,6 +60,7 @@ func NewReconcileDispatcher(
 		nodeRepo:                nodeRepo,
 		scheduler:               scheduler,
 		reservationRepo:         reservationRepo,
+		queueManager:            queueManager,
 		nodeAgentClients:        nodeAgentClients,
 		assetClient:             assetClient,
 		gameRepo:                gameRepo,
@@ -68,6 +74,7 @@ func NewReconcileDispatcher(
 var dispatchableStatuses = []entity.InstanceStatus{
 	entity.StatusPending,
 	entity.StatusScheduling,
+	entity.StatusQueued,
 	entity.StatusPreparingBuild,
 	entity.StatusRestoringSnapshot,
 	entity.StatusStarting,
@@ -146,6 +153,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		instance.Status = entity.StatusScheduling
 		d.instanceRepo.UpdateStatus(ctx, instance)
 		d.RequestDispatch(ctx, instance)
+	case entity.StatusQueued:
+		// 排队实例被唤醒（QueueWaker）：回到调度阶段（§2.1 状态机）
+		instance.Status = entity.StatusScheduling
+		d.instanceRepo.UpdateStatus(ctx, instance)
+		d.RequestDispatch(ctx, instance)
 	case entity.StatusScheduling:
 		result, err := d.scheduler.Schedule(ctx, instance)
 		if err != nil {
@@ -156,18 +168,59 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		switch result.Outcome {
 		case OutcomeScheduled:
 			// 预留事务内已完成：预留扣减 + 端口映射 + node_agent_id/status 落库（§7.1）。
+			// 若由排队唤醒调度成功 → 清队列行。
+			if _, err := d.queueManager.Get(ctx, instance.ID); err == nil {
+				_ = d.queueManager.Cancel(ctx, instance.ID)
+			}
 			// 同步内存对象并保存 ResourceReq（供释放预留，7.2）。
 			instance.NodeAgentID = &result.NodeAgentID
 			instance.Status = entity.StatusPreparingBuild
 			instance.ResourceReq = &result.ResourceReq
+			instance.QueuedReason = ""
+			instance.QueuedAt = nil
 			// 用 Save 全字段持久化（UpdateStatus 只更新 status，会丢 node_agent_id）
 			d.instanceRepo.Save(ctx, instance)
 			d.RequestDispatch(ctx, instance)
 		case OutcomeQueued:
-			// P2 实现：写入 scheduling_queue + status=Queued
-			slog.Info("[Scheduler] 实例排队（P2 实现）",
-				"instanceId", instance.ID, "reason", result.Reason)
-			d.FailedInstance(ctx, instance)
+			// 可恢复原因（资源/端口/压力不足）→ 排队（R8）。
+			// 首次入队 vs 重试仍不足（退避/超时）：
+			if _, err := d.queueManager.Get(ctx, instance.ID); err != nil {
+				// 首次入队
+				if err := d.queueManager.Enqueue(ctx, instance, result.Reason); err != nil {
+					slog.Error("[Scheduler] 排队写入失败", "instanceId", instance.ID, "err", err)
+					d.FailedInstance(ctx, instance)
+					return nil
+				}
+				now := time.Now()
+				instance.Status = entity.StatusQueued
+				instance.QueuedReason = result.Reason
+				instance.QueuedAt = &now
+				d.instanceRepo.Save(ctx, instance)
+				slog.Info("[Scheduler] 实例已排队",
+					"instanceId", instance.ID, "reason", result.Reason)
+			} else {
+				// 重试仍不足：退避 or 超时（§8.2/D9）
+				timeout, err := d.queueManager.OnStillQueued(ctx, instance.ID, false)
+				if err != nil {
+					slog.Error("[Scheduler] 队列退避更新失败", "instanceId", instance.ID, "err", err)
+					d.FailedInstance(ctx, instance)
+					return nil
+				}
+				if timeout {
+					_ = d.queueManager.Cancel(ctx, instance.ID)
+					instance.Status = entity.Failed
+					instance.QueuedReason = "queue_timeout"
+					d.instanceRepo.Save(ctx, instance)
+					slog.Warn("[Scheduler] 排队超时，实例调度失败",
+						"instanceId", instance.ID, "reason", result.Reason)
+					return nil
+				}
+				instance.Status = entity.StatusQueued
+				instance.QueuedReason = result.Reason
+				d.instanceRepo.UpdateStatus(ctx, instance)
+				slog.Info("[Scheduler] 实例仍资源不足，退避重试",
+					"instanceId", instance.ID, "reason", result.Reason)
+			}
 		default: // OutcomeFailed
 			slog.Warn("[Scheduler] 调度失败",
 				"instanceId", instance.ID, "code", result.ReasonCode, "reason", result.Reason)
@@ -407,38 +460,27 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
 	// 释放预留（7.2 挂点：调度/阶段失败回滚）。
-	// 仅当实例已绑定节点且记录了资源需求时才有预留可释放。
-	if instance.NodeAgentID != nil && instance.ResourceReq != nil {
-		if agent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID); err == nil {
-			if err := d.reservationRepo.Release(ctx, agent.NodeId, *instance.ResourceReq); err != nil {
-				slog.Error("[ReconcileDispatcher] 释放预留失败",
-					"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID, "err", err)
-			}
-		}
-	}
+	d.releaseReservation(ctx, instance)
 	instance.Status = entity.Failed
 	d.instanceRepo.UpdateStatus(ctx, instance)
 }
 
-/**
-* 在目标 node_agent 上为实例分配端口映射（调度阶段调用）
-**/
-func (d *ReconcileDispatcher) assignPorts(ctx context.Context, instance *entity.GameInstance) error {
-	if instance.NodeAgentID == nil {
-		return errors.New("node_agent_id is nil")
+// releaseReservation 扣回预留（幂等：仅当已绑定节点且记录了资源需求时执行）
+func (d *ReconcileDispatcher) releaseReservation(ctx context.Context, instance *entity.GameInstance) {
+	if instance.NodeAgentID == nil || instance.ResourceReq == nil {
+		return
 	}
-	nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
-	if err != nil {
-		return fmt.Errorf("load node agent: %w", err)
+	if agent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID); err == nil {
+		if err := d.reservationRepo.Release(ctx, agent.NodeId, *instance.ResourceReq); err != nil {
+			slog.Error("[ReconcileDispatcher] 释放预留失败",
+				"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID, "err", err)
+		}
 	}
-	game, err := d.gameRepo.GetByID(ctx, instance.GameID)
-	if err != nil {
-		return fmt.Errorf("load game: %w", err)
-	}
-	if _, err := d.gameContainerPortMapper.MapPort(ctx, nodeAgent, game, instance); err != nil {
-		return err
-	}
-	return nil
+}
+
+// SetResourceReleasedHook 注册资源释放事件回调（S14：实例停止释放资源后唤醒排队）
+func (d *ReconcileDispatcher) SetResourceReleasedHook(fn func()) {
+	d.resourceReleasedHook = fn
 }
 
 /**
@@ -620,14 +662,21 @@ func (d *ReconcileDispatcher) onStopInstanceSucceeded(ctx context.Context, insta
 
 /**
 * CleanInstance 成功后的回调：实例完全停止（终态）
+* 7.2 挂点：释放端口映射 + 预留；并触发资源释放事件（S14 排队唤醒）。
 **/
 func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	// 先释放预留（依赖 NodeAgentID），再清空绑定
+	d.releaseReservation(ctx, instance)
 	instance.Status = entity.StatusStopped
 	instance.NodeAgentID = nil
 	d.instanceRepo.UpdateStatus(ctx, instance)
 	if _, err := d.gameContainerPortMapper.ReleaseMapPortByInstanceId(ctx, instance.ID); err != nil {
 		slog.Error("[PortMapper] ReleaseMapPortByInstanceId fail",
 			"instanceId", instance.ID, "err", err)
+	}
+	// 资源释放 → 唤醒排队（S14）
+	if d.resourceReleasedHook != nil {
+		d.resourceReleasedHook()
 	}
 }
 

@@ -14,6 +14,8 @@ pub struct NodeHeartbeat {
     pub memory_usage_pct: f32,
     pub disk_usage_pct: f32,
     pub running_instances: u32,
+    pub net_rx_bps: u64, // 网络接收速率（字节/秒），P3 带宽评分数据源
+    pub net_tx_bps: u64, // 网络发送速率（字节/秒）
 }
 
 #[async_trait]

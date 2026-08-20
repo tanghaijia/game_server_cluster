@@ -33,6 +33,12 @@ type Node struct {
 
 	// 压力状态（3.3，落库供重启恢复）
 	PressureStatus NodePressureStatus `gorm:"column:pressure_status"`
+
+	// 带宽（§3.5，D6 软约束；000018 迁移）
+	NetRxLimitMbps          int `gorm:"column:net_rx_limit_mbps"` // 平台可分配带宽上限（Mbps）
+	NetTxLimitMbps          int `gorm:"column:net_tx_limit_mbps"`
+	BandwidthRxReservedMbps int `gorm:"column:bandwidth_rx_reserved_mbps"` // 已预留（调度事务维护）
+	BandwidthTxReservedMbps int `gorm:"column:bandwidth_tx_reserved_mbps"`
 }
 
 func (Node) TableName() string {

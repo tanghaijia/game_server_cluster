@@ -203,7 +203,15 @@ where
     }
 
     pub async fn heartbeat(&self) -> Result<crate::ports::NodeHeartbeat, NodeAgentError> {
-        self.system_info.heartbeat().await
+        let mut hb = self.system_info.heartbeat().await?;
+        // running_instances 真实值：从实例仓库统计 Running 实例（修正占位 0，§9.5）
+        if let Ok(instances) = self.game_instance_repos.get_all().await {
+            hb.running_instances = instances
+                .iter()
+                .filter(|i| i.status == crate::domain::GameInstanceStatus::Running)
+                .count() as u32;
+        }
+        Ok(hb)
     }
 
     pub async fn cache_game(

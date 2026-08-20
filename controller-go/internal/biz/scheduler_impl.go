@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,11 +16,12 @@ import (
 
 // ResourceAwareScheduler 资源感知调度器（替换 SimpleScheduler）：
 // filter（H1-H6）→ score（P1-P4）→ 预留事务绑定（§2.2/§7.1）。
-// P1 阶段：可恢复原因（资源/端口/压力不足）暂返回 OutcomeFailed（FailCodeResourceShortage），
-// P2 引入排队后改为 OutcomeQueued。
+// 决策出口（§2.3）：可恢复原因（资源/端口/压力不足）→ OutcomeQueued（P2 排队）；
+// 结构性原因 → OutcomeFailed。
 type ResourceAwareScheduler struct {
 	nodeAgentRepo       repository.NodeAgentRepository
 	nodeRepo            repository.NodeRepository
+	instanceRepo        repository.GameInstanceRepository
 	sampleRepo          repository.NodeResourceSampleRepository
 	reservationRepo     repository.ReservationRepository
 	gameRepo            repository.GameRepository
@@ -27,6 +29,7 @@ type ResourceAwareScheduler struct {
 	steamBranchRepo     repository.SteamBranchRepository
 	portMapper          *GameContainerPortMapper
 	cacheProvider       CacheStatusProvider
+	queueManager        *QueueManager
 
 	weights           ScoreWeights
 	utilizationTarget float64
@@ -43,6 +46,7 @@ type ResourceAwareScheduler struct {
 func NewResourceAwareScheduler(
 	nodeAgentRepo repository.NodeAgentRepository,
 	nodeRepo repository.NodeRepository,
+	instanceRepo repository.GameInstanceRepository,
 	sampleRepo repository.NodeResourceSampleRepository,
 	reservationRepo repository.ReservationRepository,
 	gameRepo repository.GameRepository,
@@ -50,6 +54,7 @@ func NewResourceAwareScheduler(
 	steamBranchRepo repository.SteamBranchRepository,
 	portMapper *GameContainerPortMapper,
 	cacheProvider CacheStatusProvider,
+	queueManager *QueueManager,
 	weights ScoreWeights,
 	utilizationTarget float64,
 	regionForce bool,
@@ -75,6 +80,7 @@ func NewResourceAwareScheduler(
 	return &ResourceAwareScheduler{
 		nodeAgentRepo:       nodeAgentRepo,
 		nodeRepo:            nodeRepo,
+		instanceRepo:        instanceRepo,
 		sampleRepo:          sampleRepo,
 		reservationRepo:     reservationRepo,
 		gameRepo:            gameRepo,
@@ -82,6 +88,7 @@ func NewResourceAwareScheduler(
 		steamBranchRepo:     steamBranchRepo,
 		portMapper:          portMapper,
 		cacheProvider:       cacheProvider,
+		queueManager:        queueManager,
 		weights:             weights,
 		utilizationTarget:   utilizationTarget,
 		regionForce:         regionForce,
@@ -147,6 +154,7 @@ func (s *ResourceAwareScheduler) resolveBranch(ctx context.Context, instance *en
 }
 
 func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.GameInstance) (*ScheduleResult, error) {
+	start := time.Now()
 	game, err := s.gameRepo.GetByID(ctx, instance.GameID)
 	if err != nil {
 		return nil, fmt.Errorf("load game: %w", err)
@@ -184,7 +192,9 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 		}
 
 		if len(eligible) == 0 {
-			return s.classifyNoCandidate(instance, candidates, allResourceOnly, branch), nil
+			res := s.classifyNoCandidate(instance, candidates, allResourceOnly, branch)
+			s.audit(instance, res, time.Since(start))
+			return res, nil
 		}
 
 		// score → 选最优（确定性：同分取序号小者，候选按 ListAll 稳定顺序）
@@ -217,18 +227,40 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 		}
 
 		s.record("scheduled")
-		return &ScheduleResult{
+		res := &ScheduleResult{
 			Outcome:     OutcomeScheduled,
 			NodeAgentID: best.Agent.ID,
 			Score:       best.Score,
 			Scores:      map[string]float64{"score": best.Score},
 			Excluded:    buildExclusions(candidates),
 			ResourceReq: req,
-		}, nil
+		}
+		s.audit(instance, res, time.Since(start))
+		return res, nil
 	}
 
 	s.record("failed")
 	return failed(FailCodeResourceShortage, "预留冲突重试达上限"), nil
+}
+
+// audit 调度审计日志（F2/S28）：输入需求、出口、得分、排除明细、耗时
+func (s *ResourceAwareScheduler) audit(instance *entity.GameInstance, res *ScheduleResult, dur time.Duration) {
+	excluded := make([]string, 0, len(res.Excluded))
+	for _, e := range res.Excluded {
+		excluded = append(excluded, e.NodeAgentID+":"+strings.Join(e.Reasons, ";"))
+	}
+	slog.Info("[Scheduler] 调度决策",
+		"instanceId", instance.ID,
+		"game", instance.GameID,
+		"region", instance.Region,
+		"outcome", res.Outcome,
+		"reason_code", res.ReasonCode,
+		"reason", res.Reason,
+		"node_agent_id", res.NodeAgentID,
+		"score", res.Score,
+		"excluded", strings.Join(excluded, " | "),
+		"duration_ms", dur.Milliseconds(),
+	)
 }
 
 // classifyNoCandidate 无候选时的决策出口（§2.3）：
@@ -258,9 +290,9 @@ func (s *ResourceAwareScheduler) classifyNoCandidate(
 			Reason: "区域强制模式下无区域 " + instance.Region + " 的节点", Excluded: excluded}
 	}
 	if allResourceOnly {
-		// P1：可恢复原因暂按失败处理（P2 改为 OutcomeQueued）
+		// 可恢复原因（资源/端口/压力不足）→ 排队（R8，P2）
 		s.record("queued")
-		return &ScheduleResult{Outcome: OutcomeFailed, ReasonCode: FailCodeResourceShortage,
+		return &ScheduleResult{Outcome: OutcomeQueued, ReasonCode: FailCodeResourceShortage,
 			Reason: "资源/端口不足，无可调度节点", Excluded: excluded}
 	}
 	s.record("failed")
@@ -284,7 +316,7 @@ func (s *ResourceAwareScheduler) pickBest(
 			LastNodeMatch:    instance.NodeAgentID != nil && *instance.NodeAgentID == c.Agent.ID,
 			Utilization:      utilizationOf(c),
 			HistoryUtil:      c.HistoryUtil,
-			BandwidthRatio:   0, // P1 无带宽数据（P3 完善）
+			BandwidthRatio:   c.BandwidthRatio, // §3.5 带宽余量（P3 已接入）
 			Degraded:         c.Agent.HealthStatus == entity.HealthDegraded,
 			SingleThreaded:   config.SingleThreaded,
 			CoreFrequencyGHz: c.Node.CoreFrequency,
@@ -374,12 +406,36 @@ func (s *ResourceAwareScheduler) Stats() map[string]int64 {
 	return out
 }
 
-// CancelQueued P2 实现；P1 阶段排队未启用，直接返回错误。
+// CancelQueued 取消排队（D5 + D10）：仅 queued 状态允许；
+// 移除队列行 + 实例置 stopped + cancelled 标记（幂等：非排队状态返回 ErrNotQueued）。
 func (s *ResourceAwareScheduler) CancelQueued(ctx context.Context, instanceID string) error {
-	return errors.New("queue not implemented in P1")
+	inst, err := s.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return err
+	}
+	if inst.Status != entity.StatusQueued {
+		return ErrNotQueued
+	}
+	if err := s.queueManager.Cancel(ctx, instanceID); err != nil {
+		return err
+	}
+	inst.Status = entity.StatusStopped
+	inst.Cancelled = true
+	inst.QueuedReason = ""
+	inst.QueuedAt = nil
+	return s.instanceRepo.Save(ctx, inst)
 }
 
-// QueueStats P2 实现；P1 阶段返回空统计。
+// QueueStats 排队统计（debug/指标，S29）
 func (s *ResourceAwareScheduler) QueueStats() map[string]any {
-	return map[string]any{"queue_len": 0, "implemented": false}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	n, err := s.queueManager.Count(ctx)
+	if err != nil {
+		return map[string]any{"queue_len": 0, "implemented": true, "error": err.Error()}
+	}
+	return map[string]any{"queue_len": n, "implemented": true}
 }
+
+// ErrNotQueued 实例不在排队状态（取消时状态守卫拒绝）
+var ErrNotQueued = errors.New("instance is not in queued state")

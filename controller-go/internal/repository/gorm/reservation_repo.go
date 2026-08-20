@@ -60,11 +60,13 @@ func (r *ReservationRepo) TryReserve(ctx context.Context, req repository.Reserve
 			}
 		}
 
-		// 4. 扣减预留
+		// 4. 扣减预留（cpu/mem/disk 硬约束 + 带宽软约束，§3.5/D6）
 		if err := tx.Model(&entity.Node{}).Where("id = ?", req.NodeID).Updates(map[string]any{
-			"cpu_reserved_milli":    gorm.Expr("cpu_reserved_milli + ?", req.Req.CPUMilli),
-			"memory_reserved_bytes": gorm.Expr("memory_reserved_bytes + ?", req.Req.MemoryBytes),
-			"disk_reserved_bytes":   gorm.Expr("disk_reserved_bytes + ?", req.Req.DiskBytes),
+			"cpu_reserved_milli":         gorm.Expr("cpu_reserved_milli + ?", req.Req.CPUMilli),
+			"memory_reserved_bytes":      gorm.Expr("memory_reserved_bytes + ?", req.Req.MemoryBytes),
+			"disk_reserved_bytes":        gorm.Expr("disk_reserved_bytes + ?", req.Req.DiskBytes),
+			"bandwidth_rx_reserved_mbps": gorm.Expr("bandwidth_rx_reserved_mbps + ?", req.Req.BandwidthRxMbps),
+			"bandwidth_tx_reserved_mbps": gorm.Expr("bandwidth_tx_reserved_mbps + ?", req.Req.BandwidthTxMbps),
 		}).Error; err != nil {
 			return err
 		}
@@ -98,8 +100,10 @@ func (r *ReservationRepo) Release(ctx context.Context, nodeID string, req entity
 	return r.db.WithContext(ctx).Model(&entity.Node{}).
 		Where("id = ?", nodeID).
 		Updates(map[string]any{
-			"cpu_reserved_milli":    gorm.Expr("GREATEST(cpu_reserved_milli - ?, 0)", req.CPUMilli),
-			"memory_reserved_bytes": gorm.Expr("GREATEST(memory_reserved_bytes - ?, 0)", req.MemoryBytes),
-			"disk_reserved_bytes":   gorm.Expr("GREATEST(disk_reserved_bytes - ?, 0)", req.DiskBytes),
+			"cpu_reserved_milli":         gorm.Expr("GREATEST(cpu_reserved_milli - ?, 0)", req.CPUMilli),
+			"memory_reserved_bytes":      gorm.Expr("GREATEST(memory_reserved_bytes - ?, 0)", req.MemoryBytes),
+			"disk_reserved_bytes":        gorm.Expr("GREATEST(disk_reserved_bytes - ?, 0)", req.DiskBytes),
+			"bandwidth_rx_reserved_mbps": gorm.Expr("GREATEST(bandwidth_rx_reserved_mbps - ?, 0)", req.BandwidthRxMbps),
+			"bandwidth_tx_reserved_mbps": gorm.Expr("GREATEST(bandwidth_tx_reserved_mbps - ?, 0)", req.BandwidthTxMbps),
 		}).Error
 }

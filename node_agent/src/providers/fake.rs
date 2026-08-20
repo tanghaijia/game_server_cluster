@@ -195,6 +195,8 @@ impl SystemInfoProvider for FakeSystemInfoProvider {
             memory_usage_pct: 33.0,
             disk_usage_pct: 48.0,
             running_instances: 0,
+            net_rx_bps: 100_000_000, // 100Mbps（联调/演示用固定值）
+            net_tx_bps: 50_000_000,  // 50Mbps
         })
     }
 
