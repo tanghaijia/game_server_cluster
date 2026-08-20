@@ -29,12 +29,17 @@ func (uc *GameInstanceAdvanceUseCase) AdvanceGameInstance(ctx context.Context, g
 		gameInstance.Status = entity.StatusScheduling
 		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)
 	case entity.StatusScheduling:
-		_, err := uc.scheduler.Schedule(gameInstance)
+		result, err := uc.scheduler.Schedule(ctx, gameInstance)
 		if err != nil {
 			return err
 		}
+		if result.Outcome != OutcomeScheduled {
+			return errors.New("schedule failed: " + result.Reason)
+		}
+		gameInstance.NodeAgentID = &result.NodeAgentID
+		gameInstance.ResourceReq = &result.ResourceReq
 		gameInstance.Status = entity.StatusPreparingBuild
-		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)
+		uc.gameInstanceRepo.Save(ctx, gameInstance)
 	case entity.StatusPreparingBuild:
 		gameInstance.Status = entity.StatusRestoringSnapshot
 		uc.gameInstanceRepo.UpdateStatus(ctx, gameInstance)

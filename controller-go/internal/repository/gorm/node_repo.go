@@ -51,3 +51,9 @@ func (r *NodeRepo) UpdateDynamicUsage(ctx context.Context, nodeID string, u enti
 			"usage_reported_at": reportedAt,
 		}).Error
 }
+
+func (r *NodeRepo) UpdatePressureStatus(ctx context.Context, nodeID string, status entity.NodePressureStatus) error {
+	return r.db.WithContext(ctx).Model(&entity.Node{}).
+		Where("id = ?", nodeID).
+		Update("pressure_status", status).Error
+}

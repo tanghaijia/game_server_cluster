@@ -11,7 +11,7 @@ func TestAllRoutesRegister(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	NewGameInstanceHandler(nil).RegisterRoutes(r)
-	NewGameHandler(nil).RegisterRoutes(r)
+	NewGameHandler(nil, nil).RegisterRoutes(r)
 	NewNodeHandler(nil).RegisterRoutes(r)
 	NewNodeAgentHandler(nil).RegisterRoutes(r)
 	NewGameCacheHandler(nil).RegisterRoutes(r)

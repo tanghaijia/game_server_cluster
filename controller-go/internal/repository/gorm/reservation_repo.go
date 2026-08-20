@@ -46,7 +46,21 @@ func (r *ReservationRepo) TryReserve(ctx context.Context, req repository.Reserve
 			return repository.ErrReservationConflict
 		}
 
-		// 3. 扣减预留
+		// 3. 复核 H4：端口冲突（并发窗口内其他调度已占用同一 host_port/protocol）
+		for _, m := range req.PortMappings {
+			var cnt int64
+			if err := tx.Model(&entity.ContainerPortMapping{}).
+				Where("node_agent_id = ? AND host_port = ? AND protocol = ?",
+					req.NodeAgentID, m.HostPort, m.Protocol).
+				Count(&cnt).Error; err != nil {
+				return err
+			}
+			if cnt > 0 {
+				return repository.ErrReservationConflict
+			}
+		}
+
+		// 4. 扣减预留
 		if err := tx.Model(&entity.Node{}).Where("id = ?", req.NodeID).Updates(map[string]any{
 			"cpu_reserved_milli":    gorm.Expr("cpu_reserved_milli + ?", req.Req.CPUMilli),
 			"memory_reserved_bytes": gorm.Expr("memory_reserved_bytes + ?", req.Req.MemoryBytes),
@@ -55,14 +69,14 @@ func (r *ReservationRepo) TryReserve(ctx context.Context, req repository.Reserve
 			return err
 		}
 
-		// 4. 写端口映射（biz 层事务外预计算的分配结果）
+		// 5. 写端口映射（biz 层事务外预计算的分配结果）
 		for i := range req.PortMappings {
 			if err := tx.Create(&req.PortMappings[i]).Error; err != nil {
 				return err
 			}
 		}
 
-		// 5. 绑定实例（node_agent_id + 进入 PreparingBuild）
+		// 6. 绑定实例（node_agent_id + 进入 PreparingBuild）
 		if err := tx.Model(&entity.GameInstance{}).Where("id = ?", req.InstanceID).
 			Updates(map[string]any{
 				"node_agent_id": req.NodeAgentID,

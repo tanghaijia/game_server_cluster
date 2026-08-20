@@ -24,6 +24,7 @@ type ReconcileDispatcher struct {
 	nodeAgnetRepo           repository.NodeAgentRepository
 	nodeRepo                repository.NodeRepository
 	scheduler               Scheduler
+	reservationRepo         repository.ReservationRepository
 	nodeAgentClients        *nodeagent.ClientRegistry
 	assetClient             *assetservice.AssetServiceFaceClient
 	gameRepo                repository.GameRepository
@@ -40,6 +41,7 @@ func NewReconcileDispatcher(
 	nodeAgnetRepo repository.NodeAgentRepository,
 	nodeRepo repository.NodeRepository,
 	scheduler Scheduler,
+	reservationRepo repository.ReservationRepository,
 	nodeAgentClients *nodeagent.ClientRegistry,
 	assetClient *assetservice.AssetServiceFaceClient,
 	gameRepo repository.GameRepository,
@@ -52,6 +54,7 @@ func NewReconcileDispatcher(
 		nodeAgnetRepo:           nodeAgnetRepo,
 		nodeRepo:                nodeRepo,
 		scheduler:               scheduler,
+		reservationRepo:         reservationRepo,
 		nodeAgentClients:        nodeAgentClients,
 		assetClient:             assetClient,
 		gameRepo:                gameRepo,
@@ -144,25 +147,31 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		d.instanceRepo.UpdateStatus(ctx, instance)
 		d.RequestDispatch(ctx, instance)
 	case entity.StatusScheduling:
-		node_agent_id, err := d.scheduler.Schedule(instance)
+		result, err := d.scheduler.Schedule(ctx, instance)
 		if err != nil {
-			instance.Status = entity.Failed
-			d.instanceRepo.UpdateStatus(ctx, instance)
-		} else {
-			instance.NodeAgentID = &node_agent_id
-			// 在目标 node_agent 上为该实例分配端口映射
-			if err := d.assignPorts(ctx, instance); err != nil {
-				slog.Error("[PortMapper] 分配端口失败",
-					"instanceId", instance.ID, "nodeAgentId", node_agent_id, "err", err)
-				d.FailedInstance(ctx, instance)
-				return nil
-			}
+			slog.Error("[Scheduler] 调度器内部错误", "instanceId", instance.ID, "err", err)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		switch result.Outcome {
+		case OutcomeScheduled:
+			// 预留事务内已完成：预留扣减 + 端口映射 + node_agent_id/status 落库（§7.1）。
+			// 同步内存对象并保存 ResourceReq（供释放预留，7.2）。
+			instance.NodeAgentID = &result.NodeAgentID
 			instance.Status = entity.StatusPreparingBuild
-			// 用 Save 全字段持久化，确保 node_agent_id 也落库
-			// （UpdateStatus 只更新 status，会把 node_agent_id 丢在内存里，
-			//   导致 stop 等从 DB 重新加载实例的路径拿到 nil 而 panic）
+			instance.ResourceReq = &result.ResourceReq
+			// 用 Save 全字段持久化（UpdateStatus 只更新 status，会丢 node_agent_id）
 			d.instanceRepo.Save(ctx, instance)
 			d.RequestDispatch(ctx, instance)
+		case OutcomeQueued:
+			// P2 实现：写入 scheduling_queue + status=Queued
+			slog.Info("[Scheduler] 实例排队（P2 实现）",
+				"instanceId", instance.ID, "reason", result.Reason)
+			d.FailedInstance(ctx, instance)
+		default: // OutcomeFailed
+			slog.Warn("[Scheduler] 调度失败",
+				"instanceId", instance.ID, "code", result.ReasonCode, "reason", result.Reason)
+			d.FailedInstance(ctx, instance)
 		}
 	case entity.StatusPreparingBuild:
 		if instance.NodeAgentID == nil {
@@ -397,6 +406,16 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 }
 
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
+	// 释放预留（7.2 挂点：调度/阶段失败回滚）。
+	// 仅当实例已绑定节点且记录了资源需求时才有预留可释放。
+	if instance.NodeAgentID != nil && instance.ResourceReq != nil {
+		if agent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID); err == nil {
+			if err := d.reservationRepo.Release(ctx, agent.NodeId, *instance.ResourceReq); err != nil {
+				slog.Error("[ReconcileDispatcher] 释放预留失败",
+					"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID, "err", err)
+			}
+		}
+	}
 	instance.Status = entity.Failed
 	d.instanceRepo.UpdateStatus(ctx, instance)
 }

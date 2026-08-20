@@ -283,8 +283,7 @@ func (g *GameCacheManager) UpdateBranchCache(ctx context.Context, gameId, branch
 
 // GetNodeCache 查询指定 node_agent 上某 (game, branch) 的缓存状态。
 // 缓存不存在（node_agent 返回 BUILD_CACHE_MISS / NOT_FOUND）时返回 (nil, nil)。
-func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId, branchName string) (*nodeagentv1.GameCache, error) {
-	if nodeAgentId == "" {
+func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId, branchName string) (*nodeagentv1.GameCache, error) {	if nodeAgentId == "" {
 		return nil, errors.New("node_agent_id is required")
 	}
 	if gameId == "" || branchName == "" {
@@ -318,6 +317,20 @@ func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId
 		return nil, errors.New("node_agent returned empty game cache")
 	}
 	return resp.GameCache, nil
+}
+
+// CacheAvailable 实现 CacheStatusProvider（H5 判定，§6.1）：
+// 查询节点 (game, branch) 缓存状态，仅 status == AVAILABLE 视为命中
+// （D2：DOWNLOADING 不算命中；缓存缺失返回 false）。
+func (g *GameCacheManager) CacheAvailable(ctx context.Context, nodeAgentId, gameId, branchName string) (bool, error) {
+	gc, err := g.GetNodeCache(ctx, nodeAgentId, gameId, branchName)
+	if err != nil {
+		return false, err
+	}
+	if gc == nil {
+		return false, nil
+	}
+	return gc.GetStatus() == nodeagentv1.GameCacheStatus_AVAILABLE, nil
 }
 
 // Start 启动后台循环：周期性执行分支同步 + Enable 分支缓存检查/更新。

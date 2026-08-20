@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -62,6 +63,8 @@ func main() {
 	gameContainerConfigRepo := repogorm.NewGameContainerConfigRepo(db)
 	containerPortMappingRepo := repogorm.NewContainerPortMappingRepo(db)
 	steamBranchRepo := repogorm.NewSteamBranchRepo(db)
+	sampleRepo := repogorm.NewNodeResourceSampleRepo(db)
+	reservationRepo := repogorm.NewReservationRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. gRPC 客户端
@@ -84,25 +87,46 @@ func main() {
 	defer nodeAgentClients.CloseAll()
 
 	// ---------------------------------------------------------------
-	// 5. Scheduler（从 DB 加载 node_agent 列表用于调度）
+	// 5. 调度器（ResourceAwareScheduler：filter → score → 预留事务）
+	//    依赖 GameCacheManager（H5 缓存判定）与 GameContainerPortMapper（H4 端口预检）
 	// ---------------------------------------------------------------
-	nodeAgentIDs, err := nodeAgentRepo.ListEnabledIDs(context.Background())
-	if err != nil {
-		slog.Error("加载 node_agent 列表失败", "err", err)
-		os.Exit(1)
+	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
+	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
+
+	schedulerWeights := biz.DefaultScoreWeights()
+	if cfg.SchedulerScoreWeights != "" {
+		if err := json.Unmarshal([]byte(cfg.SchedulerScoreWeights), &schedulerWeights); err != nil {
+			slog.Error("解析调度评分权重失败，使用默认权重", "err", err)
+		}
 	}
-	scheduler := biz.NewSimpleScheduler(nodeAgentIDs)
-	slog.Info("Scheduler 就绪", "node_agent_ids", nodeAgentIDs)
+	scheduler := biz.NewResourceAwareScheduler(
+		nodeAgentRepo,
+		nodeRepo,
+		sampleRepo,
+		reservationRepo,
+		gameRepo,
+		gameContainerConfigRepo,
+		steamBranchRepo,
+		gameContainerPortMapper,
+		gameCacheManager,
+		schedulerWeights,
+		cfg.SchedulerUtilizationTarget,
+		cfg.SchedulerRegionForce,
+		cfg.SchedulerReservationRetry,
+		time.Duration(cfg.SchedulerHistoryWindowSec)*time.Second,
+		time.Duration(cfg.SchedulerHealthStaleSec)*time.Second,
+	)
+	slog.Info("Scheduler 就绪", "weights", schedulerWeights, "utilization_target", cfg.SchedulerUtilizationTarget)
 
 	// ---------------------------------------------------------------
 	// 6. ReconcileDispatcher
 	// ---------------------------------------------------------------
-	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
 	dispatcher := biz.NewReconcileDispatcher(
 		gameInstanceRepo,
 		nodeAgentRepo,
 		nodeRepo,
 		scheduler,
+		reservationRepo,
 		nodeAgentClients,
 		assetClient,
 		gameRepo,
@@ -119,11 +143,10 @@ func main() {
 	nodeUseCase := biz.NewNodeUseCase(nodeRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
 	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
-	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
 	fileSessionIssuer := biz.NewFileSessionIssuer(cfg.NodeAgentFileSecret, 30*time.Minute)
 
 	// ---------------------------------------------------------------
-	// 8. 启动 dispatcher
+	// 8. 启动后台组件
 	// ---------------------------------------------------------------
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -131,14 +154,33 @@ func main() {
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
 
-	// node_agent 存活检测：周期探测心跳，调度器过滤失联节点
+	// node_agent 存活检测 + 健康状态机 + 资源采样（3.4/§9）
 	healthMonitor := biz.NewNodeAgentHealthMonitor(
-		nodeAgentRepo, nodeRepo, nodeAgentClients, scheduler,
+		nodeAgentRepo, nodeRepo, sampleRepo, nodeAgentClients, scheduler,
 		time.Duration(cfg.HeartbeatProbeTimeoutMs)*time.Millisecond,
 		cfg.HeartbeatFailThreshold,
+		cfg.HealthDegradedPct,
 	)
 	healthMonitor.Start(ctx, time.Duration(cfg.HeartbeatCheckIntervalSec)*time.Second)
 	slog.Info("NodeAgentHealthMonitor 已启动", "interval_sec", cfg.HeartbeatCheckIntervalSec)
+
+	// 节点压力状态机（3.3）
+	pressureMonitor := biz.NewPressureMonitor(
+		nodeRepo, sampleRepo,
+		cfg.PressureWarningPct, cfg.PressureCriticalPct,
+		cfg.PressureObservePeriods, cfg.PressureRecoverPeriods,
+		time.Duration(cfg.SchedulerHistoryWindowSec)*time.Second,
+	)
+	pressureMonitor.Start(ctx, time.Duration(cfg.HeartbeatCheckIntervalSec)*time.Second)
+	slog.Info("PressureMonitor 已启动")
+
+	// 中间态卡死哨兵（7.4）
+	reaper := biz.NewStaleReservationReaper(
+		gameInstanceRepo, nodeAgentRepo, reservationRepo,
+		time.Duration(cfg.StaleReservationTimeoutMin)*time.Minute,
+	)
+	reaper.Start(ctx, time.Duration(cfg.StaleReservationScanSec)*time.Second)
+	slog.Info("StaleReservationReaper 已启动")
 
 	// 启动 GameCache 后台循环（分支同步 + Enable 分支缓存下载/更新）
 	gameCacheManager.Start(ctx, time.Duration(cfg.GameCacheReconcileInterval)*time.Second)

@@ -15,4 +15,6 @@ type NodeRepository interface {
 	ListAll(ctx context.Context) ([]*entity.Node, error)
 	// UpdateDynamicUsage 更新节点动态资源（ResourceSampler 心跳上报写入）
 	UpdateDynamicUsage(ctx context.Context, nodeID string, u entity.NodeDynamicUsage, reportedAt time.Time) error
+	// UpdatePressureStatus 更新节点压力状态（PressureMonitor，3.3）
+	UpdatePressureStatus(ctx context.Context, nodeID string, status entity.NodePressureStatus) error
 }

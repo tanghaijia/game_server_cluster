@@ -37,6 +37,9 @@ func NewGameContainerPortMapper(
  * LiteNetLib 走 UDP、rules 查询走 TCP）时，TCP/UDP 必须映射到【同一个宿主端口】，
  * 否则客户端连接宿主端口时一种协议打不到服务器。因此先按容器端口归并协议需求，
  * 再为每个容器端口分配宿主端口。
+ *
+ * MapPort = 幂等释放 + PlanPorts（计算）+ 写库；
+ * PlanPorts 只计算不写库（H4 预检 / 预留事务内写入用，§6.1/§7.1）。
  */
 func (g *GameContainerPortMapper) MapPort(
 	ctx context.Context, nodeAgent *entity.NodeAgent, game *entity.Game,
@@ -46,6 +49,23 @@ func (g *GameContainerPortMapper) MapPort(
 	if err := g.releaseIfExists(ctx, gameInstance.ID); err != nil {
 		return nil, err
 	}
+	mappings, err := g.PlanPorts(ctx, nodeAgent, game, gameInstance)
+	if err != nil {
+		return nil, err
+	}
+	for i := range mappings {
+		if err := g.portMappingRepo.Save(ctx, &mappings[i]); err != nil {
+			return nil, fmt.Errorf("save port mapping: %w", err)
+		}
+	}
+	return mappings, nil
+}
+
+// PlanPorts 计算端口映射方案（不写库、不释放既有映射）。
+// 供硬约束 H4 预检（§6.1）与预留事务内写入（§7.1）使用。
+func (g *GameContainerPortMapper) PlanPorts(
+	ctx context.Context, nodeAgent *entity.NodeAgent, game *entity.Game,
+	gameInstance *entity.GameInstance) ([]entity.ContainerPortMapping, error) {
 
 	config, err := g.gameContainerConfigRepo.GetByID(ctx, game.ContainerConfigID)
 	if err != nil {
@@ -56,8 +76,15 @@ func (g *GameContainerPortMapper) MapPort(
 	// 通过 env 注入 adapter（如 SDTD_SERVER_PORT=H），由 start.sh 改写游戏配置。
 	// 这样游戏通告的端口 == 宿主映射端口，EOS/Steam 发现与直连一致。
 	if config.InjectGamePort && config.PortMode == entity.PORT_MAPPING_MOD_NAT {
-		return g.mapPortInjected(ctx, nodeAgent, gameInstance, config)
+		return g.planPortsInjected(ctx, nodeAgent, gameInstance, config)
 	}
+	return g.planPortsNAT(ctx, nodeAgent, gameInstance, config)
+}
+
+// planPortsNAT 普通 NAT/HOST 模式的端口方案计算（原 MapPort 计算主体，不写库）
+func (g *GameContainerPortMapper) planPortsNAT(
+	ctx context.Context, nodeAgent *entity.NodeAgent, gameInstance *entity.GameInstance,
+	config *entity.GameContainerConfig) ([]entity.ContainerPortMapping, error) {
 
 	// 该 node_agent 上已占用的宿主端口（按协议区分，TCP/UDP 端口空间独立）
 	usedByNode, err := g.portMappingRepo.ListByNodeAgentId(ctx, nodeAgent.ID)
@@ -143,11 +170,6 @@ func (g *GameContainerPortMapper) MapPort(
 		}
 	}
 
-	for i := range mappings {
-		if err := g.portMappingRepo.Save(ctx, &mappings[i]); err != nil {
-			return nil, fmt.Errorf("save port mapping: %w", err)
-		}
-	}
 	return mappings, nil
 }
 
@@ -291,14 +313,14 @@ func newPortMappingID() string {
 	return "port-map-" + hex.EncodeToString(b)
 }
 
-// mapPortInjected 端口注入模式（方案A）：
+// planPortsInjected 端口注入模式（方案A，只计算不写库）：
 //   - 游戏端口块（is_game_port 起、覆盖到所有 >= 基准端口的 excerpt）分配一段连续宿主端口，
 //     并做 identity 映射（container_port == host_port），因为游戏会被注入 SDTD_SERVER_PORT=H，
 //     容器内监听端口就是 H，不再是模板里的固定端口。
 //   - 块内每个端口按需生成 TCP/UDP 两条映射（同宿主端口）。
 //   - 基准端口以下的 excerpt（如 telnet 8081）保持普通 NAT 映射。
 // 返回的映射中，游戏端口块基准对应的 TCP 映射标记 IsGamePort=true（供 connect/env 定位宿主端口）。
-func (g *GameContainerPortMapper) mapPortInjected(
+func (g *GameContainerPortMapper) planPortsInjected(
 	ctx context.Context, nodeAgent *entity.NodeAgent, gameInstance *entity.GameInstance,
 	config *entity.GameContainerConfig,
 ) ([]entity.ContainerPortMapping, error) {
@@ -389,12 +411,6 @@ func (g *GameContainerPortMapper) mapPortInjected(
 	}
 	mappings = append(mappings, extra...)
 
-	// 7. 落库
-	for i := range mappings {
-		if err := g.portMappingRepo.Save(ctx, &mappings[i]); err != nil {
-			return nil, fmt.Errorf("save port mapping: %w", err)
-		}
-	}
 	return mappings, nil
 }
 

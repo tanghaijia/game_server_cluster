@@ -108,13 +108,14 @@ func (uc *DebugUseCase) nodeAgentInfo(ctx context.Context, nodeAgentID string) m
 	return info
 }
 
-// schedulerState 读取调度器内部状态（仅 SimpleScheduler 有可读状态，其他实现返回类型名）
+// schedulerState 读取调度器内部状态（ResourceAwareScheduler 暴露统计，其他实现返回类型名）
 func (uc *DebugUseCase) schedulerState() map[string]any {
-	if s, ok := uc.scheduler.(*SimpleScheduler); ok {
+	if s, ok := uc.scheduler.(*ResourceAwareScheduler); ok {
 		return map[string]any{
-			"type":     "simple",
-			"node_ids": s.nodeIDs,
-			"counter":  s.counter,
+			"type":     "resource_aware",
+			"stats":    s.Stats(),
+			"queue":    s.QueueStats(),
+			"weights":  s.weights,
 		}
 	}
 	return map[string]any{"type": fmt.Sprintf("%T", uc.scheduler)}

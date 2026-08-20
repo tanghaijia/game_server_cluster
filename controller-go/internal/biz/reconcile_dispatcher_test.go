@@ -64,6 +64,10 @@ func (m *mockNodeAgentRepo) UpdateHealth(ctx context.Context, agentID string, al
 	return nil
 }
 
+func (m *mockNodeAgentRepo) UpdateHealthStatus(ctx context.Context, agentID string, status entity.NodeAgentHealthStatus) error {
+	return nil
+}
+
 var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
 
 type mockNodeRepo struct{}
@@ -77,13 +81,39 @@ func (m *mockNodeRepo) ListAll(ctx context.Context) ([]*entity.Node, error) {
 	return nil, nil
 }
 
+func (m *mockNodeRepo) UpdateDynamicUsage(ctx context.Context, nodeID string, u entity.NodeDynamicUsage, reportedAt time.Time) error {
+	return nil
+}
+
+func (m *mockNodeRepo) UpdatePressureStatus(ctx context.Context, nodeID string, status entity.NodePressureStatus) error {
+	return nil
+}
+
 var _ repository.NodeRepository = (*mockNodeRepo)(nil)
 
-type mockScheduler struct{}
+type mockReservationRepo struct{}
 
-func (m *mockScheduler) Schedule(gameInstance *entity.GameInstance) (string, error) {
-	return "node-agent-1", nil
+func (m *mockReservationRepo) TryReserve(ctx context.Context, req repository.ReserveTxRequest) error { return nil }
+func (m *mockReservationRepo) Release(ctx context.Context, nodeID string, req entity.ResourceRequest) error {
+	return nil
 }
+
+var _ repository.ReservationRepository = (*mockReservationRepo)(nil)
+
+type mockScheduler struct {
+	scheduleFunc func(ctx context.Context, inst *entity.GameInstance) (*ScheduleResult, error)
+}
+
+func (m *mockScheduler) Schedule(ctx context.Context, inst *entity.GameInstance) (*ScheduleResult, error) {
+	if m.scheduleFunc != nil {
+		return m.scheduleFunc(ctx, inst)
+	}
+	return &ScheduleResult{Outcome: OutcomeScheduled, NodeAgentID: "node-agent-1",
+		ResourceReq: entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30, DiskBytes: 10 << 30}}, nil
+}
+
+func (m *mockScheduler) CancelQueued(ctx context.Context, instanceID string) error { return nil }
+func (m *mockScheduler) QueueStats() map[string]any                           { return nil }
 
 type mockGameRepo struct{}
 
@@ -179,11 +209,29 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 	portMappingRepo := &mockPortMappingRepo{}
 	mapper := NewGameContainerPortMapper(portMappingRepo, &mockGameContainerConfigRepo{})
 
+	// 模拟 ResourceAwareScheduler：调度阶段完成端口分配（新架构下端口分配在 scheduler 内部完成）
+	sch := &mockScheduler{
+		scheduleFunc: func(ctx context.Context, inst *entity.GameInstance) (*ScheduleResult, error) {
+			mappings, err := mapper.PlanPorts(ctx,
+				&entity.NodeAgent{ID: "node-agent-1"},
+				&entity.Game{ID: "343050", ContainerConfigID: "cfg-1"}, inst)
+			if err != nil {
+				return nil, err
+			}
+			for i := range mappings {
+				portMappingRepo.mappings = append(portMappingRepo.mappings, &mappings[i])
+			}
+			return &ScheduleResult{Outcome: OutcomeScheduled, NodeAgentID: "node-agent-1",
+				ResourceReq: entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30, DiskBytes: 10 << 30}}, nil
+		},
+	}
+
 	rd := NewReconcileDispatcher(
 		repo,
 		&mockNodeAgentRepo{},
 		&mockNodeRepo{},
-		&mockScheduler{},
+		sch,
+		&mockReservationRepo{},
 		nodeagent.NewClientRegistry(),
 		nil,
 		&mockGameRepo{},
