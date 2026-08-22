@@ -367,6 +367,33 @@ controller 生成 env 的知识来源：端口注入变量名来自 `port_inject
 - `RegisterGameBuild` 请求携带 `adapter_metadata` + `schema_json`（gen_manifest.py 产物），随构建存储（`t_asset_service_game_builds` 加 `metadata_json`/`schema_json` 列）；
 - `ResolveGameBuild` 直接返回 build 自带的 metadata/schema——controller 不需要二次查询，按 adapter_version 匹配的缺口自动消失（schema 天然绑定 build）；
 
+#### 3.6.4 RegisterGameBuild：增量迭代注册（build_id 系统生成）
+
+> **注册模型（2026-08-21）**：build_id 是**系统生成标识**，管理员不可手填、不可编辑；
+> 注册是**基于旧版本的增量迭代**，管理员只提交需要更新的字段，其余从基准版本继承。
+
+- **build_id 生成规则**：`{game_id}-{channel}-{artifact_image_tag}`（channel 为空则 `{game_id}-{tag}`）。
+  请求中携带非空且与规则不符的 build_id → `InvalidArgument` 拒绝（防伪造/手改）；
+- **迭代基准 `base_build_id`**（可选）：显式指定从哪个 build 继承；缺省 = 同 channel 最新
+  `Available`。指定基准时请求 channel 与基准 channel 不一致 → 拒绝（迭代不可跨 channel）；
+- **继承规则**（请求中未显式设置的字段从基准继承）：
+
+  | 字段 | 未设置标记 | 继承来源 |
+  | --- | --- | --- |
+  | `channel` | `null` | 基准 |
+  | `adapter_id` | 空串 | 基准（若携带 schema 则优先 schema.adapter_id） |
+  | `adapter_version` | `0.0.0`（未解析） | 基准 |
+  | `upstream_version` / `artifact_uri` / `artifact_image_name` | `null` | 基准 |
+  | `adapter_metadata` / `schema_json` | `null`（未重新上传） | 基准 |
+  | `pinned` | `false` | 基准 |
+
+- **必填**：仅 `artifact_image_tag`（新版本身份，tag 不同 → build_id 不同 → 保留历史版本）；
+- **幂等**：同 build_id（同 tag 重传）覆盖更新，不触发 Deprecated；新版本注册后同 channel
+  旧 `Available`（非 pinned）自动标为 `Deprecated`；
+- **前端**：表单去掉 build_id 输入，改为「迭代基准」下拉 + 只读 build_id 实时预览
+  （`{game_id}-{channel}-{tag}`）；留空字段不提交（服务端继承），schema/metadata 不重新上传
+  则继承基准的配置能力。
+
 ### 3.7 目录结构（目标形态）
 
 ```text
@@ -402,6 +429,7 @@ adapters/
 | M4 ✅ | asset_service schema/metadata 随 GameBuild 注册（收敛模型）+ CI 契约测试 | **已完成**：`RegisterGameBuild` 携带 `adapter_metadata`+`schema_json`（builds 表加列），`ResolveGameBuild` 一次返回全套；**删除独立 adapter 实体**（RegisterAdapter/GetAdapterSchema RPC、AdapterRepository、adapter 表全部移除）；TOML 解析在 `adapters/tools/gen_manifest.py`（离线，tomllib）生成 metadata.json/schema.json/config-manifest.json（7dtd 69 项：35 player/28 platform/6 locked）；镜像 COPY config-manifest.json；start.sh 接入 `render_config_auto`；CI 契约脚本 `adapters/tools/ci-test.sh`；三端编译通过 | ✅ |
 | M5 ✅ | 前后端校验 + 配置表单 + GameBuild 注册适配 | **已完成**：schema 契约校验（key 唯一/control/apply/render/type/enum/render_file 绝对路径，asset_service 单测 23 过）；实例配置校验（controller `ValidateInstanceConfig`：未知 key/locked/int 范围/bool/enum）；`GET /api/games/:id/config-schema`（controller → platform-service 透传）；下单带 config（orders 表加列 → 支付时透传创建实例）；前端 MyOrdersView 按 schema 渲染 player 配置表单（string/int/bool/enum/secret + i18n 中英 + 默认值预填 + 分组）；**GameBuild 注册全链路适配**（admin 表单上传 schema.json/metadata.json → platform-service 透传 → controller → asset_service 校验落库，proto json tag 为 snake_case 天然兼容 gen_manifest 产物） | ✅ |
 | M6 ✅ | admin 平台配置页 + 实例配置更新 | **已完成**：`game_platform_configs` 表（按游戏全局，control=platform 项）+ `GET/PUT /api/games/:id/platform-config`（controller，仅 platform key 允许）+ platform-service 透传 `/api/admin/games/:id/platform-config` + 前端 AdminGamePlatformConfigView（schema 驱动表单）；启动时合并下发（platform 为底、player 覆盖，`mergedInstanceConfig`）；实例配置更新 `PUT /api/game-instances/:id/config`（schema 校验，重启生效）+ platform-service 透传 `/api/me/instances/:orderId/config` + MyServersView 配置弹层 | ✅ |
+| M7 ✅ | GameBuild 增量迭代注册（build_id 系统生成） | **已完成**（§3.6.4）：注册改为增量语义——`build_id` 由系统按 `{game_id}-{channel}-{tag}` 生成（请求自定义 → 拒绝），新增 `base_build_id` 迭代基准（缺省 = 同 channel 最新 Available），未显式设置字段（channel/adapter_id/adapter_version/upstream/artifact/metadata/schema/pinned）从基准继承，仅 `artifact_image_tag` 必填；proto 加 `base_build_id` 并重新生成（asset_service tonic + controller-go protoc）；controller/platform-service 去掉 build_id 手填校验、透传 base_build_id；前端 AdminGameBuildsView 改为「迭代基准」下拉 + 只读 build_id 预览 + 留空即继承（schema/metadata 不重新上传则继承）；asset_service 单测 31 过、三端编译 + 前端 vue-tsc 通过 | ✅ |
 | 后续 | 配置热更新（游戏内命令如 7dtd setgamepref）、配置版本对比/回滚 | — |
 
 > 建议：M1+M2 先行（纯适配器目录内重构，平台零感知，立即消除全部脚本重复）；M3 作为独立第二阶段（动平台两侧，需联调）。

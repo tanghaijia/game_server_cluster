@@ -157,34 +157,39 @@ func (h *GameHandler) GetConfigSchema(c *gin.Context) {
 }
 
 type registerGameBuildRequest struct {
-	BuildID            string `json:"build_id"`
-	GameID             string `json:"game_id"`
-	Channel            string `json:"channel"`
-	AdapterID          string `json:"adapter_id"`
-	AdapterVersion     string `json:"adapter_version"`
-	UpstreamVersion    string `json:"upstream_version"`
-	ArtifactURI        string `json:"artifact_uri"`
-	ArtifactImageName  string `json:"artifact_image_name"`
-	ArtifactImageTag   string `json:"artifact_image_tag"`
+	// 迭代注册（增量语义）：build_id 由系统按 {game_id}-{channel}-{tag} 生成，不接受手填；
+	// 除 artifact_image_tag 外字段均可省略，未提供的字段从 base_build_id（缺省 = 同
+	// channel 最新 Available）继承。
+	GameID            string `json:"game_id"`
+	Channel           string `json:"channel"`
+	BaseBuildID       string `json:"base_build_id"`
+	AdapterID         string `json:"adapter_id"`
+	AdapterVersion    string `json:"adapter_version"`
+	UpstreamVersion   string `json:"upstream_version"`
+	ArtifactURI       string `json:"artifact_uri"`
+	ArtifactImageName string `json:"artifact_image_name"`
+	ArtifactImageTag  string `json:"artifact_image_tag"`
 	// 收敛模型（M5）：适配器元数据/schema 随构建注册携带（gen_manifest.py 产物），
 	// 不再有独立 adapter 实体；以下字段可选，缺省时 build 无配置能力
 	AdapterMetadata *assetservicev1.AdapterMetadata `json:"adapter_metadata,omitempty"`
 	SchemaJSON      string                          `json:"schema_json,omitempty"`
 }
 
-// RegisterGameBuild 注册新构建版本
+// RegisterGameBuild 注册新构建版本（增量迭代：只传需要更新的字段）
 func (h *GameHandler) RegisterGameBuild(c *gin.Context) {
 	var req registerGameBuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
 	}
-	if req.BuildID == "" || req.GameID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "build_id and game_id are required"}); return
+	if req.GameID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "game_id is required"}); return
+	}
+	if req.ArtifactImageTag == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "artifact_image_tag is required（新版本身份）"}); return
 	}
 
 	resp, err := h.assetClient.RegisterGameBuild(c.Request.Context(), &assetservicev1.RegisterGameBuildRequest{
 		Build: &assetservicev1.GameBuild{
-			BuildId:            req.BuildID,
 			Game:               &assetservicev1.Game{Id: req.GameID},
 			Channel:            optionalString(req.Channel),
 			AdapterId:          req.AdapterID,
@@ -198,6 +203,7 @@ func (h *GameHandler) RegisterGameBuild(c *gin.Context) {
 			// asset_service 的 rpc 层要求 status 非 0；新注册默认 Available（asset_service 内部也会置 Available）
 			Status:             assetservicev1.BuildStatus_BUILD_STATUS_AVAILABLE,
 		},
+		BaseBuildId: optionalString(req.BaseBuildID),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return

@@ -103,6 +103,7 @@ where
             .service
             .register_game_build(RegisterBuildRequest {
                 build: map_build_from_proto(build)?,
+                base_build_id: request.base_build_id,
             })
             .await
             .map_err(map_error)?;

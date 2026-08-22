@@ -45,7 +45,13 @@ message ResolveGameBuildResponse {
 }
 
 message RegisterGameBuildRequest {
+  // 增量注册（迭代语义）：
+  // - build_id 由系统按 {game_id}-{channel}-{artifact_image_tag} 生成，请求中不可自定义；
+  // - 除 artifact_image_tag 外的字段均可省略，未显式设置的字段从 base_build_id 指定的
+  //   build 继承（base_build_id 缺省时 = 同 channel 最新 Available）。
   GameBuild build = 1;
+  // 迭代基准 build_id；省略时自动取同 channel 最新可用版本（无则按全新注册处理）
+  optional string base_build_id = 2;
 }
 
 message RegisterGameBuildResponse {

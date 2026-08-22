@@ -90,8 +90,7 @@ async fn seed_demo_builds(
         })
         .await?;
     service
-        .register_game_build(RegisterBuildRequest {
-            build: GameBuild {
+        .register_game_build(RegisterBuildRequest::new(GameBuild {
                 build_id: BuildId("dst-public-0.2.2".to_string()),
                 game_id: game_id,
                 channel: Some("public".to_string()),
@@ -109,7 +108,7 @@ async fn seed_demo_builds(
                 created_at: now,
                 updated_at: now,
             },
-        })
+        ))
         .await?;
     Ok(())
 }

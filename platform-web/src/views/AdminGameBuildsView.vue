@@ -4,57 +4,73 @@
       <RouterLink to="/admin/games" class="text-sm text-muted-foreground hover:underline">← 游戏管理</RouterLink>
       <RouterLink :to="{ name: 'admin-game-platform-config', params: { gameId } }" class="ml-3 text-sm text-muted-foreground hover:underline">平台配置</RouterLink>
       <h1 class="mt-1 text-2xl font-semibold">构建版本 · {{ gameId }}</h1>
-      <p class="text-sm text-muted-foreground">管理游戏的资产构建版本（channel 分组、历史版本、注册新构建）。</p>
+      <p class="text-sm text-muted-foreground">管理游戏的资产构建版本（channel 分组、历史版本、增量迭代注册）。</p>
     </div>
 
-    <!-- 注册新构建 -->
+    <!-- 增量迭代注册：build_id 系统生成；选择基准后只填需要更新的字段 -->
     <form class="grid max-w-3xl grid-cols-2 gap-3 rounded-lg border p-4" @submit.prevent="onRegister">
-      <div>
-        <label class="mb-1 block text-sm font-medium">build_id *</label>
-        <input v-model="form.build_id" type="text" placeholder="如 294420-public-0.3.0" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      <div class="col-span-2">
+        <label class="mb-1 block text-sm font-medium">迭代基准（可选）</label>
+        <select v-model="form.base_build_id" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2">
+          <option value="">全新注册（无基准，需填写全部必填项）</option>
+          <option v-for="b in builds" :key="b.build_id" :value="b.build_id">
+            {{ b.build_id }}（{{ b.channel || '无 channel' }} · {{ statusText(b.status ?? 0) }}）
+          </option>
+        </select>
+        <p class="mt-1 text-[11px] text-muted-foreground">
+          选择基准后，未填写的字段（上游版本 / 镜像 / 适配器版本 / 配置 schema / 元数据）自动继承该版本，无需重复录入。
+        </p>
       </div>
       <div>
         <label class="mb-1 block text-sm font-medium">channel</label>
-        <input v-model="form.channel" type="text" placeholder="如 public / beta" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <input v-model="form.channel" type="text" :placeholder="baseBuild ? baseBuild.channel || '如 public' : '如 public'" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <p v-if="baseBuild" class="mt-1 text-[11px] text-muted-foreground">留空继承基准：{{ baseBuild.channel || '（无）' }}</p>
       </div>
       <div>
-        <label class="mb-1 block text-sm font-medium">adapter_version</label>
-        <input v-model="form.adapter_version" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
-      </div>
-      <div>
-        <label class="mb-1 block text-sm font-medium">upstream_version</label>
-        <input v-model="form.upstream_version" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
-      </div>
-      <div>
-        <label class="mb-1 block text-sm font-medium">artifact_image_name</label>
-        <input v-model="form.artifact_image_name" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
-      </div>
-      <div>
-        <label class="mb-1 block text-sm font-medium">artifact_image_tag</label>
-        <input v-model="form.artifact_image_tag" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <label class="mb-1 block text-sm font-medium">artifact_image_tag *</label>
+        <input v-model="form.artifact_image_tag" type="text" placeholder="新版本身份，如 0.4.1" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <p class="mt-1 text-[11px] text-muted-foreground">新版本必须更换 tag，build_id 由系统按 game-channel-tag 生成</p>
       </div>
       <div class="col-span-2">
-        <label class="mb-1 block text-sm font-medium">artifact_uri</label>
-        <input v-model="form.artifact_uri" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <label class="mb-1 block text-sm font-medium">build_id（系统生成，只读预览）</label>
+        <input :value="generatedBuildId" readonly class="w-full cursor-not-allowed rounded-md border bg-muted px-3 py-2 font-mono text-sm outline-none" />
       </div>
-      <!-- M5：配置 schema / 适配器元数据（gen_manifest.py 产物，可选） -->
+      <div>
+        <label class="mb-1 block text-sm font-medium">upstream_version（留空继承）</label>
+        <input v-model="form.upstream_version" type="text" :placeholder="baseBuild?.upstream_version || '留空继承'" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium">artifact_image_name（留空继承）</label>
+        <input v-model="form.artifact_image_name" type="text" :placeholder="baseBuild?.artifact_image_name || '如 7daystodie-adapter'" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <div>
+        <label class="mb-1 block text-sm font-medium">adapter_version（留空继承）</label>
+        <input v-model="form.adapter_version" type="text" :placeholder="baseBuild?.adapter_version || '如 0.4.0'" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <div class="col-span-2">
+        <label class="mb-1 block text-sm font-medium">artifact_uri（留空继承）</label>
+        <input v-model="form.artifact_uri" type="text" :placeholder="baseBuild?.artifact_uri || '镜像仓库地址'" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <!-- 配置能力：不重新上传则继承基准的 schema/metadata（gen_manifest.py 产物） -->
       <div class="col-span-2 rounded-md border border-dashed p-3">
         <div class="mb-2 text-xs font-medium text-muted-foreground">
-          配置能力（可选）：上传 <code class="rounded bg-muted px-1">schema.json</code> 与
+          配置能力（可选）：重新上传 <code class="rounded bg-muted px-1">schema.json</code> 与
           <code class="rounded bg-muted px-1">metadata.json</code>（
-          <code class="rounded bg-muted px-1">python adapters/tools/gen_manifest.py …</code> 产物），
-          注册后创建实例即可用平台配置表单。
+          <code class="rounded bg-muted px-1">python adapters/tools/gen_manifest.py …</code> 产物）以覆盖基准版本，
+          不传则继承基准的配置能力。
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="mb-1 block text-sm font-medium">schema.json</label>
             <input type="file" accept=".json" class="w-full text-sm" @change="readJson($event, 'schema_json')" />
-            <p v-if="form.schema_json" class="mt-1 truncate text-[11px] text-green-600">已载入（{{ schemaItems }} 个配置项）</p>
+            <p v-if="form.schema_json" class="mt-1 truncate text-[11px] text-green-600">已载入覆盖（{{ schemaItems }} 个配置项）</p>
+            <p v-else-if="baseBuild?.schema_json" class="mt-1 text-[11px] text-muted-foreground">将继承基准的 schema</p>
           </div>
           <div>
             <label class="mb-1 block text-sm font-medium">metadata.json</label>
             <input type="file" accept=".json" class="w-full text-sm" @change="readJson($event, 'adapter_metadata')" />
-            <p v-if="form.adapter_metadata" class="mt-1 truncate text-[11px] text-green-600">已载入</p>
+            <p v-if="form.adapter_metadata" class="mt-1 truncate text-[11px] text-green-600">已载入覆盖</p>
+            <p v-else-if="baseBuild?.adapter_metadata" class="mt-1 text-[11px] text-muted-foreground">将继承基准的元数据</p>
           </div>
         </div>
       </div>
@@ -88,7 +104,7 @@
             <td class="px-4 py-3 font-mono text-xs">{{ b.artifact_image_name }}:{{ b.artifact_image_tag || '-' }}</td>
             <td class="px-4 py-3">
               <span class="rounded px-2 py-0.5 text-xs" :class="statusClass(b.status ?? 0)">
-                {{ BUILD_STATUS[b.status ?? 0] ?? 'unknown' }}
+                {{ statusText(b.status ?? 0) }}
               </span>
             </td>
             <td class="px-4 py-3 text-xs text-muted-foreground">{{ b.created_at ? new Date(b.created_at).toLocaleString() : '-' }}</td>
@@ -114,8 +130,18 @@ const gameId = route.params.gameId as string
 
 const builds = ref<GameBuild[]>([])
 const error = ref('')
-// form 支持平铺字符串字段 + schema_json（JSON 字符串）+ adapter_metadata（对象）
+// 增量表单：空字段不提交，服务端从迭代基准继承
 const form = reactive<Record<string, any>>({})
+
+// 当前选中的迭代基准
+const baseBuild = computed<GameBuild | undefined>(() => builds.value.find((b) => b.build_id === form.base_build_id))
+
+// build_id 预览：系统按 {game_id}-{channel}-{tag} 生成
+const generatedBuildId = computed(() => {
+  const ch = (form.channel || baseBuild.value?.channel || '').trim()
+  const tag = (form.artifact_image_tag || '').trim()
+  return ch ? `${gameId}-${ch}-${tag}` : `${gameId}-${tag}`
+})
 
 // schema.json 已载入时的配置项数量（展示用）
 const schemaItems = computed(() => {
@@ -127,8 +153,12 @@ const schemaItems = computed(() => {
   }
 })
 
+function statusText(s: number) {
+  return BUILD_STATUS[s] ?? 'unknown'
+}
+
 function statusClass(s: number) {
-  const st = BUILD_STATUS[s] ?? 'unknown'
+  const st = statusText(s)
   if (st === 'available') return 'bg-green-100 text-green-700'
   if (st === 'deprecated') return 'bg-yellow-100 text-yellow-700'
   if (st === 'deleted' || st === 'unavailable') return 'bg-red-100 text-red-700'
@@ -167,14 +197,34 @@ async function load() {
   }
 }
 
+// 提交增量：只发送非空字段（schema_json/adapter_metadata 只有重新上传才携带）
+function buildPayload(): Record<string, any> {
+  const payload: Record<string, any> = {}
+  const fields: Array<[string, string]> = [
+    ['channel', form.channel],
+    ['base_build_id', form.base_build_id],
+    ['artifact_image_tag', form.artifact_image_tag],
+    ['upstream_version', form.upstream_version],
+    ['artifact_uri', form.artifact_uri],
+    ['adapter_version', form.adapter_version],
+    ['artifact_image_name', form.artifact_image_name],
+  ]
+  for (const [key, value] of fields) {
+    if (typeof value === 'string' && value.trim() !== '') payload[key] = value.trim()
+  }
+  if (form.schema_json) payload.schema_json = form.schema_json
+  if (form.adapter_metadata) payload.adapter_metadata = form.adapter_metadata
+  return payload
+}
+
 async function onRegister() {
   error.value = ''
-  if (!form.build_id) {
-    error.value = '请填写 build_id'
+  if (!form.artifact_image_tag || !String(form.artifact_image_tag).trim()) {
+    error.value = '请填写 artifact_image_tag（新版本身份）'
     return
   }
   try {
-    await registerGameBuild(gameId, { ...form })
+    await registerGameBuild(gameId, buildPayload())
     Object.keys(form).forEach((k) => (form[k] = ''))
     await load()
   } catch (e: any) {

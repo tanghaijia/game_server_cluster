@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        instance_data_path, validate_adapter_schema, AdapterSchema, BuildCompatibility, BuildId,
-        BuildStatus, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord,
-        SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
+        instance_data_path, validate_adapter_schema, AdapterId, AdapterSchema, AdapterVersion,
+        BuildCompatibility, BuildId, BuildStatus, GameBuild, ModManifest, ModManifestId,
+        SnapshotId, SnapshotRecord, SnapshotRestorePlan, SnapshotStatus, SnapshotType,
+        VersionSelector,
     },
     error::AssetServiceError,
     ports::{
@@ -14,7 +15,20 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct RegisterBuildRequest {
+    /// 增量注册（迭代语义）：仅 artifact_image_tag 必填，其余字段未显式设置时从 base 继承
     pub build: GameBuild,
+    /// 迭代基准 build_id；缺省 = 同 channel 最新 Available（无则按全新注册处理）
+    pub base_build_id: Option<String>,
+}
+
+impl RegisterBuildRequest {
+    /// 全新注册（无迭代基准）
+    pub fn new(build: GameBuild) -> Self {
+        Self {
+            build,
+            base_build_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -129,33 +143,26 @@ where
         Ok(build)
     }
 
+    /// 注册游戏构建（增量迭代语义）。
+    ///
+    /// 规则：
+    /// 1. `artifact_image_tag` 必填（新版本身份）；`build_id` 一律由系统按
+    ///    `{game_id}-{channel}-{tag}` 生成，请求中携带自定义 build_id → 拒绝；
+    /// 2. `base_build_id` 指定迭代基准（缺省 = 同 channel 最新 Available）；请求中
+    ///    未显式设置的字段（channel / adapter_id / adapter_version / upstream_version /
+    ///    artifact_uri / artifact_image_name / adapter_metadata / schema_json / pinned）
+    ///    从 base 继承，避免重复录入旧字段；
+    /// 3. 携带 schema 时校验契约，并以其 adapter_id 作为权威（build 未显式提供时继承，
+    ///    显式提供且冲突 → 拒绝）；
+    /// 4. 同 build_id（同 tag 重传）幂等覆盖更新；新版本将同 channel 旧 Available
+    ///    （非 pinned）标为 Deprecated。
     pub async fn register_game_build(
         &self,
         request: RegisterBuildRequest,
     ) -> Result<GameBuild, AssetServiceError> {
         let mut build = request.build;
 
-        // schema 契约校验（携带时）：反序列化 + 规则校验 + adapter_id 一致性
-        if let Some(schema_json) = &build.schema_json {
-            let schema: AdapterSchema = serde_json::from_str(schema_json).map_err(|e| {
-                AssetServiceError::InvalidRequest {
-                    message: format!("schema_json 解析失败: {e}"),
-                }
-            })?;
-            validate_adapter_schema(&schema)
-                .map_err(|message| AssetServiceError::InvalidRequest { message })?;
-            if schema.adapter_id != build.adapter_id.0 {
-                return Err(AssetServiceError::InvalidRequest {
-                    message: format!(
-                        "schema.adapter_id ({}) 与 build.adapter_id ({}) 不一致",
-                        schema.adapter_id, build.adapter_id.0
-                    ),
-                });
-            }
-        }
-
-        // 镜像 tag 即版本：build_id 由规则生成，保证不同 tag → 不同 build_id，
-        // 从而同 channel 下保留多版本历史（旧版本不会被覆盖）。
+        // build_id 不可自定义：由 {game_id}-{channel}-{tag} 规则生成
         let tag =
             build
                 .artifact_image_tag
@@ -168,15 +175,119 @@ where
                 message: "artifact_image_tag must not be empty".to_string(),
             });
         }
+        if build.game_id.trim().is_empty() {
+            return Err(AssetServiceError::InvalidRequest {
+                message: "game_id is required".to_string(),
+            });
+        }
+
+        // 解析迭代基准：显式 base_build_id，或同 channel 最新 Available
+        let base: Option<GameBuild> = match &request.base_build_id {
+            Some(base_id) if !base_id.trim().is_empty() => {
+                let base = self
+                    .builds
+                    .get(&BuildId(base_id.clone()))
+                    .await?
+                    .ok_or_else(|| AssetServiceError::BuildNotFound {
+                        build_id: base_id.clone(),
+                    })?;
+                if let Some(req_channel) = &build.channel {
+                    if base.channel.as_deref() != Some(req_channel.as_str()) {
+                        return Err(AssetServiceError::InvalidRequest {
+                            message: format!(
+                                "迭代基准 {} 属于 channel {:?}，与请求 channel {:?} 不一致",
+                                base_id, base.channel, build.channel
+                            ),
+                        });
+                    }
+                }
+                Some(base)
+            }
+            _ => {
+                let channel = build.channel.clone();
+                let candidates = self.builds.list_by_game(&build.game_id).await?;
+                candidates.into_iter().find(|c| {
+                    c.channel == channel && c.status == BuildStatus::Available
+                })
+            }
+        };
+
+        // 增量合并：未显式设置的字段从 base 继承
+        if let Some(base) = &base {
+            if build.channel.is_none() {
+                build.channel = base.channel.clone();
+            }
+            if build.adapter_id.0.is_empty() {
+                build.adapter_id = base.adapter_id.clone();
+            }
+            if build.adapter_version == AdapterVersion::new(0, 0, 0) {
+                build.adapter_version = base.adapter_version.clone();
+            }
+            if build.upstream_version.is_none() {
+                build.upstream_version = base.upstream_version.clone();
+            }
+            if build.artifact_uri.is_none() {
+                build.artifact_uri = base.artifact_uri.clone();
+            }
+            if build.artifact_image_name.is_none() {
+                build.artifact_image_name = base.artifact_image_name.clone();
+            }
+            if build.adapter_metadata.is_none() {
+                build.adapter_metadata = base.adapter_metadata.clone();
+            }
+            if build.schema_json.is_none() {
+                build.schema_json = base.schema_json.clone();
+            }
+            if !build.pinned {
+                build.pinned = base.pinned;
+            }
+        }
+
+        // schema 契约校验（合并后的最终形态）：反序列化 + 规则校验。
+        // 收敛模型：schema 是 adapter_id 的权威来源 —— build 未显式携带 adapter_id 时
+        // 从 schema 继承；两者都显式提供且不一致才算冲突。
+        if let Some(schema_json) = &build.schema_json {
+            let schema: AdapterSchema = serde_json::from_str(schema_json).map_err(|e| {
+                AssetServiceError::InvalidRequest {
+                    message: format!("schema_json 解析失败: {e}"),
+                }
+            })?;
+            validate_adapter_schema(&schema)
+                .map_err(|message| AssetServiceError::InvalidRequest { message })?;
+            if build.adapter_id.0.is_empty() {
+                build.adapter_id = AdapterId(schema.adapter_id.clone());
+            } else if schema.adapter_id != build.adapter_id.0 {
+                return Err(AssetServiceError::InvalidRequest {
+                    message: format!(
+                        "schema.adapter_id ({}) 与 build.adapter_id ({}) 不一致",
+                        schema.adapter_id, build.adapter_id.0
+                    ),
+                });
+            }
+        }
+
+        // build_id 由系统生成：{game_id}-{channel}-{tag}，请求传入的 build_id 被忽略
+        // 并校验——非空且不等于生成值视为尝试自定义，拒绝。
         let channel = build.channel.clone().unwrap_or_default();
-        build.build_id = BuildId(if channel.is_empty() {
+        let generated = BuildId(if channel.is_empty() {
             format!("{}-{}", build.game_id, tag)
         } else {
             format!("{}-{}-{}", build.game_id, channel, tag)
         });
+        if !build.build_id.0.is_empty() && build.build_id != generated {
+            return Err(AssetServiceError::InvalidRequest {
+                message: format!(
+                    "build_id 由系统按 {{game_id}}-{{channel}}-{{tag}} 规则生成，不可自定义: {}",
+                    build.build_id.0
+                ),
+            });
+        }
+        build.build_id = generated;
 
         // 已存在同 build_id（同 tag 幂等重传）→ 仅覆盖更新，不触发 Deprecated 逻辑
         if self.builds.get(&build.build_id).await?.is_some() {
+            build.status = BuildStatus::Available;
+            build.updated_at = self.clock.now();
             self.builds.save(&build).await?;
             return Ok(build);
         }
@@ -478,7 +589,8 @@ mod tests {
         now: chrono::DateTime<chrono::Utc>,
     ) -> GameBuild {
         GameBuild {
-            build_id: BuildId("ignored".to_string()),
+            // 系统生成：build_id 由 {game_id}-{channel}-{tag} 规则派生，测试里留空
+            build_id: BuildId(String::new()),
             game_id: game_id.to_string(),
             channel: channel.map(|s| s.to_string()),
             adapter_id: AdapterId("adapter".to_string()),
@@ -561,9 +673,9 @@ mod tests {
         let service = new_service();
         let now = Utc::now();
         let build = service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         assert_eq!(build.build_id, BuildId("dst-public-0.2.2".to_string()));
@@ -576,17 +688,17 @@ mod tests {
         let now = Utc::now();
 
         let v1 = service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         assert_eq!(v1.status, BuildStatus::Available);
 
         let v2 = service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.3.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.3.0", now),
+            ))
             .await
             .unwrap();
         assert_eq!(v2.status, BuildStatus::Available);
@@ -605,16 +717,16 @@ mod tests {
         let now = Utc::now();
 
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.3.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.3.0", now),
+            ))
             .await
             .unwrap();
         // 同 tag 重复注册：不触发 Deprecated（没有其他 build 被误标）
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.3.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.3.0", now),
+            ))
             .await
             .unwrap();
 
@@ -629,16 +741,16 @@ mod tests {
         let now = Utc::now();
 
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         // beta channel 发布不影响 public channel 的可用性
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("beta"), "0.4.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("beta"), "0.4.0", now),
+            ))
             .await
             .unwrap();
 
@@ -652,15 +764,15 @@ mod tests {
         let now = Utc::now();
 
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.10.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.10.0", now),
+            ))
             .await
             .unwrap();
 
@@ -683,15 +795,15 @@ mod tests {
 
         // 先注册旧版本，再注册新版本 → 旧版本变 Deprecated，新版本 Available
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.3.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.3.0", now),
+            ))
             .await
             .unwrap();
 
@@ -731,15 +843,15 @@ mod tests {
         let now = Utc::now();
 
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.2.2", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.2.2", now),
+            ))
             .await
             .unwrap();
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("dst", Some("public"), "0.3.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("dst", Some("public"), "0.3.0", now),
+            ))
             .await
             .unwrap();
 
@@ -767,9 +879,8 @@ mod tests {
 
         // 无 channel 的 build：build_id 只含 game_id + tag
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("custom", None, "1.0.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("custom", None, "1.0.0", now)))
             .await
             .unwrap();
         let build = service.get_game_build("custom-1.0.0").await.unwrap();
@@ -777,9 +888,8 @@ mod tests {
 
         // 无 channel 也能注册第二个版本，且互不覆盖
         service
-            .register_game_build(RegisterBuildRequest {
-                build: make_build("custom", None, "1.1.0", now),
-            })
+            .register_game_build(RegisterBuildRequest::new(
+                make_build("custom", None, "1.1.0", now)))
             .await
             .unwrap();
         let v1 = service.get_game_build("custom-1.0.0").await.unwrap();
@@ -796,9 +906,231 @@ mod tests {
         build.artifact_image_tag = None;
 
         let err = service
-            .register_game_build(RegisterBuildRequest { build })
+            .register_game_build(RegisterBuildRequest::new(build))
             .await
             .unwrap_err();
         assert!(matches!(err, AssetServiceError::InvalidRequest { .. }));
+    }
+
+    // 收敛模型：schema 是 adapter_id 的权威来源。build 未显式携带 adapter_id 时
+    // 应从 schema 继承，而不是报"不一致"错误（前端只需上传 schema.json）。
+    #[tokio::test]
+    async fn test_register_derives_adapter_id_from_schema() {
+        let service = new_service();
+        let now = Utc::now();
+        let mut build = make_build("7daystodie", Some("public"), "0.4.0", now);
+        build.adapter_id = AdapterId(String::new()); // 前端不上传 adapter_id
+        build.schema_json = Some(
+            serde_json::json!({
+                "adapter_id": "7daystodie",
+                "game_id": "7daystodie",
+                "settings": [
+                    {
+                        "key": "ServerName",
+                        "type": "string",
+                        "control": "player",
+                        "apply": "always",
+                        "render": "xml_property",
+                        "default": "My Server",
+                        "min": null,
+                        "max": null,
+                        "enum_values": null,
+                        "secret": false,
+                        "label_key": null,
+                        "description_key": null,
+                        "group_key": null
+                    }
+                ],
+                "render_file": "/data/serverconfig.xml",
+                "i18n": {"fallback": "en"}
+            })
+            .to_string(),
+        );
+
+        let registered = service
+            .register_game_build(RegisterBuildRequest::new(build))
+            .await
+            .unwrap();
+        assert_eq!(registered.adapter_id, AdapterId("7daystodie".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_register_adapter_id_conflict_is_rejected() {
+        let service = new_service();
+        let now = Utc::now();
+        let mut build = make_build("7daystodie", Some("public"), "0.4.0", now);
+        build.adapter_id = AdapterId("dst".to_string()); // 与 schema 冲突
+        build.schema_json = Some(
+            serde_json::json!({
+                "adapter_id": "7daystodie",
+                "game_id": "7daystodie",
+                "settings": [],
+                "render_file": null,
+                "i18n": {"fallback": "en"}
+            })
+            .to_string(),
+        );
+
+        let err = service
+            .register_game_build(RegisterBuildRequest::new(build))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AssetServiceError::InvalidRequest { .. }));
+    }
+
+    // ── 迭代注册：build_id 系统生成 + 未显式字段从 base 继承 ──
+
+    #[tokio::test]
+    async fn test_register_rejects_custom_build_id() {
+        let service = new_service();
+        let now = Utc::now();
+        let mut build = make_build("dst", Some("public"), "0.2.2", now);
+        build.build_id = BuildId("my-custom-id".to_string()); // 系统生成，不可自定义
+
+        let err = service
+            .register_game_build(RegisterBuildRequest::new(build))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AssetServiceError::InvalidRequest { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_register_iteration_inherits_from_channel_latest() {
+        let service = new_service();
+        let now = Utc::now();
+
+        // 基线：携带上游版本 / 镜像名 / 适配器版本 / schema
+        let mut base = make_build("7daystodie", Some("public"), "0.4.0", now);
+        base.upstream_version = Some("1.0.1".to_string());
+        base.artifact_image_name = Some("7daystodie-adapter".to_string());
+        base.adapter_version = AdapterVersion::new(0, 4, 0);
+        service
+            .register_game_build(RegisterBuildRequest::new(base))
+            .await
+            .unwrap();
+
+        // 迭代：只换镜像 tag，其余字段不重复提供 → 从同 channel 最新 Available 继承
+        let mut iterated_build = make_build("7daystodie", Some("public"), "0.4.1", now);
+        iterated_build.artifact_image_name = None; // 前端不提供 → 继承 base
+        iterated_build.adapter_id = AdapterId(String::new()); // 前端不上传 → 继承 base
+        iterated_build.adapter_version = AdapterVersion::new(0, 0, 0); // 未提供 → 继承 base
+        let iterated = service
+            .register_game_build(RegisterBuildRequest::new(iterated_build))
+            .await
+            .unwrap();
+        assert_eq!(iterated.build_id, BuildId("7daystodie-public-0.4.1".to_string()));
+        assert_eq!(iterated.upstream_version.as_deref(), Some("1.0.1"));
+        assert_eq!(iterated.artifact_image_name.as_deref(), Some("7daystodie-adapter"));
+        assert_eq!(iterated.adapter_version, AdapterVersion::new(0, 4, 0));
+    }
+
+    #[tokio::test]
+    async fn test_register_iteration_explicit_base_build_id() {
+        let service = new_service();
+        let now = Utc::now();
+
+        // 两个 channel 各有基线，显式指定 base_build_id 精确迭代
+        let mut v1 = make_build("dst", Some("public"), "1.0.0", now);
+        v1.upstream_version = Some("up-1".to_string());
+        service
+            .register_game_build(RegisterBuildRequest::new(v1))
+            .await
+            .unwrap();
+        let mut beta = make_build("dst", Some("beta"), "1.0.0", now);
+        beta.upstream_version = Some("up-beta".to_string());
+        service
+            .register_game_build(RegisterBuildRequest::new(beta))
+            .await
+            .unwrap();
+
+        let iterated = service
+            .register_game_build(RegisterBuildRequest {
+                build: make_build("dst", Some("beta"), "1.0.1", now),
+                base_build_id: Some("dst-beta-1.0.0".to_string()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(iterated.build_id, BuildId("dst-beta-1.0.1".to_string()));
+        assert_eq!(iterated.upstream_version.as_deref(), Some("up-beta"));
+    }
+
+    #[tokio::test]
+    async fn test_register_iteration_cross_channel_rejected() {
+        let service = new_service();
+        let now = Utc::now();
+        let mut base = make_build("dst", Some("public"), "1.0.0", now);
+        service
+            .register_game_build(RegisterBuildRequest::new(base))
+            .await
+            .unwrap();
+
+        // 请求 channel 与 base 的 channel 不一致 → 拒绝
+        let err = service
+            .register_game_build(RegisterBuildRequest {
+                build: make_build("dst", Some("beta"), "1.0.1", now),
+                base_build_id: Some("dst-public-1.0.0".to_string()),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AssetServiceError::InvalidRequest { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_register_iteration_base_not_found() {
+        let service = new_service();
+        let now = Utc::now();
+        let err = service
+            .register_game_build(RegisterBuildRequest {
+                build: make_build("dst", Some("public"), "1.0.1", now),
+                base_build_id: Some("dst-public-0.0.1".to_string()),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AssetServiceError::BuildNotFound { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_register_iteration_keeps_base_schema_and_metadata() {
+        let service = new_service();
+        let now = Utc::now();
+
+        // 基线带 schema + 端口注入元数据
+        let mut base = make_build("7daystodie", Some("public"), "0.4.0", now);
+        base.adapter_id = AdapterId(String::new()); // adapter_id 从 schema 派生
+        base.schema_json = Some(
+            serde_json::json!({
+                "adapter_id": "7daystodie",
+                "game_id": "7daystodie",
+                "settings": [],
+                "render_file": "/data/serverconfig.xml",
+                "i18n": {"fallback": "en"}
+            })
+            .to_string(),
+        );
+        base.adapter_metadata = Some(crate::domain::AdapterMetadata {
+            port_inject_env: Some("GAME_HOST_PORT".to_string()),
+            start_script: "/scripts/start.sh".to_string(),
+            save_script: "/scripts/save.sh".to_string(),
+            stop_script: "/scripts/stop.sh".to_string(),
+            players_script: "/scripts/players.sh".to_string(),
+            health_script: "/scripts/health.sh".to_string(),
+        });
+        service
+            .register_game_build(RegisterBuildRequest::new(base))
+            .await
+            .unwrap();
+
+        // 迭代不重复上传 schema/metadata → 继承
+        let mut iterated_build = make_build("7daystodie", Some("public"), "0.4.1", now);
+        iterated_build.adapter_id = AdapterId(String::new()); // 前端不上传 → 继承 base
+        let iterated = service
+            .register_game_build(RegisterBuildRequest::new(iterated_build))
+            .await
+            .unwrap();
+        assert!(iterated.schema_json.is_some());
+        assert_eq!(
+            iterated.adapter_metadata.as_ref().and_then(|m| m.port_inject_env.as_deref()),
+            Some("GAME_HOST_PORT")
+        );
     }
 }

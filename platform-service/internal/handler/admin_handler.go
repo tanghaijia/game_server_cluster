@@ -442,35 +442,36 @@ func (h *AdminHandler) ListGameBuilds(c *gin.Context) {
 }
 
 type registerGameBuildRequest struct {
-	BuildID           string         `json:"build_id"`
+	// 迭代注册（增量语义）：build_id 由系统按 {game_id}-{channel}-{tag} 生成，不接受手填；
+	// 除 artifact_image_tag 外字段均可省略，未提供的字段从 base_build_id（缺省 = 同
+	// channel 最新 Available）继承。
 	Channel           string         `json:"channel"`
+	BaseBuildID       string         `json:"base_build_id"`
 	AdapterID         string         `json:"adapter_id"`
 	AdapterVersion    string         `json:"adapter_version"`
 	UpstreamVersion   string         `json:"upstream_version"`
 	ArtifactURI       string         `json:"artifact_uri"`
 	ArtifactImageName string         `json:"artifact_image_name"`
 	ArtifactImageTag  string         `json:"artifact_image_tag"`
-	// M5：配置 schema / 适配器元数据（gen_manifest.py 产物，可选）
+	// M5：配置 schema / 适配器元数据（gen_manifest.py 产物，可选；不提供则从 base 继承）
 	SchemaJSON        string         `json:"schema_json,omitempty"`
 	AdapterMetadata   map[string]any `json:"adapter_metadata,omitempty"`
 }
 
-// RegisterGameBuild 注册新构建
+// RegisterGameBuild 注册新构建（增量迭代：只传需要更新的字段）
 func (h *AdminHandler) RegisterGameBuild(c *gin.Context) {
 	var req registerGameBuildRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
 	}
-	if req.BuildID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "build_id is required"}); return
+	if req.ArtifactImageTag == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "artifact_image_tag is required（新版本身份）"}); return
 	}
 	strPtr := func(s string) *string {
 		if s == "" { return nil }
 		return &s
 	}
 	build, err := h.controller.RegisterGameBuild(c.Request.Context(), c.Param("id"), &controller.GameBuild{
-		BuildId:           req.BuildID,
-		Game:              &struct{ Id string `json:"id"` }{Id: c.Param("id")},
 		Channel:           strPtr(req.Channel),
 		AdapterId:         req.AdapterID,
 		AdapterVersion:    strPtr(req.AdapterVersion),
@@ -480,7 +481,7 @@ func (h *AdminHandler) RegisterGameBuild(c *gin.Context) {
 		ArtifactImageTag:  strPtr(req.ArtifactImageTag),
 		SchemaJson:        strPtr(req.SchemaJSON),
 		AdapterMetadata:   req.AdapterMetadata,
-	})
+	}, req.BaseBuildID)
 	if err != nil {
 		fail(c, err); return
 	}

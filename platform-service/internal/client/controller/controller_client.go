@@ -441,12 +441,12 @@ func (c *Client) ListGameBuilds(ctx context.Context, gameID, channel string) ([]
 	return out.Builds, nil
 }
 
-// RegisterGameBuild 注册新构建。controller 的注册接口是平铺字段（build_id + game_id），
-// 这里显式拼平铺 body，避免 proto 风格嵌套导致 game_id 解析为空。
-// schema_json / adapter_metadata 可选（gen_manifest.py 产物），有则透传。
-func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *GameBuild) (*GameBuild, error) {
+// RegisterGameBuild 注册新构建（增量迭代语义）。controller 的注册接口是平铺字段
+// （game_id + 可选覆盖字段），build_id 由系统按 {game_id}-{channel}-{tag} 生成；
+// base_build_id 指定迭代基准（缺省 = 同 channel 最新 Available）。
+// schema_json / adapter_metadata 可选（gen_manifest.py 产物），不提供则从 base 继承。
+func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *GameBuild, baseBuildID string) (*GameBuild, error) {
 	body := map[string]any{
-		"build_id":            build.BuildId,
 		"game_id":             gameID,
 		"channel":             derefStr(build.Channel),
 		"adapter_id":          build.AdapterId,
@@ -455,6 +455,9 @@ func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *Ga
 		"artifact_uri":        derefStr(build.ArtifactUri),
 		"artifact_image_name": derefStr(build.ArtifactImageName),
 		"artifact_image_tag":  derefStr(build.ArtifactImageTag),
+	}
+	if baseBuildID != "" {
+		body["base_build_id"] = baseBuildID
 	}
 	if build.SchemaJson != nil && *build.SchemaJson != "" {
 		body["schema_json"] = *build.SchemaJson

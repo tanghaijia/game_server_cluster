@@ -275,8 +275,14 @@ func (x *ResolveGameBuildResponse) GetBuild() *GameBuild {
 }
 
 type RegisterGameBuildRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Build         *GameBuild             `protobuf:"bytes,1,opt,name=build,proto3" json:"build,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 增量注册（迭代语义）：
+	//   - build_id 由系统按 {game_id}-{channel}-{artifact_image_tag} 生成，请求中不可自定义；
+	//   - 除 artifact_image_tag 外的字段均可省略，未显式设置的字段从 base_build_id 指定的
+	//     build 继承（base_build_id 缺省时 = 同 channel 最新 Available）。
+	Build *GameBuild `protobuf:"bytes,1,opt,name=build,proto3" json:"build,omitempty"`
+	// 迭代基准 build_id；省略时自动取同 channel 最新可用版本（无则按全新注册处理）
+	BaseBuildId   *string `protobuf:"bytes,2,opt,name=base_build_id,json=baseBuildId,proto3,oneof" json:"base_build_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -316,6 +322,13 @@ func (x *RegisterGameBuildRequest) GetBuild() *GameBuild {
 		return x.Build
 	}
 	return nil
+}
+
+func (x *RegisterGameBuildRequest) GetBaseBuildId() string {
+	if x != nil && x.BaseBuildId != nil {
+		return *x.BaseBuildId
+	}
+	return ""
 }
 
 type RegisterGameBuildResponse struct {
@@ -1894,9 +1907,11 @@ const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\x04game\x18\x01 \x01(\v2\x15.assetservice.v1.GameR\x04game\x12<\n" +
 	"\bselector\x18\x02 \x01(\v2 .assetservice.v1.VersionSelectorR\bselector\"L\n" +
 	"\x18ResolveGameBuildResponse\x120\n" +
-	"\x05build\x18\x01 \x01(\v2\x1a.assetservice.v1.GameBuildR\x05build\"L\n" +
+	"\x05build\x18\x01 \x01(\v2\x1a.assetservice.v1.GameBuildR\x05build\"\x87\x01\n" +
 	"\x18RegisterGameBuildRequest\x120\n" +
-	"\x05build\x18\x01 \x01(\v2\x1a.assetservice.v1.GameBuildR\x05build\"M\n" +
+	"\x05build\x18\x01 \x01(\v2\x1a.assetservice.v1.GameBuildR\x05build\x12'\n" +
+	"\rbase_build_id\x18\x02 \x01(\tH\x00R\vbaseBuildId\x88\x01\x01B\x10\n" +
+	"\x0e_base_build_id\"M\n" +
 	"\x19RegisterGameBuildResponse\x120\n" +
 	"\x05build\x18\x01 \x01(\v2\x1a.assetservice.v1.GameBuildR\x05build\"0\n" +
 	"\x13GetGameBuildRequest\x12\x19\n" +
@@ -2177,6 +2192,7 @@ func file_assetservice_v1_asset_service_proto_init() {
 	file_assetservice_v1_snapshot_proto_init()
 	file_assetservice_v1_game_proto_init()
 	file_assetservice_v1_asset_service_proto_msgTypes[0].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[4].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[8].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[10].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[17].OneofWrappers = []any{}

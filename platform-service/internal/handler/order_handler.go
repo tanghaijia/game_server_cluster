@@ -40,7 +40,7 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	router.GET("/api/instances", auth, RequireAdmin(), h.AllInstances)
 
 	// 游戏配置 schema（M5）：下单表单数据源（透传 controller → asset_service）
-	router.GET("/api/games/:id/config-schema", auth, h.ConfigSchema)
+	router.GET("/api/games/:gameId/config-schema", auth, h.ConfigSchema)
 }
 
 type createOrderRequest struct {
@@ -73,7 +73,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 // ConfigSchema 游戏配置 schema（下单表单数据源，透传 controller → asset_service）
 func (h *OrderHandler) ConfigSchema(c *gin.Context) {
-	schema, err := h.orderUseCase.ConfigSchema(c.Request.Context(), c.Param("id"))
+	schema, err := h.orderUseCase.ConfigSchema(c.Request.Context(), c.Param("gameId"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -212,7 +212,8 @@ func (h *OrderHandler) MyInstances(c *gin.Context) {
 }
 
 // MyFileSession 为当前用户订单关联的实例签发文件会话（本人或管理员）。
-// 注意：路由参数是 :orderId，不能复用 loadOwnOrder（其内部取 c.Param("id")）。func (h *OrderHandler) MyFileSession(c *gin.Context) {
+// 注意：路由参数是 :orderId，不能复用 loadOwnOrder（其内部取 c.Param("id")）。
+func (h *OrderHandler) MyFileSession(c *gin.Context) {
 	orderID := c.Param("orderId")
 	order, err := h.orderUseCase.GetOrder(c.Request.Context(), orderID)
 	if err != nil {
