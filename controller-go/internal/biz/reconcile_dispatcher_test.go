@@ -149,6 +149,68 @@ func TestFailedInstance_NoReleaseOnScheduleFailure(t *testing.T) {
 	}
 }
 
+// TestFailedInstance_KeepBindingOnStopFailure 停止阶段失败保留 node_agent 绑定的回归测试：
+// StopInstance 失败后容器可能仍残留在 node_agent 上，清空绑定会导致"停止失败后重试停止"
+// 无法定位节点；同时应清空 ResourceReq（预留已释放），避免重试停止成功进入清理阶段时二次释放。
+func TestFailedInstance_KeepBindingOnStopFailure(t *testing.T) {
+	repo := &mockInstanceRepo{saveFunc: func(ctx context.Context, inst *entity.GameInstance) error { return nil }}
+	resv := &mockReservationRepo{}
+	rd := NewReconcileDispatcher(
+		repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, resv,
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100, nil),
+		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
+		GameContainerPortMapper{},
+		nil, // platformConfigRepo
+	)
+
+	agentID := "node-agent-1"
+	inst := &entity.GameInstance{
+		ID: "inst-stop-fail", Status: entity.StatusStopping,
+		NodeAgentID: &agentID,
+		ResourceReq: &entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30},
+	}
+	rd.FailedInstance(context.Background(), inst)
+	if inst.Status != entity.Failed {
+		t.Fatalf("状态应为 Failed, 实际: %v", inst.Status)
+	}
+	if inst.NodeAgentID == nil || *inst.NodeAgentID != agentID {
+		t.Fatalf("停止阶段失败应保留 NodeAgentID 绑定（供停止重试定位节点）, 实际: %v", inst.NodeAgentID)
+	}
+	if inst.ResourceReq != nil {
+		t.Fatalf("停止阶段失败应清空 ResourceReq（防清理阶段二次释放）, 实际: %v", inst.ResourceReq)
+	}
+	if resv.releaseCount != 1 {
+		t.Fatalf("停止阶段失败应释放预留, releaseCount=%d", resv.releaseCount)
+	}
+}
+
+// TestFailedInstance_ClearBindingOnStartFailure 启动阶段失败仍应清空绑定的回归测试：
+// 仅停止/清理阶段保留绑定，其余阶段失败（如 Starting 启动失败）照旧清空 NodeAgentID。
+func TestFailedInstance_ClearBindingOnStartFailure(t *testing.T) {
+	repo := &mockInstanceRepo{saveFunc: func(ctx context.Context, inst *entity.GameInstance) error { return nil }}
+	resv := &mockReservationRepo{}
+	rd := NewReconcileDispatcher(
+		repo, &mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, resv,
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100, nil),
+		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
+		GameContainerPortMapper{},
+		nil,
+	)
+
+	agentID := "node-agent-1"
+	inst := &entity.GameInstance{
+		ID: "inst-start-fail", Status: entity.StatusStarting,
+		NodeAgentID: &agentID,
+		ResourceReq: &entity.ResourceRequest{CPUMilli: 1000, MemoryBytes: 1 << 30},
+	}
+	rd.FailedInstance(context.Background(), inst)
+	if inst.NodeAgentID != nil {
+		t.Fatalf("启动阶段失败应清空 NodeAgentID, 实际: %v", inst.NodeAgentID)
+	}
+}
+
 type mockQueueRepo struct{}
 
 func (m *mockQueueRepo) Enqueue(ctx context.Context, q *entity.SchedulingQueue) error { return nil }

@@ -34,17 +34,38 @@ export async function updateInstanceConfig(orderId: string, config: Record<strin
   await http.put('/me/instances/' + orderId + '/config', { config })
 }
 
-// 实例状态 → 可执行动作
-export function instanceActions(status: string | undefined): { label: string; action: 'start' | 'stop' } | null {
-  const s = (status ?? '').trim().toLowerCase()
-  // stopped/failed/状态未知 → 允许开服（start 幂等，controller 会拒绝非法状态并报错）
-  if (s === '' || s === 'stopped' || s === 'failed' || s === 'unknown' || s === 'unavailable') {
-    return { label: '开服', action: 'start' }
+// 状态归一化：统一小写并去首尾空白
+function normStatus(status: string | undefined): string {
+  return (status ?? '').trim().toLowerCase()
+}
+
+// 启动是否允许（对齐后端 StartGameInstance 状态守卫：仅 stopped/failed 可启动）。
+// 空 / unknown / unavailable：controller 不可达或状态未知时的兜底，保留启动入口
+//（操作会被后端拒绝并报错，不阻断页面其余功能）。
+export function canStart(status: string | undefined): boolean {
+  const s = normStatus(status)
+  return s === '' || s === 'stopped' || s === 'failed' || s === 'unknown' || s === 'unavailable'
+}
+
+// 停止是否允许（对齐后端 StopGameInstance 状态守卫：仅 running/failed 可停止）。
+// failed 状态允许「停止重试」：停止可能失败而容器仍残留在 node_agent 上，
+// 状态回落 failed 后仍可再次发起停止，二次清理残留容器。
+export function canStop(status: string | undefined): boolean {
+  const s = normStatus(status)
+  return s === 'running' || s === 'failed'
+}
+
+// 按钮禁用原因文案（title 提示）；当前状态可操作时返回空串。
+export function actionDisabledReason(status: string | undefined, action: 'start' | 'stop'): string {
+  const s = normStatus(status)
+  if (isTransitionalStatus(s)) return '实例处于中间态，请等待当前流程完成'
+  if (action === 'start') {
+    if (s === 'running') return '实例运行中，请先停止'
+    return '当前状态不可启动（仅 stopped / failed 可启动）'
   }
-  if (s === 'running') {
-    return { label: '停服', action: 'stop' }
-  }
-  return null // 中间态（pending/scheduling/starting/...）不可操作
+  if (s === 'stopped') return '实例已停止，无需停止'
+  if (s === 'unknown' || s === 'unavailable') return '无法确认实例状态（controller 不可达）'
+  return '当前状态不可停止（仅 running / failed 可停止）'
 }
 
 // 状态展示文案（含中间态中文提示，便于诊断）

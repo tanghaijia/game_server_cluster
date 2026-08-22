@@ -487,8 +487,18 @@ func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *enti
 		instance.Status != entity.StatusScheduling {
 		d.releaseReservation(ctx, instance)
 	}
+	// 停止/清理阶段的失败保留 node_agent 绑定：StopInstance 可能已失败而容器仍残留在
+	// node_agent 上，此时清空绑定会导致"停止失败后重试停止"在 StatusStopping 分支因
+	// NodeAgentID 为空而直接再次失败（无法定位节点清理残留容器）。
+	// 绑定保留的同时清空 ResourceReq（预留已释放），避免重试停止成功进入清理阶段
+	// onCleanInstanceSucceeded 时二次释放预留。
+	keepBinding := instance.Status == entity.StatusStopping || instance.Status == entity.StatusCleaning
 	instance.Status = entity.Failed
-	instance.NodeAgentID = nil // 失败后不再绑定节点（预留已释放或从未扣减）
+	if keepBinding {
+		instance.ResourceReq = nil
+	} else {
+		instance.NodeAgentID = nil // 失败后不再绑定节点（预留已释放或从未扣减）
+	}
 	// Save 全字段落库（含 fail_reason、NodeAgentID 清理）
 	d.instanceRepo.Save(ctx, instance)
 	if d.eventBus != nil {

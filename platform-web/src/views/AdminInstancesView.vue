@@ -42,16 +42,21 @@
               <span v-else class="text-muted-foreground">-</span>
             </td>
             <td class="px-4 py-3">
-              <button
-                v-if="action(inst.status)"
-                class="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                :disabled="busy"
-                @click="onAction(inst, action(inst.status)!)"
-              >
-                {{ action(inst.status)!.label }}
-              </button>
-              <span v-else class="text-xs text-muted-foreground">-</span>
-              <button class="ml-2 rounded-md border px-3 py-1 text-xs hover:bg-muted" @click="openFiles(inst)">文件</button>
+              <div class="flex items-center gap-1.5">
+                <button
+                  class="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                  :disabled="busy || !canStart(inst.status)"
+                  :title="canStart(inst.status) ? '启动实例' : actionDisabledReason(inst.status, 'start')"
+                  @click="onStart(inst)"
+                >启动</button>
+                <button
+                  class="rounded-md border border-destructive/40 px-3 py-1 text-xs text-destructive hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-40"
+                  :disabled="busy || !canStop(inst.status)"
+                  :title="canStop(inst.status) ? '停止实例（停止失败可重试）' : actionDisabledReason(inst.status, 'stop')"
+                  @click="onStop(inst)"
+                >停止</button>
+                <button class="ml-1 rounded-md border px-3 py-1 text-xs hover:bg-muted" @click="openFiles(inst)">文件</button>
+              </div>
             </td>
           </tr>
           <tr v-if="!instances.length">
@@ -69,8 +74,10 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
+  actionDisabledReason,
   allInstances,
-  instanceActions,
+  canStart,
+  canStop,
   isTransitionalStatus,
   startOrderInstance,
   statusText,
@@ -83,8 +90,6 @@ const router = useRouter()
 const instances = ref<UserInstance[]>([])
 const busy = ref(false)
 const error = ref('')
-
-const action = (status: string) => instanceActions(status)
 
 async function load() {
   error.value = ''
@@ -110,27 +115,38 @@ function openFiles(inst: UserInstance) {
   })
 }
 
-async function onAction(inst: UserInstance, act: { label: string; action: 'start' | 'stop' }) {
+// 启动/停止是异步的：轮询等待实例离开中间态（启动、停止失败都会进入 failed 终态，
+// 轮询即停止，此时按钮恢复可用，便于停止失败后二次重试）
+async function pollUntilSettled(instanceId: string) {
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    await load()
+    const cur = instances.value.find((x) => x.instance_id === instanceId)
+    if (!cur || !isTransitionalStatus(cur.status)) return
+  }
+}
+
+async function onStart(inst: UserInstance) {
   busy.value = true
   error.value = ''
   try {
-    if (act.action === 'start') {
-      await startOrderInstance(inst.order_id)
-    } else {
-      await stopOrderInstance(inst.order_id)
-    }
-    await load()
-    // 启动是异步的：轮询等待实例离开中间态（最多 15s），捕获调度失败（此前失败对前端无感知）
-    if (act.action === 'start') {
-      for (let i = 0; i < 15; i++) {
-        await new Promise((r) => setTimeout(r, 1000))
-        await load()
-        const cur = instances.value.find((x) => x.instance_id === inst.instance_id)
-        if (!cur || !isTransitionalStatus(cur.status)) break
-      }
-    }
+    await startOrderInstance(inst.order_id)
+    await pollUntilSettled(inst.instance_id)
   } catch (e: any) {
-    error.value = e.response?.data?.error ?? '操作失败（controller 是否已启动？）'
+    error.value = e.response?.data?.error ?? '启动失败（controller 是否已启动？）'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function onStop(inst: UserInstance) {
+  busy.value = true
+  error.value = ''
+  try {
+    await stopOrderInstance(inst.order_id)
+    await pollUntilSettled(inst.instance_id)
+  } catch (e: any) {
+    error.value = e.response?.data?.error ?? '停止失败（controller 是否已启动？）'
   } finally {
     busy.value = false
   }
