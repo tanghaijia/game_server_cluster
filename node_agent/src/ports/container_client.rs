@@ -35,6 +35,17 @@ pub trait ContainerClient: Send + Sync {
     async fn remove_container(&self, id: String) -> Result<GameContainer, ContainerError>;
 
     async fn update_container_status(&self) -> Result<i32, ContainerError>;
+
+    /// 在容器内执行命令（生命周期脚本驱动：stop.sh / save.sh / players.sh / health.sh）
+    async fn exec(&self, container_id: String, cmd: Vec<String>) -> Result<ExecOutput, ContainerError>;
+}
+
+/// 容器内命令执行结果。
+#[derive(Debug, Clone, Default)]
+pub struct ExecOutput {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 #[derive(Error, Debug)]

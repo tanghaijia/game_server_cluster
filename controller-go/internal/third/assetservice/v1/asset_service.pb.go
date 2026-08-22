@@ -4,7 +4,7 @@
 // 	protoc        v7.35.0
 // source: assetservice/v1/asset_service.proto
 
-package assetservicev1
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1588,8 +1588,13 @@ type GameBuild struct {
 	CreatedAt         string                 `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt         string                 `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	AdapterId         string                 `protobuf:"bytes,14,opt,name=adapter_id,json=adapterId,proto3" json:"adapter_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// 适配器运行时元数据（M4：端口注入 env、生命周期脚本路径），controller 消费
+	AdapterMetadata *AdapterMetadata `protobuf:"bytes,15,opt,name=adapter_metadata,json=adapterMetadata,proto3,oneof" json:"adapter_metadata,omitempty"`
+	// 配置 schema JSON（gen_manifest.py 生成的 AdapterSchema 序列化），随构建注册携带，
+	// 天然绑定该 build 引用的适配器镜像版本
+	SchemaJson    *string `protobuf:"bytes,16,opt,name=schema_json,json=schemaJson,proto3,oneof" json:"schema_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GameBuild) Reset() {
@@ -1720,6 +1725,107 @@ func (x *GameBuild) GetAdapterId() string {
 	return ""
 }
 
+func (x *GameBuild) GetAdapterMetadata() *AdapterMetadata {
+	if x != nil {
+		return x.AdapterMetadata
+	}
+	return nil
+}
+
+func (x *GameBuild) GetSchemaJson() string {
+	if x != nil && x.SchemaJson != nil {
+		return *x.SchemaJson
+	}
+	return ""
+}
+
+// 适配器运行时元数据（adapter.toml 的 [lifecycle] / [port_inject] 段解析结果）
+type AdapterMetadata struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 端口注入环境变量名（空 = 无注入），如 GAME_HOST_PORT
+	PortInjectEnv *string `protobuf:"bytes,1,opt,name=port_inject_env,json=portInjectEnv,proto3,oneof" json:"port_inject_env,omitempty"`
+	// 生命周期脚本路径（容器内，默认由 base 提供）
+	StartScript   string `protobuf:"bytes,2,opt,name=start_script,json=startScript,proto3" json:"start_script,omitempty"`
+	SaveScript    string `protobuf:"bytes,3,opt,name=save_script,json=saveScript,proto3" json:"save_script,omitempty"`
+	StopScript    string `protobuf:"bytes,4,opt,name=stop_script,json=stopScript,proto3" json:"stop_script,omitempty"`
+	PlayersScript string `protobuf:"bytes,5,opt,name=players_script,json=playersScript,proto3" json:"players_script,omitempty"`
+	HealthScript  string `protobuf:"bytes,6,opt,name=health_script,json=healthScript,proto3" json:"health_script,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdapterMetadata) Reset() {
+	*x = AdapterMetadata{}
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdapterMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdapterMetadata) ProtoMessage() {}
+
+func (x *AdapterMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdapterMetadata.ProtoReflect.Descriptor instead.
+func (*AdapterMetadata) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *AdapterMetadata) GetPortInjectEnv() string {
+	if x != nil && x.PortInjectEnv != nil {
+		return *x.PortInjectEnv
+	}
+	return ""
+}
+
+func (x *AdapterMetadata) GetStartScript() string {
+	if x != nil {
+		return x.StartScript
+	}
+	return ""
+}
+
+func (x *AdapterMetadata) GetSaveScript() string {
+	if x != nil {
+		return x.SaveScript
+	}
+	return ""
+}
+
+func (x *AdapterMetadata) GetStopScript() string {
+	if x != nil {
+		return x.StopScript
+	}
+	return ""
+}
+
+func (x *AdapterMetadata) GetPlayersScript() string {
+	if x != nil {
+		return x.PlayersScript
+	}
+	return ""
+}
+
+func (x *AdapterMetadata) GetHealthScript() string {
+	if x != nil {
+		return x.HealthScript
+	}
+	return ""
+}
+
 type BuildCompatibility struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Compatible    bool                   `protobuf:"varint,1,opt,name=compatible,proto3" json:"compatible,omitempty"`
@@ -1730,7 +1836,7 @@ type BuildCompatibility struct {
 
 func (x *BuildCompatibility) Reset() {
 	*x = BuildCompatibility{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1848,7 @@ func (x *BuildCompatibility) String() string {
 func (*BuildCompatibility) ProtoMessage() {}
 
 func (x *BuildCompatibility) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1861,7 @@ func (x *BuildCompatibility) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildCompatibility.ProtoReflect.Descriptor instead.
 func (*BuildCompatibility) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{32}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *BuildCompatibility) GetCompatible() bool {
@@ -1872,7 +1978,7 @@ const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\achannel\x18\x01 \x01(\tH\x00R\achannel\x12\x1b\n" +
 	"\bbuild_id\x18\x02 \x01(\tH\x00R\abuildIdB\n" +
 	"\n" +
-	"\bselector\"\x9f\x05\n" +
+	"\bselector\"\xbc\x06\n" +
 	"\tGameBuild\x12\x19\n" +
 	"\bbuild_id\x18\x01 \x01(\tR\abuildId\x12)\n" +
 	"\x04game\x18\x02 \x01(\v2\x15.assetservice.v1.GameR\x04game\x12\x1d\n" +
@@ -1892,14 +1998,29 @@ const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\r \x01(\tR\tupdatedAt\x12\x1d\n" +
 	"\n" +
-	"adapter_id\x18\x0e \x01(\tR\tadapterIdB\n" +
+	"adapter_id\x18\x0e \x01(\tR\tadapterId\x12P\n" +
+	"\x10adapter_metadata\x18\x0f \x01(\v2 .assetservice.v1.AdapterMetadataH\x06R\x0fadapterMetadata\x88\x01\x01\x12$\n" +
+	"\vschema_json\x18\x10 \x01(\tH\aR\n" +
+	"schemaJson\x88\x01\x01B\n" +
 	"\n" +
 	"\b_channelB\x12\n" +
 	"\x10_adapter_versionB\x13\n" +
 	"\x11_upstream_versionB\x0f\n" +
 	"\r_artifact_uriB\x16\n" +
 	"\x14_artifact_image_nameB\x15\n" +
-	"\x13_artifact_image_tag\"\\\n" +
+	"\x13_artifact_image_tagB\x13\n" +
+	"\x11_adapter_metadataB\x0e\n" +
+	"\f_schema_json\"\x83\x02\n" +
+	"\x0fAdapterMetadata\x12+\n" +
+	"\x0fport_inject_env\x18\x01 \x01(\tH\x00R\rportInjectEnv\x88\x01\x01\x12!\n" +
+	"\fstart_script\x18\x02 \x01(\tR\vstartScript\x12\x1f\n" +
+	"\vsave_script\x18\x03 \x01(\tR\n" +
+	"saveScript\x12\x1f\n" +
+	"\vstop_script\x18\x04 \x01(\tR\n" +
+	"stopScript\x12%\n" +
+	"\x0eplayers_script\x18\x05 \x01(\tR\rplayersScript\x12#\n" +
+	"\rhealth_script\x18\x06 \x01(\tR\fhealthScriptB\x12\n" +
+	"\x10_port_inject_env\"\\\n" +
 	"\x12BuildCompatibility\x12\x1e\n" +
 	"\n" +
 	"compatible\x18\x01 \x01(\bR\n" +
@@ -1944,7 +2065,7 @@ func file_assetservice_v1_asset_service_proto_rawDescGZIP() []byte {
 }
 
 var file_assetservice_v1_asset_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_assetservice_v1_asset_service_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_assetservice_v1_asset_service_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_assetservice_v1_asset_service_proto_goTypes = []any{
 	(BuildStatus)(0),                           // 0: assetservice.v1.BuildStatus
 	(*ListGameBuildsRequest)(nil),              // 1: assetservice.v1.ListGameBuildsRequest
@@ -1979,71 +2100,73 @@ var file_assetservice_v1_asset_service_proto_goTypes = []any{
 	(*CheckBuildModCompatibilityResponse)(nil), // 30: assetservice.v1.CheckBuildModCompatibilityResponse
 	(*VersionSelector)(nil),                    // 31: assetservice.v1.VersionSelector
 	(*GameBuild)(nil),                          // 32: assetservice.v1.GameBuild
-	(*BuildCompatibility)(nil),                 // 33: assetservice.v1.BuildCompatibility
-	(*Game)(nil),                               // 34: assetservice.v1.Game
-	(SnapshotType)(0),                          // 35: assetservice.v1.SnapshotType
-	(*SnapshotRecord)(nil),                     // 36: assetservice.v1.SnapshotRecord
-	(*SnapshotRestorePlan)(nil),                // 37: assetservice.v1.SnapshotRestorePlan
-	(*ModManifest)(nil),                        // 38: assetservice.v1.ModManifest
+	(*AdapterMetadata)(nil),                    // 33: assetservice.v1.AdapterMetadata
+	(*BuildCompatibility)(nil),                 // 34: assetservice.v1.BuildCompatibility
+	(*Game)(nil),                               // 35: assetservice.v1.Game
+	(SnapshotType)(0),                          // 36: assetservice.v1.SnapshotType
+	(*SnapshotRecord)(nil),                     // 37: assetservice.v1.SnapshotRecord
+	(*SnapshotRestorePlan)(nil),                // 38: assetservice.v1.SnapshotRestorePlan
+	(*ModManifest)(nil),                        // 39: assetservice.v1.ModManifest
 }
 var file_assetservice_v1_asset_service_proto_depIdxs = []int32{
 	32, // 0: assetservice.v1.ListGameBuildsResponse.builds:type_name -> assetservice.v1.GameBuild
-	34, // 1: assetservice.v1.ResolveGameBuildRequest.game:type_name -> assetservice.v1.Game
+	35, // 1: assetservice.v1.ResolveGameBuildRequest.game:type_name -> assetservice.v1.Game
 	31, // 2: assetservice.v1.ResolveGameBuildRequest.selector:type_name -> assetservice.v1.VersionSelector
 	32, // 3: assetservice.v1.ResolveGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
 	32, // 4: assetservice.v1.RegisterGameBuildRequest.build:type_name -> assetservice.v1.GameBuild
 	32, // 5: assetservice.v1.RegisterGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
 	32, // 6: assetservice.v1.GetGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
-	35, // 7: assetservice.v1.CreateSnapshotRequest.snapshot_type:type_name -> assetservice.v1.SnapshotType
-	36, // 8: assetservice.v1.CreateSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	36, // 9: assetservice.v1.CompleteSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	36, // 10: assetservice.v1.FailSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	36, // 11: assetservice.v1.GetSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	36, // 12: assetservice.v1.GetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	36, // 13: assetservice.v1.SetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	37, // 14: assetservice.v1.GetSnapshotRestorePlanResponse.restore_plan:type_name -> assetservice.v1.SnapshotRestorePlan
-	36, // 15: assetservice.v1.ListSnapshotsResponse.snapshots:type_name -> assetservice.v1.SnapshotRecord
-	38, // 16: assetservice.v1.RegisterModManifestRequest.manifest:type_name -> assetservice.v1.ModManifest
-	38, // 17: assetservice.v1.RegisterModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
-	38, // 18: assetservice.v1.GetModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
-	33, // 19: assetservice.v1.CheckBuildModCompatibilityResponse.compatibility:type_name -> assetservice.v1.BuildCompatibility
-	34, // 20: assetservice.v1.GameBuild.game:type_name -> assetservice.v1.Game
+	36, // 7: assetservice.v1.CreateSnapshotRequest.snapshot_type:type_name -> assetservice.v1.SnapshotType
+	37, // 8: assetservice.v1.CreateSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	37, // 9: assetservice.v1.CompleteSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	37, // 10: assetservice.v1.FailSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	37, // 11: assetservice.v1.GetSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	37, // 12: assetservice.v1.GetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	37, // 13: assetservice.v1.SetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	38, // 14: assetservice.v1.GetSnapshotRestorePlanResponse.restore_plan:type_name -> assetservice.v1.SnapshotRestorePlan
+	37, // 15: assetservice.v1.ListSnapshotsResponse.snapshots:type_name -> assetservice.v1.SnapshotRecord
+	39, // 16: assetservice.v1.RegisterModManifestRequest.manifest:type_name -> assetservice.v1.ModManifest
+	39, // 17: assetservice.v1.RegisterModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
+	39, // 18: assetservice.v1.GetModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
+	34, // 19: assetservice.v1.CheckBuildModCompatibilityResponse.compatibility:type_name -> assetservice.v1.BuildCompatibility
+	35, // 20: assetservice.v1.GameBuild.game:type_name -> assetservice.v1.Game
 	0,  // 21: assetservice.v1.GameBuild.status:type_name -> assetservice.v1.BuildStatus
-	1,  // 22: assetservice.v1.AssetService.ListGameBuilds:input_type -> assetservice.v1.ListGameBuildsRequest
-	3,  // 23: assetservice.v1.AssetService.ResolveGameBuild:input_type -> assetservice.v1.ResolveGameBuildRequest
-	5,  // 24: assetservice.v1.AssetService.RegisterGameBuild:input_type -> assetservice.v1.RegisterGameBuildRequest
-	7,  // 25: assetservice.v1.AssetService.GetGameBuild:input_type -> assetservice.v1.GetGameBuildRequest
-	9,  // 26: assetservice.v1.AssetService.CreateSnapshot:input_type -> assetservice.v1.CreateSnapshotRequest
-	11, // 27: assetservice.v1.AssetService.CompleteSnapshot:input_type -> assetservice.v1.CompleteSnapshotRequest
-	13, // 28: assetservice.v1.AssetService.FailSnapshot:input_type -> assetservice.v1.FailSnapshotRequest
-	15, // 29: assetservice.v1.AssetService.GetSnapshot:input_type -> assetservice.v1.GetSnapshotRequest
-	17, // 30: assetservice.v1.AssetService.GetLatestSnapshot:input_type -> assetservice.v1.GetLatestSnapshotRequest
-	19, // 31: assetservice.v1.AssetService.SetLatestSnapshot:input_type -> assetservice.v1.SetLatestSnapshotRequest
-	21, // 32: assetservice.v1.AssetService.GetSnapshotRestorePlan:input_type -> assetservice.v1.GetSnapshotRestorePlanRequest
-	23, // 33: assetservice.v1.AssetService.ListSnapshots:input_type -> assetservice.v1.ListSnapshotsRequest
-	25, // 34: assetservice.v1.AssetService.RegisterModManifest:input_type -> assetservice.v1.RegisterModManifestRequest
-	27, // 35: assetservice.v1.AssetService.GetModManifest:input_type -> assetservice.v1.GetModManifestRequest
-	29, // 36: assetservice.v1.AssetService.CheckBuildModCompatibility:input_type -> assetservice.v1.CheckBuildModCompatibilityRequest
-	2,  // 37: assetservice.v1.AssetService.ListGameBuilds:output_type -> assetservice.v1.ListGameBuildsResponse
-	4,  // 38: assetservice.v1.AssetService.ResolveGameBuild:output_type -> assetservice.v1.ResolveGameBuildResponse
-	6,  // 39: assetservice.v1.AssetService.RegisterGameBuild:output_type -> assetservice.v1.RegisterGameBuildResponse
-	8,  // 40: assetservice.v1.AssetService.GetGameBuild:output_type -> assetservice.v1.GetGameBuildResponse
-	10, // 41: assetservice.v1.AssetService.CreateSnapshot:output_type -> assetservice.v1.CreateSnapshotResponse
-	12, // 42: assetservice.v1.AssetService.CompleteSnapshot:output_type -> assetservice.v1.CompleteSnapshotResponse
-	14, // 43: assetservice.v1.AssetService.FailSnapshot:output_type -> assetservice.v1.FailSnapshotResponse
-	16, // 44: assetservice.v1.AssetService.GetSnapshot:output_type -> assetservice.v1.GetSnapshotResponse
-	18, // 45: assetservice.v1.AssetService.GetLatestSnapshot:output_type -> assetservice.v1.GetLatestSnapshotResponse
-	20, // 46: assetservice.v1.AssetService.SetLatestSnapshot:output_type -> assetservice.v1.SetLatestSnapshotResponse
-	22, // 47: assetservice.v1.AssetService.GetSnapshotRestorePlan:output_type -> assetservice.v1.GetSnapshotRestorePlanResponse
-	24, // 48: assetservice.v1.AssetService.ListSnapshots:output_type -> assetservice.v1.ListSnapshotsResponse
-	26, // 49: assetservice.v1.AssetService.RegisterModManifest:output_type -> assetservice.v1.RegisterModManifestResponse
-	28, // 50: assetservice.v1.AssetService.GetModManifest:output_type -> assetservice.v1.GetModManifestResponse
-	30, // 51: assetservice.v1.AssetService.CheckBuildModCompatibility:output_type -> assetservice.v1.CheckBuildModCompatibilityResponse
-	37, // [37:52] is the sub-list for method output_type
-	22, // [22:37] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	33, // 22: assetservice.v1.GameBuild.adapter_metadata:type_name -> assetservice.v1.AdapterMetadata
+	1,  // 23: assetservice.v1.AssetService.ListGameBuilds:input_type -> assetservice.v1.ListGameBuildsRequest
+	3,  // 24: assetservice.v1.AssetService.ResolveGameBuild:input_type -> assetservice.v1.ResolveGameBuildRequest
+	5,  // 25: assetservice.v1.AssetService.RegisterGameBuild:input_type -> assetservice.v1.RegisterGameBuildRequest
+	7,  // 26: assetservice.v1.AssetService.GetGameBuild:input_type -> assetservice.v1.GetGameBuildRequest
+	9,  // 27: assetservice.v1.AssetService.CreateSnapshot:input_type -> assetservice.v1.CreateSnapshotRequest
+	11, // 28: assetservice.v1.AssetService.CompleteSnapshot:input_type -> assetservice.v1.CompleteSnapshotRequest
+	13, // 29: assetservice.v1.AssetService.FailSnapshot:input_type -> assetservice.v1.FailSnapshotRequest
+	15, // 30: assetservice.v1.AssetService.GetSnapshot:input_type -> assetservice.v1.GetSnapshotRequest
+	17, // 31: assetservice.v1.AssetService.GetLatestSnapshot:input_type -> assetservice.v1.GetLatestSnapshotRequest
+	19, // 32: assetservice.v1.AssetService.SetLatestSnapshot:input_type -> assetservice.v1.SetLatestSnapshotRequest
+	21, // 33: assetservice.v1.AssetService.GetSnapshotRestorePlan:input_type -> assetservice.v1.GetSnapshotRestorePlanRequest
+	23, // 34: assetservice.v1.AssetService.ListSnapshots:input_type -> assetservice.v1.ListSnapshotsRequest
+	25, // 35: assetservice.v1.AssetService.RegisterModManifest:input_type -> assetservice.v1.RegisterModManifestRequest
+	27, // 36: assetservice.v1.AssetService.GetModManifest:input_type -> assetservice.v1.GetModManifestRequest
+	29, // 37: assetservice.v1.AssetService.CheckBuildModCompatibility:input_type -> assetservice.v1.CheckBuildModCompatibilityRequest
+	2,  // 38: assetservice.v1.AssetService.ListGameBuilds:output_type -> assetservice.v1.ListGameBuildsResponse
+	4,  // 39: assetservice.v1.AssetService.ResolveGameBuild:output_type -> assetservice.v1.ResolveGameBuildResponse
+	6,  // 40: assetservice.v1.AssetService.RegisterGameBuild:output_type -> assetservice.v1.RegisterGameBuildResponse
+	8,  // 41: assetservice.v1.AssetService.GetGameBuild:output_type -> assetservice.v1.GetGameBuildResponse
+	10, // 42: assetservice.v1.AssetService.CreateSnapshot:output_type -> assetservice.v1.CreateSnapshotResponse
+	12, // 43: assetservice.v1.AssetService.CompleteSnapshot:output_type -> assetservice.v1.CompleteSnapshotResponse
+	14, // 44: assetservice.v1.AssetService.FailSnapshot:output_type -> assetservice.v1.FailSnapshotResponse
+	16, // 45: assetservice.v1.AssetService.GetSnapshot:output_type -> assetservice.v1.GetSnapshotResponse
+	18, // 46: assetservice.v1.AssetService.GetLatestSnapshot:output_type -> assetservice.v1.GetLatestSnapshotResponse
+	20, // 47: assetservice.v1.AssetService.SetLatestSnapshot:output_type -> assetservice.v1.SetLatestSnapshotResponse
+	22, // 48: assetservice.v1.AssetService.GetSnapshotRestorePlan:output_type -> assetservice.v1.GetSnapshotRestorePlanResponse
+	24, // 49: assetservice.v1.AssetService.ListSnapshots:output_type -> assetservice.v1.ListSnapshotsResponse
+	26, // 50: assetservice.v1.AssetService.RegisterModManifest:output_type -> assetservice.v1.RegisterModManifestResponse
+	28, // 51: assetservice.v1.AssetService.GetModManifest:output_type -> assetservice.v1.GetModManifestResponse
+	30, // 52: assetservice.v1.AssetService.CheckBuildModCompatibility:output_type -> assetservice.v1.CheckBuildModCompatibilityResponse
+	38, // [38:53] is the sub-list for method output_type
+	23, // [23:38] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_assetservice_v1_asset_service_proto_init() }
@@ -2063,13 +2186,14 @@ func file_assetservice_v1_asset_service_proto_init() {
 	}
 	file_assetservice_v1_asset_service_proto_msgTypes[31].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[32].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[33].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_assetservice_v1_asset_service_proto_rawDesc), len(file_assetservice_v1_asset_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   33,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

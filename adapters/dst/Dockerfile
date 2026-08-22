@@ -1,30 +1,27 @@
-FROM debian:bookworm-slim
+# ============================================================
+# adapters/dst —— DST（Don't Starve Together）游戏适配器
+#
+# 基于公共基础镜像（adapters/base）：
+#   - 公共运行环境（i386 运行库、steamcmd、工具链）来自 base
+#   - 生命周期框架（start/save/stop/players/health）来自 base
+#   - 本镜像只提供：差异钩子 hooks.sh + 配置模板 templates/
+#
+# 构建：
+#   1) 先构建 base：  docker build -t registry/game/base:2026.08 adapters/base
+#   2) 再构建本镜像： docker build -t registry/game/dst-adapter:0.3.0 adapters/dst
+# ============================================================
+FROM registry/game/base:2026.08
 
-# 安装依赖
-RUN dpkg --add-architecture i386 && \
-    apt-get update && apt-get install -y \
-      libstdc++6:i386 \
-      libc6-i386 \
-      libgcc-s1:i386 \
-      libcurl4-gnutls-dev:i386 \
-      lib32gcc-s1 \
-      ca-certificates \
-      curl \
-      bash \
-      jq \
-      procps \
-      && rm -rf /var/lib/apt/lists/*
+# DST 专用默认值（hook 与框架读取）
+ENV GAME_BIN_NAME=dontstarve_dedicated_server_nullrenderer \
+    DST_CONF_DIR=DoNotStarveTogether \
+    DST_CLUSTER=Cluster \
+    DST_SHARD=both
 
-# 安装 steamcmd
-RUN mkdir -p /opt/steamcmd && \
-    cd /opt/steamcmd && \
-    curl -L -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && \
-    tar -xvzf steamcmd_linux.tar.gz
-
-# 拷贝脚本和模板
-COPY scripts/ /scripts/
+# 差异钩子 + 配置模板 + 渲染清单（M4：DST 暂无渲染入口，manifest 为空占位）
+COPY hooks.sh /scripts/hooks.sh
 COPY templates/ /templates/
-RUN chmod +x /scripts/*.sh
+COPY config-manifest.json /scripts/config-manifest.json
+RUN chmod +x /scripts/hooks.sh && mkdir -p /server /data
 
-WORKDIR /scripts
-ENTRYPOINT ["/scripts/start.sh"]
+# 容器契约入口由 base 提供（/scripts/start.sh → lifecycle/start.sh）

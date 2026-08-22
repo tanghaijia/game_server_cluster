@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "file": "",
+  "settings": [
+    {
+      "key": "DST_CLUSTER",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "DST_CONF_DIR",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "DST_SHARD",
+      "render": "xml_property",
+      "apply": "always"
+    }
+  ]
+}

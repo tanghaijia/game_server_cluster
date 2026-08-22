@@ -20,14 +20,25 @@ impl SqlBuildRepository {
 #[async_trait]
 impl BuildRepository for SqlBuildRepository {
     async fn save(&self, build: &GameBuild) -> Result<(), AssetServiceError> {
+        let metadata_json = build
+            .adapter_metadata
+            .as_ref()
+            .map(|m| serde_json::to_string(m))
+            .transpose()
+            .map_err(|e| AssetServiceError::Internal {
+                message: format!("serialize adapter metadata: {e}"),
+            })?
+            .unwrap_or_else(|| "{}".to_string());
+
         sqlx::query(
             r#"
             INSERT INTO t_asset_service_game_builds (
                 build_id, game_id, channel,
                 adapter_id, adapter_version_major, adapter_version_minor, adapter_version_patch,
                 upstream_version, artifact_uri, artifact_image_name, artifact_image_tag,
-                status, pinned, resolved_at, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                status, pinned, resolved_at, created_at, updated_at,
+                metadata_json, schema_json
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
             ON CONFLICT (build_id) DO UPDATE SET
                 game_id               = EXCLUDED.game_id,
                 channel               = EXCLUDED.channel,
@@ -42,7 +53,9 @@ impl BuildRepository for SqlBuildRepository {
                 status                = EXCLUDED.status,
                 pinned                = EXCLUDED.pinned,
                 resolved_at           = EXCLUDED.resolved_at,
-                updated_at            = EXCLUDED.updated_at
+                updated_at            = EXCLUDED.updated_at,
+                metadata_json         = EXCLUDED.metadata_json,
+                schema_json           = EXCLUDED.schema_json
             "#,
         )
         .bind(&build.build_id.0)
@@ -61,6 +74,8 @@ impl BuildRepository for SqlBuildRepository {
         .bind(build.resolved_at)
         .bind(build.created_at)
         .bind(build.updated_at)
+        .bind(metadata_json)
+        .bind(&build.schema_json)
         .execute(&self.pool)
         .await
         .map_err(|e| AssetServiceError::Internal {
@@ -76,7 +91,8 @@ impl BuildRepository for SqlBuildRepository {
                 build_id, game_id, channel,
                 adapter_id, adapter_version_major, adapter_version_minor, adapter_version_patch,
                 upstream_version, artifact_uri, artifact_image_name, artifact_image_tag,
-                status, pinned, resolved_at, created_at, updated_at
+                status, pinned, resolved_at, created_at, updated_at,
+                metadata_json, schema_json
             FROM t_asset_service_game_builds
             WHERE build_id = $1
             "#,
@@ -98,7 +114,8 @@ impl BuildRepository for SqlBuildRepository {
                 build_id, game_id, channel,
                 adapter_id, adapter_version_major, adapter_version_minor, adapter_version_patch,
                 upstream_version, artifact_uri, artifact_image_name, artifact_image_tag,
-                status, pinned, resolved_at, created_at, updated_at
+                status, pinned, resolved_at, created_at, updated_at,
+                metadata_json, schema_json
             FROM t_asset_service_game_builds
             WHERE game_id = $1
             ORDER BY created_at DESC
@@ -133,10 +150,21 @@ struct GameBuildRow {
     resolved_at: chrono::DateTime<chrono::Utc>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+    metadata_json: String,
+    schema_json: Option<String>,
 }
 
 impl GameBuildRow {
     fn try_into_domain(self) -> Result<GameBuild, AssetServiceError> {
+        let adapter_metadata = if self.metadata_json.is_empty() || self.metadata_json == "{}" {
+            None
+        } else {
+            Some(serde_json::from_str(&self.metadata_json).map_err(|e| {
+                AssetServiceError::Internal {
+                    message: format!("deserialize adapter metadata: {e}"),
+                }
+            })?)
+        };
         Ok(GameBuild {
             build_id: BuildId(self.build_id),
             game_id: self.game_id,
@@ -153,6 +181,9 @@ impl GameBuildRow {
             artifact_image_tag: self.artifact_image_tag,
             status: super::sql_helpers::str_to_build_status(&self.status)?,
             pinned: self.pinned,
+            // 适配器元数据/schema 随构建存储（无需二次查询 adapter 表）
+            adapter_metadata,
+            schema_json: self.schema_json,
             resolved_at: self.resolved_at,
             created_at: self.created_at,
             updated_at: self.updated_at,

@@ -7,7 +7,9 @@ use crate::{
         SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
-    ports::{BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository},
+    ports::{
+        BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -81,7 +83,7 @@ where
         game_id: &str,
         selector: VersionSelector,
     ) -> Result<GameBuild, AssetServiceError> {
-        match selector {
+        let build = match selector {
             VersionSelector::BuildId { build_id } => self
                 .builds
                 .get(&BuildId(build_id.clone()))
@@ -121,7 +123,10 @@ where
                         build_id: format!("{game_id}:{channel}"),
                     })
             }
-        }
+        }?;
+
+        // 适配器元数据/schema 随构建存储，随构建返回（无需二次查询）
+        Ok(build)
     }
 
     pub async fn register_game_build(
@@ -465,6 +470,8 @@ mod tests {
             artifact_image_tag: Some(tag.to_string()),
             status: BuildStatus::Available,
             pinned: false,
+            adapter_metadata: None,
+            schema_json: None,
             resolved_at: now,
             created_at: now,
             updated_at: now,

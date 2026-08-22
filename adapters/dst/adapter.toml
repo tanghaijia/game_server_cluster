@@ -1,0 +1,93 @@
+# ============================================================
+# adapters/dst/adapter.toml —— DST 适配器声明式元数据
+#
+# 平台消费链（adapter-framework-design.md §3.3）：
+#   asset_service：注册 adapter + 建 GameBuild（镜像名/版本）
+#   controller：port_inject / config schema（表单与校验）
+#   node_agent：lifecycle 命令路径（docker exec）
+# M2 阶段平台尚未消费本文件（M3/M4 接入），先落地声明。
+# ============================================================
+
+schema_version = 1
+adapter_id = "dst"
+game_id = "dst"
+
+[image]
+name = "registry/game/dst-adapter"
+tag = "0.3.0"
+
+[build]
+type = "steamcmd"
+app_id = 343050
+branch = "public"
+
+# 生命周期脚本路径（默认继承 base，此处显式声明契约）
+[lifecycle]
+start = "/scripts/start.sh"
+save = "/scripts/save.sh"
+stop = "/scripts/stop.sh"
+players = "/scripts/players.sh"
+health = "/scripts/health.sh"
+
+# 端口注入：DST 当前无注入能力（game_port 由模板固定，10999/udp）
+[port_inject]
+enabled = false
+
+# 配置渲染目标文件：DST 的 serverconfig 由 /data 文件管理（暂无平台配置渲染入口）
+[config_render]
+file = ""
+
+# ── 配置项 schema（用户可配置项少；DST 内部多由 /data 文件管理） ──
+[config."DST_SHARD"]
+label_key = "cfg.DST_SHARD.label"
+description_key = "cfg.DST_SHARD.desc"
+type = "enum"
+enum = ["both", "Master", "Caves"]
+default = "both"
+control = "player"
+apply = "always"
+group_key = "grp.runtime"
+[config."DST_SHARD".enum_labels]
+both = "enum.DST_SHARD.both"
+Master = "enum.DST_SHARD.master"
+Caves = "enum.DST_SHARD.caves"
+
+[config."DST_CLUSTER"]
+label_key = "cfg.DST_CLUSTER.label"
+type = "string"
+default = "Cluster"
+control = "player"
+apply = "on_first_start"
+group_key = "grp.runtime"
+
+[config."DST_CONF_DIR"]
+label_key = "cfg.DST_CONF_DIR.label"
+type = "string"
+default = "DoNotStarveTogether"
+control = "platform"
+apply = "on_first_start"
+group_key = "grp.runtime"
+
+[i18n]
+fallback = "en"
+
+[i18n.en]
+"cfg.DST_SHARD.desc" = "Which shards to start (both = Master + Caves)"
+"grp.runtime" = "Runtime"
+"enum.DST_SHARD.both" = "Both (Master + Caves)"
+"enum.DST_SHARD.master" = "Master only"
+"enum.DST_SHARD.caves" = "Caves only"
+"control.player" = "Player"
+"control.platform" = "Platform"
+
+[i18n.zh]
+"cfg.DST_SHARD.label" = "启动分片"
+"cfg.DST_SHARD.desc" = "启动哪些分片（both = Master + Caves）"
+"cfg.DST_CLUSTER.label" = "集群名"
+"cfg.DST_CONF_DIR.label" = "配置目录名"
+"grp.runtime" = "运行时"
+"enum.DST_SHARD.both" = "全部（Master + Caves）"
+"enum.DST_SHARD.master" = "仅 Master"
+"enum.DST_SHARD.caves" = "仅 Caves"
+"control.player" = "玩家"
+"control.platform" = "平台"

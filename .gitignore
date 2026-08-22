@@ -21,3 +21,4 @@ debug.json
 .crate-cache
 vendor
 .cargo
+.go-cache

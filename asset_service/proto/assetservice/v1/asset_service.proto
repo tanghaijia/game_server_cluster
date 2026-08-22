@@ -11,6 +11,7 @@ service AssetService {
   rpc RegisterGameBuild(RegisterGameBuildRequest) returns (RegisterGameBuildResponse);
   rpc GetGameBuild(GetGameBuildRequest) returns (GetGameBuildResponse);
 
+  // 适配器管理（M4）：schema/metadata 随 GameBuild 注册携带，无独立 adapter 实体
   rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
   rpc CompleteSnapshot(CompleteSnapshotRequest) returns (CompleteSnapshotResponse);
   rpc FailSnapshot(FailSnapshotRequest) returns (FailSnapshotResponse);
@@ -178,6 +179,23 @@ message GameBuild {
   string created_at = 12;
   string updated_at = 13;
   string adapter_id = 14;
+  // 适配器运行时元数据（M4：端口注入 env、生命周期脚本路径），controller 消费
+  optional AdapterMetadata adapter_metadata = 15;
+  // 配置 schema JSON（gen_manifest.py 生成的 AdapterSchema 序列化），随构建注册携带，
+  // 天然绑定该 build 引用的适配器镜像版本
+  optional string schema_json = 16;
+}
+
+// 适配器运行时元数据（adapter.toml 的 [lifecycle] / [port_inject] 段解析结果）
+message AdapterMetadata {
+  // 端口注入环境变量名（空 = 无注入），如 GAME_HOST_PORT
+  optional string port_inject_env = 1;
+  // 生命周期脚本路径（容器内，默认由 base 提供）
+  string start_script = 2;
+  string save_script = 3;
+  string stop_script = 4;
+  string players_script = 5;
+  string health_script = 6;
 }
 
 message BuildCompatibility {

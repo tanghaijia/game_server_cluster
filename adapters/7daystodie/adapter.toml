@@ -1,0 +1,607 @@
+# ============================================================
+# adapters/7daystodie/adapter.toml —— 7 Days to Die 适配器声明式元数据
+#
+# config 段覆盖 serverconfig.xml 全部可配置 property（adapter-framework-design.md §3.4）。
+# 解析约定：label_key 缺省回退为配置项名本身（英文即默认显示名）；
+# i18n 查找链：当前语言 → fallback(en) → key。
+#
+# control 三值（§3.3.4）：
+#   player    玩家（实例所有者）可配置，创建实例时表单生成
+#   platform  平台运营方配置（admin 按游戏设置，玩家不可见）
+#   locked    平台固定写死（基础设施依赖，不落表、不进渲染清单）
+#
+# apply 两值：
+#   always         每次启动按平台配置渲染
+#   on_first_start 仅首次生成时应用（存档/世界类，之后以文件为准）
+# ============================================================
+
+schema_version = 1
+adapter_id = "7daystodie"
+game_id = "7daystodie"
+
+[image]
+name = "registry/game/7daystodie-adapter"
+tag = "0.4.0"
+
+[build]
+type = "steamcmd"
+app_id = 294420
+branch = "public"
+
+[lifecycle]
+start = "/scripts/start.sh"
+save = "/scripts/save.sh"
+stop = "/scripts/stop.sh"
+players = "/scripts/players.sh"
+health = "/scripts/health.sh"
+
+# 端口注入：宿主端口 → serverconfig.xml 的 ServerPort 属性
+[port_inject]
+enabled = true
+env = "GAME_HOST_PORT"
+
+# 配置渲染目标文件（config-render.sh 按 config-manifest.json 合并的宿主文件）
+[config_render]
+file = "/data/serverconfig.xml"
+
+# ───────────────────────── 配置项 schema ─────────────────────────
+
+# ---- 基础 General ----
+[config."ServerName"]
+label_key = "cfg.ServerName.label"
+type = "string"
+default = "My Game Host"
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerDescription"]
+type = "string"
+default = "A 7 Days to Die server"
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerWebsiteURL"]
+type = "string"
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerPassword"]
+type = "string"
+secret = true
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerLoginConfirmationText"]
+type = "string"
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."Language"]
+type = "string"
+default = "English"
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."Region"]
+type = "enum"
+enum = ["NorthAmericaEast", "NorthAmericaWest", "CentralAmerica", "SouthAmerica", "Europe", "Russia", "Asia", "MiddleEast", "Africa", "Oceania"]
+default = "Asia"
+control = "platform"
+apply = "always"
+group_key = "grp.general"
+
+# ---- 网络 Networking ----
+[config."ServerPort"]
+control = "locked"                  # 由端口注入（GAME_HOST_PORT）管理
+
+[config."ServerVisibility"]
+type = "enum"
+enum = [0, 1, 2]
+default = 2
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."ServerDisabledNetworkProtocols"]
+type = "string"
+default = "SteamNetworking"
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."ServerMaxWorldTransferSpeedKiBs"]
+type = "int"
+min = 1
+max = 1300
+default = 512
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+# ---- 人数 Slots ----
+[config."ServerMaxPlayerCount"]
+label_key = "cfg.ServerMaxPlayerCount.label"
+type = "int"
+min = 1
+max = 64
+default = 8
+control = "player"
+apply = "always"
+group_key = "grp.players"
+
+[config."ServerReservedSlots"]
+type = "int"
+min = 0
+default = 0
+control = "platform"
+apply = "always"
+group_key = "grp.players"
+
+[config."ServerReservedSlotsPermission"]
+type = "int"
+default = 100
+control = "platform"
+apply = "always"
+group_key = "grp.players"
+
+[config."ServerAdminSlots"]
+type = "int"
+min = 0
+default = 0
+control = "platform"
+apply = "always"
+group_key = "grp.players"
+
+[config."ServerAdminSlotsPermission"]
+type = "int"
+default = 0
+control = "platform"
+apply = "always"
+group_key = "grp.players"
+
+# ---- 管理界面 Admin interfaces ----
+[config."WebDashboardEnabled"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."WebDashboardPort"]
+type = "int"
+default = 8080
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."WebDashboardUrl"]
+type = "string"
+default = ""
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."EnableMapRendering"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+# ---- Telnet（平台 save/stop 依赖） ----
+[config."TelnetEnabled"]
+control = "locked"                  # 平台 save/stop 依赖，强制 true
+
+[config."TelnetPort"]
+type = "int"
+default = 8081
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."TelnetPassword"]
+type = "string"
+secret = true
+default = ""
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."TelnetFailedLoginLimit"]
+type = "int"
+default = 10
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."TelnetFailedLoginsBlocktime"]
+type = "int"
+default = 10
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+# ---- 文件夹与位置（平台锁定） ----
+[config."AdminFileName"]
+control = "locked"
+
+[config."UserDataFolder"]
+control = "locked"                  # 固定 /data/7DaysToDie
+
+[config."TerminalWindowEnabled"]
+control = "locked"                  # Windows only，容器内无意义
+
+# ---- 技术设置 Technical ----
+[config."ServerAllowCrossplay"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.technical"
+
+[config."EACEnabled"]
+control = "locked"                  # /server 只读，EAC 无法写入
+
+[config."IgnoreEOSSanctions"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.technical"
+
+[config."HideCommandExecutionLog"]
+type = "int"
+enum = [0, 1, 2, 3]
+default = 0
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."MaxUncoveredMapChunksPerPlayer"]
+type = "int"
+default = 131072
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."PersistentPlayerProfiles"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.technical"
+
+[config."MaxChunkAge"]
+type = "int"
+default = -1
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."SaveDataLimit"]
+type = "int"
+default = -1
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+# ---- 世界 World（存档生成后改动无意义 → on_first_start） ----
+[config."GameWorld"]
+label_key = "cfg.GameWorld.label"
+type = "enum"
+enum = ["Navezgane", "RWG", "Pregen06k01", "Pregen06k02", "Pregen08k01", "Pregen08k02"]
+default = "Navezgane"
+control = "player"
+apply = "on_first_start"
+group_key = "grp.world"
+[config."GameWorld".enum_labels]
+Navezgane = "world.navezgane"
+RWG = "world.rwg"
+Pregen06k01 = "world.pregen06k01"
+Pregen06k02 = "world.pregen06k02"
+Pregen08k01 = "world.pregen08k01"
+Pregen08k02 = "world.pregen08k02"
+
+[config."WorldGenSeed"]
+type = "string"
+default = "MyGame"
+control = "player"
+apply = "on_first_start"
+group_key = "grp.world"
+
+[config."WorldGenSize"]
+type = "enum"
+enum = [6144, 8192, 10240]
+default = 6144
+control = "player"
+apply = "on_first_start"
+group_key = "grp.world"
+
+[config."GameName"]
+type = "string"
+default = "MyGame"
+control = "player"
+apply = "on_first_start"
+group_key = "grp.world"
+
+[config."GameMode"]
+type = "enum"
+enum = ["GameModeSurvival"]
+default = "GameModeSurvival"
+control = "player"
+apply = "on_first_start"
+group_key = "grp.world"
+
+# ---- 难度与游戏规则 Gameplay ----
+[config."PlayerSafeZoneLevel"]
+type = "int"
+default = 5
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."PlayerSafeZoneHours"]
+type = "int"
+default = 5
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."BuildCreate"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."BedrollDeadZoneSize"]
+type = "int"
+default = 15
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."BedrollExpiryTime"]
+type = "int"
+default = 45
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."AllowSpawnNearFriend"]
+type = "enum"
+enum = [0, 1, 2]
+default = 2
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."CameraRestrictionMode"]
+type = "enum"
+enum = [0, 1, 2]
+default = 0
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."PlayerKillingMode"]
+label_key = "cfg.PlayerKillingMode.label"
+type = "enum"
+enum = [0, 1, 2, 3]
+default = 3
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+[config."PlayerKillingMode".enum_labels]
+0 = "pvp.off"
+1 = "pvp.allies"
+2 = "pvp.strangers"
+3 = "pvp.everyone"
+
+[config."PartySharedKillRange"]
+type = "int"
+default = 100
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+[config."SandboxCode"]
+type = "string"
+default = "AAAJABJACJADJARFBNC"
+control = "player"
+apply = "always"
+group_key = "grp.gameplay"
+
+# ---- 性能 Performance ----
+[config."MaxSpawnedZombies"]
+type = "int"
+default = 64
+control = "player"
+apply = "always"
+group_key = "grp.performance"
+
+[config."MaxSpawnedAnimals"]
+type = "int"
+default = 50
+control = "player"
+apply = "always"
+group_key = "grp.performance"
+
+[config."ServerMaxAllowedViewDistance"]
+type = "int"
+min = 6
+max = 12
+default = 12
+control = "player"
+apply = "always"
+group_key = "grp.performance"
+
+[config."MaxQueuedMeshLayers"]
+type = "int"
+default = 1000
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+[config."DynamicMeshEnabled"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+[config."DynamicMeshLandClaimOnly"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+[config."DynamicMeshLandClaimBuffer"]
+type = "int"
+default = 3
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+[config."DynamicMeshMaxItemCache"]
+type = "int"
+default = 3
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+# ---- 领地 Land claim ----
+[config."LandClaimCount"]
+type = "int"
+default = 5
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimSize"]
+type = "int"
+default = 41
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimDeadZone"]
+type = "int"
+default = 30
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimExpiryTime"]
+type = "int"
+default = 7
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimDecayMode"]
+type = "enum"
+enum = [0, 1, 2]
+default = 0
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimOnlineDurabilityModifier"]
+type = "int"
+default = 4
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimOfflineDurabilityModifier"]
+type = "int"
+default = 4
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+[config."LandClaimOfflineDelay"]
+type = "int"
+default = 0
+control = "player"
+apply = "always"
+group_key = "grp.landclaim"
+
+# ---- Twitch（低价值项，默认收进技术组） ----
+[config."TwitchServerPermission"]
+type = "int"
+default = 90
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."TwitchBloodMoonAllowed"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+# ───────────────────────── 国际化 ─────────────────────────
+
+[i18n]
+fallback = "en"
+
+[i18n.en]
+"grp.general" = "General"
+"grp.network" = "Network"
+"grp.players" = "Players"
+"grp.world" = "World"
+"grp.gameplay" = "Gameplay"
+"grp.performance" = "Performance"
+"grp.landclaim" = "Land Claim"
+"grp.technical" = "Technical"
+"world.navezgane" = "Navezgane"
+"world.rwg" = "Random World Gen"
+"world.pregen06k01" = "Pregen 6K-01"
+"world.pregen06k02" = "Pregen 6K-02"
+"world.pregen08k01" = "Pregen 8K-01"
+"world.pregen08k02" = "Pregen 8K-02"
+"pvp.off" = "No killing"
+"pvp.allies" = "Kill allies only"
+"pvp.strangers" = "Kill strangers only"
+"pvp.everyone" = "Kill everyone"
+"control.player" = "Player"
+"control.platform" = "Platform"
+
+[i18n.zh]
+"cfg.ServerName.label" = "服务器名称"
+"cfg.ServerMaxPlayerCount.label" = "最大玩家数"
+"cfg.GameWorld.label" = "世界"
+"cfg.PlayerKillingMode.label" = "PVP 模式"
+"grp.general" = "基础"
+"grp.network" = "网络"
+"grp.players" = "人数"
+"grp.world" = "世界"
+"grp.gameplay" = "玩法"
+"grp.performance" = "性能"
+"grp.landclaim" = "领地"
+"grp.technical" = "技术"
+"world.navezgane" = "纳维兹甘"
+"world.rwg" = "随机世界生成"
+"world.pregen06k01" = "预生成 6K-01"
+"world.pregen06k02" = "预生成 6K-02"
+"world.pregen08k01" = "预生成 8K-01"
+"world.pregen08k02" = "预生成 8K-02"
+"pvp.off" = "禁止击杀"
+"pvp.allies" = "仅限队友"
+"pvp.strangers" = "仅限陌生人"
+"pvp.everyone" = "允许所有人"
+"control.player" = "玩家"
+"control.platform" = "平台"

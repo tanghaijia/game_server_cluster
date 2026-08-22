@@ -736,8 +736,11 @@ func buildInstanceRuntimeSpec(
 		ContainerServerPath: config.ContainerServerPath,
 		PortMapping:         mapPortMapping(config, portMappings),
 		// 端口注入：把游戏端口对应的宿主端口通过 env 传给 adapter
-		// （adapter start.sh 用它改写 serverconfig.xml 的 ServerPort，使游戏通告端口 == 宿主端口）
+		// （adapter start.sh 用它改写游戏配置，使游戏通告端口 == 宿主端口）
 		Env: buildInstanceEnv(config, portMappings),
+		// 实例配置（000024，M3）：platform + player 合并键值，
+		// node_agent 写入 /data/.platform/game-config.json 供容器内 config-render 渲染
+		Config: instance.Config,
 		// spec 目前无数据来源，先填占位结构体以满足 nodeagent 的校验
 		Spec: &nodeagentv1.InstanceSpec{
 			Resources: &nodeagentv1.ResourceRequirements{},
@@ -745,19 +748,29 @@ func buildInstanceRuntimeSpec(
 	}
 }
 
+// defaultPortInjectEnv 端口注入 env 默认变量名（000024，M3）：
+// 各游戏 adapter 的 port_inject.env 若未在 game_container_configs 覆盖，统一用此名
+const defaultPortInjectEnv = "GAME_HOST_PORT"
+
 /**
 * buildInstanceEnv 构造容器环境变量：
-* 注入模式（InjectGamePort）下，向 adapter 传递 SDTD_SERVER_PORT=<游戏端口宿主端口>。
+* 注入模式（InjectGamePort）下，向 adapter 传递 <port_inject_env>=<游戏端口宿主端口>。
+* env 变量名读自 game_container_configs.port_inject_env（默认 GAME_HOST_PORT），
+* 消灭 SDTD_SERVER_PORT 类平台硬编码；适配器在 hooks.sh 中消费该变量改写游戏配置。
 * 未启用注入时返回 nil（空 env，nodeagent 不注入任何环境变量）。
 **/
 func buildInstanceEnv(config *entity.GameContainerConfig, portMappings []entity.ContainerPortMapping) map[string]string {
 	if config == nil || !config.InjectGamePort {
 		return nil
 	}
+	envName := config.PortInjectEnv
+	if envName == "" {
+		envName = defaultPortInjectEnv
+	}
 	for _, m := range portMappings {
 		if m.IsGamePort {
 			return map[string]string{
-				"SDTD_SERVER_PORT": strconv.Itoa(int(m.HostPort)),
+				envName: strconv.Itoa(int(m.HostPort)),
 			}
 		}
 	}

@@ -15,6 +15,9 @@ type GameContainerConfig struct {
 	BandwidthTxMbps    int64 `gorm:"column:bandwidth_tx_mbps"`
 	// 单核应用声明（3.1 声明规范）：调度校验整核（≥1000m 且 %1000==0），启用单核主频评分
 	SingleThreaded bool `gorm:"column:single_threaded"`
+	// 端口注入 env 变量名（000024 迁移）：adapter.toml port_inject.env 的部署侧配置，
+	// 默认 GAME_HOST_PORT；controller 组装实例 env 时读取，消灭 SDTD_SERVER_PORT 类硬编码
+	PortInjectEnv string `gorm:"column:port_inject_env;default:GAME_HOST_PORT"`
 }
 
 func (GameContainerConfig) TableName() string {

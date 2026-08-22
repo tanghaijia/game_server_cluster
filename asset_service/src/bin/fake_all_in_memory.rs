@@ -103,6 +103,8 @@ async fn seed_demo_builds(
                 artifact_image_tag: Some("0.2.2".to_string()),
                 status: BuildStatus::Available,
                 pinned: true,
+                adapter_metadata: None,
+                schema_json: None,
                 resolved_at: now,
                 created_at: now,
                 updated_at: now,

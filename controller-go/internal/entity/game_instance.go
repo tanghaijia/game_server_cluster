@@ -122,6 +122,11 @@ type GameInstance struct {
 
 	// 失败原因（000020 迁移）：调度/阶段失败、排队超时、卡死哨兵写入，前端展示
 	FailReason string `gorm:"column:fail_reason"`
+
+	// 实例配置（000024 迁移）：platform + player 合并后的键值，
+	// 由 adapter.toml config schema 校验，随 InstanceRuntimeSpec.config 下发，
+	// node_agent 写入 /data/.platform/game-config.json 供容器内 config-render 渲染
+	Config map[string]string `gorm:"column:config;serializer:json"`
 }
 
 func (GameInstance) TableName() string {

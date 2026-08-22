@@ -48,6 +48,9 @@ pub struct StartInstanceArgument {
     pub port_mapping: Option<ContainerPortMapping>,
     /// 容器环境变量（端口注入：如 SDTD_SERVER_PORT=<宿主端口>，adapter 用于改写游戏端口）
     pub env: HashMap<String, String>,
+    /// 实例配置（platform + player 合并后的键值），写入 /data/.platform/game-config.json
+    /// 供容器内 config-render.sh 按 manifest 渲染游戏配置文件
+    pub config: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

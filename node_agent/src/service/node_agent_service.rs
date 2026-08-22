@@ -468,7 +468,7 @@ where
             })?;
         let path_mapping = ContainerFilePathMappingHost {
             host_path: HostFilePath {
-                path: data_host_path,
+                path: data_host_path.clone(),
             },
             container_file_path: ContainerFilePath {
                 path: CONTAINER_DATA_PATH.to_string(),
@@ -476,6 +476,34 @@ where
             mapped_permission: "rwx".to_string(),
         };
         v2.push(path_mapping);
+
+        // 平台下发配置 → /data/.platform/game-config.json
+        // 供容器内 config-render.sh 按 config-manifest.json 渲染游戏配置文件
+        // （7dtd serverconfig.xml 等，见 adapter-framework-design.md §3.4）
+        if !argument.config.is_empty() {
+            let config_json = serde_json::to_string(&argument.config).map_err(|e| {
+                NodeAgentError::Internal {
+                    message: format!("serialize instance config: {e}"),
+                }
+            })?;
+            let platform_dir = PathBuf::from(&data_host_path).join(".platform");
+            tokio::fs::create_dir_all(&platform_dir)
+                .await
+                .map_err(|e| NodeAgentError::PathError {
+                    message: format!("create platform config dir failed: {e}"),
+                })?;
+            tokio::fs::write(platform_dir.join("game-config.json"), config_json)
+                .await
+                .map_err(|e| NodeAgentError::PathError {
+                    message: format!("write game-config.json failed: {e}"),
+                })?;
+            log::info!(
+                "instance {} platform config written to {}/.platform/game-config.json ({} keys)",
+                instance_id.0,
+                data_host_path,
+                argument.config.len()
+            );
+        }
 
         let container = self
             .container_client
@@ -557,6 +585,29 @@ where
             let docker_id = docker_id.unwrap();
             local_game_instance.status = crate::domain::GameInstanceStatus::Stopping;
             self.game_instance_repos.save(&local_game_instance).await?;
+
+            // 1) 优先 exec 容器内生命周期 stop.sh（save → 钩子优雅停止 → 兜底 TERM→KILL），
+            //    与镜像契约（adapters/base 生命周期框架）对齐；失败降级为 docker stop。
+            match self
+                .container_client
+                .exec(docker_id.clone(), vec!["/scripts/stop.sh".to_string()])
+                .await
+            {
+                Ok(out) => log::info!(
+                    "instance {} stop.sh exit_code={} stdout={} stderr={}",
+                    instance_id,
+                    out.exit_code,
+                    out.stdout,
+                    out.stderr
+                ),
+                Err(e) => log::warn!(
+                    "instance {} exec stop.sh failed, fallback to docker stop: {}",
+                    instance_id,
+                    e
+                ),
+            }
+
+            // 2) docker stop 兜底（graceful 30s 后 SIGKILL）
             self.container_client.stop_container(docker_id).await?;
         }
 

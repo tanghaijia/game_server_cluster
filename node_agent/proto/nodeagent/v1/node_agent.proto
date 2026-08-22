@@ -192,6 +192,9 @@ message InstanceRuntimeSpec {
   optional PortMapping port_mapping = 6;
   // 容器环境变量（端口注入等：如 SDTD_SERVER_PORT=<宿主端口>，供 adapter 改写游戏端口）
   map<string, string> env = 7;
+  // 实例配置（platform + player 合并后的键值，node_agent 写入
+  // /data/.platform/game-config.json 供容器内 config-render.sh 渲染游戏配置文件）
+  map<string, string> config = 8;
 }
 
 message BuildPreparationResult {

@@ -494,6 +494,7 @@ fn map_instance_runtime_spec(
         branch_name: value.branch_name.unwrap_or_else(|| "public".to_string()),
         port_mapping: value.port_mapping.map(map_port_mapping),
         env: value.env,
+        config: value.config,
     })
 }
 

@@ -5,21 +5,21 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     domain::{
-        AdapterId, AdapterVersion, BuildCompatibility, BuildId, BuildStatus, GameBuild,
-        InvalidAdapterVersion, ModEntry, ModManifest, ModManifestId, SnapshotRecord,
+        AdapterId, AdapterMetadata, AdapterVersion, BuildCompatibility, BuildId, BuildStatus,
+        GameBuild, InvalidAdapterVersion, ModEntry, ModManifest, ModManifestId, SnapshotRecord,
         SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
     ports::{BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository},
     proto::asset_service::{
-        self, BuildCompatibility as ProtoBuildCompatibility, CompleteSnapshotRequest,
-        CompleteSnapshotResponse, CreateSnapshotRequest, CreateSnapshotResponse,
-        FailSnapshotRequest, FailSnapshotResponse, GameBuild as ProtoGameBuild,
-        GetGameBuildRequest, GetGameBuildResponse, GetLatestSnapshotRequest,
-        GetLatestSnapshotResponse, GetModManifestRequest, GetModManifestResponse,
-        GetSnapshotRequest, GetSnapshotResponse, GetSnapshotRestorePlanRequest,
-        GetSnapshotRestorePlanResponse, ListGameBuildsRequest, ListGameBuildsResponse,
-        ListSnapshotsRequest, ListSnapshotsResponse,
+        self, AdapterMetadata as ProtoAdapterMetadata, BuildCompatibility as ProtoBuildCompatibility,
+        CompleteSnapshotRequest, CompleteSnapshotResponse, CreateSnapshotRequest,
+        CreateSnapshotResponse, FailSnapshotRequest, FailSnapshotResponse,
+        GameBuild as ProtoGameBuild, GetGameBuildRequest, GetGameBuildResponse,
+        GetLatestSnapshotRequest, GetLatestSnapshotResponse, GetModManifestRequest,
+        GetModManifestResponse, GetSnapshotRequest, GetSnapshotResponse,
+        GetSnapshotRestorePlanRequest, GetSnapshotRestorePlanResponse, ListGameBuildsRequest,
+        ListGameBuildsResponse, ListSnapshotsRequest, ListSnapshotsResponse,
         ModEntry as ProtoModEntry, ModManifest as ProtoModManifest, RegisterGameBuildRequest,
         RegisterGameBuildResponse, RegisterModManifestRequest, RegisterModManifestResponse,
         ResolveGameBuildRequest, ResolveGameBuildResponse, SnapshotRecord as ProtoSnapshotRecord,
@@ -378,6 +378,8 @@ fn map_build_from_proto(value: ProtoGameBuild) -> Result<GameBuild, Status> {
         artifact_image_tag: value.artifact_image_tag,
         status: map_build_status(value.status)?,
         pinned: value.pinned,
+        adapter_metadata: value.adapter_metadata.map(map_metadata_from_proto),
+        schema_json: value.schema_json,
         resolved_at: parse_time(&value.resolved_at)?,
         created_at: parse_time(&value.created_at)?,
         updated_at: parse_time(&value.updated_at)?,
@@ -419,9 +421,53 @@ fn map_build(value: GameBuild) -> ProtoGameBuild {
         status: map_build_status_to_proto(&value.status),
         pinned: value.pinned,
         adapter_id: value.adapter_id.0,
+        adapter_metadata: value.adapter_metadata.map(map_metadata),
+        schema_json: value.schema_json,
         resolved_at: value.resolved_at.to_rfc3339(),
         created_at: value.created_at.to_rfc3339(),
         updated_at: value.updated_at.to_rfc3339(),
+    }
+}
+
+fn map_metadata(value: AdapterMetadata) -> ProtoAdapterMetadata {
+    ProtoAdapterMetadata {
+        port_inject_env: value.port_inject_env,
+        start_script: value.start_script,
+        save_script: value.save_script,
+        stop_script: value.stop_script,
+        players_script: value.players_script,
+        health_script: value.health_script,
+    }
+}
+
+fn map_metadata_from_proto(value: ProtoAdapterMetadata) -> AdapterMetadata {
+    AdapterMetadata {
+        port_inject_env: value.port_inject_env,
+        start_script: if value.start_script.is_empty() {
+            "/scripts/start.sh".to_string()
+        } else {
+            value.start_script
+        },
+        save_script: if value.save_script.is_empty() {
+            "/scripts/save.sh".to_string()
+        } else {
+            value.save_script
+        },
+        stop_script: if value.stop_script.is_empty() {
+            "/scripts/stop.sh".to_string()
+        } else {
+            value.stop_script
+        },
+        players_script: if value.players_script.is_empty() {
+            "/scripts/players.sh".to_string()
+        } else {
+            value.players_script
+        },
+        health_script: if value.health_script.is_empty() {
+            "/scripts/health.sh".to_string()
+        } else {
+            value.health_script
+        },
     }
 }
 

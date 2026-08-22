@@ -1,0 +1,80 @@
+{
+  "adapter_id": "dst",
+  "game_id": "dst",
+  "settings": [
+    {
+      "key": "DST_CLUSTER",
+      "type": "string",
+      "control": "player",
+      "apply": "on_first_start",
+      "render": "xml_property",
+      "default": "Cluster",
+      "min": null,
+      "max": null,
+      "enum_values": null,
+      "secret": false,
+      "label_key": "cfg.DST_CLUSTER.label",
+      "description_key": null,
+      "group_key": "grp.runtime"
+    },
+    {
+      "key": "DST_CONF_DIR",
+      "type": "string",
+      "control": "platform",
+      "apply": "on_first_start",
+      "render": "xml_property",
+      "default": "DoNotStarveTogether",
+      "min": null,
+      "max": null,
+      "enum_values": null,
+      "secret": false,
+      "label_key": "cfg.DST_CONF_DIR.label",
+      "description_key": null,
+      "group_key": "grp.runtime"
+    },
+    {
+      "key": "DST_SHARD",
+      "type": "enum",
+      "control": "player",
+      "apply": "always",
+      "render": "xml_property",
+      "default": "both",
+      "min": null,
+      "max": null,
+      "enum_values": [
+        "both",
+        "Master",
+        "Caves"
+      ],
+      "secret": false,
+      "label_key": "cfg.DST_SHARD.label",
+      "description_key": "cfg.DST_SHARD.desc",
+      "group_key": "grp.runtime"
+    }
+  ],
+  "render_file": "",
+  "i18n": {
+    "fallback": "en",
+    "en": {
+      "cfg.DST_SHARD.desc": "Which shards to start (both = Master + Caves)",
+      "grp.runtime": "Runtime",
+      "enum.DST_SHARD.both": "Both (Master + Caves)",
+      "enum.DST_SHARD.master": "Master only",
+      "enum.DST_SHARD.caves": "Caves only",
+      "control.player": "Player",
+      "control.platform": "Platform"
+    },
+    "zh": {
+      "cfg.DST_SHARD.label": "启动分片",
+      "cfg.DST_SHARD.desc": "启动哪些分片（both = Master + Caves）",
+      "cfg.DST_CLUSTER.label": "集群名",
+      "cfg.DST_CONF_DIR.label": "配置目录名",
+      "grp.runtime": "运行时",
+      "enum.DST_SHARD.both": "全部（Master + Caves）",
+      "enum.DST_SHARD.master": "仅 Master",
+      "enum.DST_SHARD.caves": "仅 Caves",
+      "control.player": "玩家",
+      "control.platform": "平台"
+    }
+  }
+}

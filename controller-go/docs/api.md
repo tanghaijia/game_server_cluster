@@ -6,12 +6,12 @@
 
 ## 1. 基础信息
 
-| 项 | 值 |
-| --- | --- |
-| 基础地址 | `http://<host>:8090`（`HTTP_PORT` 环境变量，默认 8090） |
-| 内容类型 | 请求 `application/json`，响应 `application/json` |
-| 认证 | 无（当前版本未实现鉴权，仅限内网/调试使用；生产入口为 platform-service 的 `/api/admin/*`，带管理员鉴权） |
-| 数据库 | PostgreSQL（controller 本地表为读路径权威；Game 写操作同步 asset_service） |
+| 项    | 值                                                                     |
+| ---- | --------------------------------------------------------------------- |
+| 基础地址 | `http://<host>:8090`（`HTTP_PORT` 环境变量，默认 8090）                        |
+| 内容类型 | 请求 `application/json`，响应 `application/json`                           |
+| 认证   | 无（当前版本未实现鉴权，仅限内网/调试使用；生产入口为 platform-service 的 `/api/admin/*`，带管理员鉴权） |
+| 数据库  | PostgreSQL（controller 本地表为读路径权威；Game 写操作同步 asset_service）             |
 
 ### 通用错误格式
 
@@ -23,13 +23,13 @@
 
 ### 通用状态码
 
-| 状态码 | 含义 |
-| --- | --- |
-| 200 | 成功 |
-| 201 | 创建成功 |
-| 400 | 请求体非法 / 缺少必填字段 / 查询参数非法 |
-| 404 | 资源不存在（`gorm.ErrRecordNotFound`） |
-| 409 | 状态冲突（如对非 failed 实例 retry、对运行中实例 delete） |
+| 状态码 | 含义                                              |
+| --- | ----------------------------------------------- |
+| 200 | 成功                                              |
+| 201 | 创建成功                                            |
+| 400 | 请求体非法 / 缺少必填字段 / 查询参数非法                         |
+| 404 | 资源不存在（`gorm.ErrRecordNotFound`）                 |
+| 409 | 状态冲突（如对非 failed 实例 retry、对运行中实例 delete）         |
 | 500 | 服务端错误（内部错误、下游 asset_service / node_agent 调用失败等） |
 
 ---
@@ -49,11 +49,11 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| ID | string | 游戏 ID（= AppId） |
-| Name | string | 游戏名称 |
-| AppId | string | Steam App ID |
+| 字段                | 类型     | 说明                          |
+| ----------------- | ------ | --------------------------- |
+| ID                | string | 游戏 ID（= AppId）              |
+| Name              | string | 游戏名称                        |
+| AppId             | string | Steam App ID                |
 | ContainerConfigID | string | 关联的容器配置 ID（controller 本地维护） |
 
 ### 2.2 GameInstance 游戏实例
@@ -79,23 +79,23 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| ID | string | 实例 ID（`inst-` + 16 位 hex） |
-| GameID | string | 所属游戏 ID |
-| NodeAgentID | string\|null | 调度到的 node_agent ID；未调度/已停止/失败后为 `null` |
-| Status | string | 实例状态，见 [2.8 实例状态机](#28-实例状态机) |
-| LastPendingTime | string | 最近一次进入 pending 的时间（RFC3339） |
-| CreateTime / UpdateTime | string | 创建 / 更新时间（RFC3339） |
-| GameBuildId | string | 解析到的游戏构建 ID |
-| Region | string | 区域偏好（R3；空 = 任意区域） |
-| Priority | number | 调度优先级（D7，数值越小越优先，默认 100；排队按此排序） |
-| ResourceReq | object\|null | 资源需求（cpu_milli/内存/磁盘/带宽）；`null` 表示用容器配置默认值 |
-| ResourceOverride | boolean | 资源是否创建时显式指定（true 时覆盖容器配置默认值） |
-| QueuedReason | string | 排队原因（`queued` 状态时非空） |
-| QueuedAt | string\|null | 入队时间 |
-| Cancelled | boolean | 取消排队标记 |
-| FailReason | string | 失败原因（调度失败/排队超时/阶段失败等，`failed` 状态时可查） |
+| 字段                      | 类型           | 说明                                         |
+| ----------------------- | ------------ | ------------------------------------------ |
+| ID                      | string       | 实例 ID（`inst-` + 16 位 hex）                  |
+| GameID                  | string       | 所属游戏 ID                                    |
+| NodeAgentID             | string\|null | 调度到的 node_agent ID；未调度/已停止/失败后为 `null`     |
+| Status                  | string       | 实例状态，见 [2.8 实例状态机](#28-实例状态机)              |
+| LastPendingTime         | string       | 最近一次进入 pending 的时间（RFC3339）                |
+| CreateTime / UpdateTime | string       | 创建 / 更新时间（RFC3339）                         |
+| GameBuildId             | string       | 解析到的游戏构建 ID                                |
+| Region                  | string       | 区域偏好（R3；空 = 任意区域）                          |
+| Priority                | number       | 调度优先级（D7，数值越小越优先，默认 100；排队按此排序）            |
+| ResourceReq             | object\|null | 资源需求（cpu_milli/内存/磁盘/带宽）；`null` 表示用容器配置默认值 |
+| ResourceOverride        | boolean      | 资源是否创建时显式指定（true 时覆盖容器配置默认值）               |
+| QueuedReason            | string       | 排队原因（`queued` 状态时非空）                       |
+| QueuedAt                | string\|null | 入队时间                                       |
+| Cancelled               | boolean      | 取消排队标记                                     |
+| FailReason              | string       | 失败原因（调度失败/排队超时/阶段失败等，`failed` 状态时可查）       |
 
 ### 2.3 Node 服务器节点
 
@@ -114,14 +114,14 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| Id | number | 自增主键 |
-| Ip | string | 节点 IP |
+| 字段                                                 | 类型     | 说明                                           |
+| -------------------------------------------------- | ------ | -------------------------------------------- |
+| Id                                                 | number | 自增主键                                         |
+| Ip                                                 | string | 节点 IP                                        |
 | CoreNum / CoreFrequency / MemorySize / StorageSize | number | 节点规格（核心数 / 主频 GHz / 内存 MB / 存储 MB）；容量参与调度硬约束 |
-| Location | string | 地域（区域偏好匹配用） |
-| ServiceProvider | string | 云服务商 |
-| NetRxLimitMbps / NetTxLimitMbps | number | 平台可分配带宽上限（Mbps，带宽评分用） |
+| Location                                           | string | 地域（区域偏好匹配用）                                  |
+| ServiceProvider                                    | string | 云服务商                                         |
+| NetRxLimitMbps / NetTxLimitMbps                    | number | 平台可分配带宽上限（Mbps，带宽评分用）                        |
 
 > 节点其余字段（cpu_used_milli、cpu_reserved_milli、pressure_status 等）为运行时动态/账本数据，由 controller 维护，配置接口返回但不建议手动修改；实时视图见[调度观测](#10-调度观测接口)。
 
@@ -139,15 +139,15 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| ID | string | 主键（唯一名称） |
-| NodeId | string | 所属节点 ID（对应 Node.Id） |
-| Port | number | node_agent gRPC 端口 |
-| Status | number | `0`=Disabled（停用） `1`=Enabled（启用） |
-| Alive | boolean | 存活探测结果（controller 心跳） |
-| LastHeartbeatAt | string\|null | 最近心跳时间 |
-| HealthStatus | number | `0`=unknown（未探测，不可调度） `1`=healthy `2`=degraded（可调度但扣分） `3`=unhealthy（排除） |
+| 字段              | 类型           | 说明                                                                       |
+| --------------- | ------------ | ------------------------------------------------------------------------ |
+| ID              | string       | 主键（唯一名称）                                                                 |
+| NodeId          | string       | 所属节点 ID（对应 Node.Id）                                                      |
+| Port            | number       | node_agent gRPC 端口                                                       |
+| Status          | number       | `0`=Disabled（停用） `1`=Enabled（启用）                                         |
+| Alive           | boolean      | 存活探测结果（controller 心跳）                                                    |
+| LastHeartbeatAt | string\|null | 最近心跳时间                                                                   |
+| HealthStatus    | number       | `0`=unknown（未探测，不可调度） `1`=healthy `2`=degraded（可调度但扣分） `3`=unhealthy（排除） |
 
 > 只有 **Enabled 且健康状态可调度** 的 node_agent 才会参与实例调度与游戏缓存循环。
 
@@ -164,13 +164,13 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| ID | string | 映射 ID |
-| InstanceId | string | 实例 ID |
-| NodeAgentId | string | node_agent ID |
-| HostPort / ContainerPort | number | 宿主端口 / 容器端口 |
-| Protocol | number | `0`=TCP `1`=UDP |
+| 字段                       | 类型     | 说明              |
+| ------------------------ | ------ | --------------- |
+| ID                       | string | 映射 ID           |
+| InstanceId               | string | 实例 ID           |
+| NodeAgentId              | string | node_agent ID   |
+| HostPort / ContainerPort | number | 宿主端口 / 容器端口     |
+| Protocol                 | number | `0`=TCP `1`=UDP |
 
 ### 2.6 SteamBranch 游戏分支
 
@@ -187,15 +187,15 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| Id | string | 主键（`game_id:branch_name`） |
-| BranchName | string | Steam 分支名 |
-| LastBuildId | number | 最新构建 ID |
-| Description | string | 分支描述 |
-| GameId | string | 所属游戏 ID |
-| Status | number | `0`=Disable `1`=Enable `2`=Abandoned（废弃） |
-| CreateTime / UpdateTime | string | 创建 / 更新时间（RFC3339） |
+| 字段                      | 类型     | 说明                                       |
+| ----------------------- | ------ | ---------------------------------------- |
+| Id                      | string | 主键（`game_id:branch_name`）                |
+| BranchName              | string | Steam 分支名                                |
+| LastBuildId             | number | 最新构建 ID                                  |
+| Description             | string | 分支描述                                     |
+| GameId                  | string | 所属游戏 ID                                  |
+| Status                  | number | `0`=Disable `1`=Enable `2`=Abandoned（废弃） |
+| CreateTime / UpdateTime | string | 创建 / 更新时间（RFC3339）                       |
 
 ### 2.7 GameCache 节点缓存（node_agent 上报）
 
@@ -212,15 +212,15 @@
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| game_id | string | 游戏 ID |
-| branch_name | string | 分支名 |
-| build_id | string | 节点上缓存的构建 ID（字符串） |
-| status | number | `0`=DOWNLOADING `1`=AVAILABLE `2`=REMOVED `3`=UNAVAILABLE |
-| path | string | 缓存路径（未设置时省略） |
-| download_progress | number | 下载进度 0~1（未设置时省略） |
-| create_time / update_time | string | 创建 / 更新时间（未设置时省略） |
+| 字段                        | 类型     | 说明                                                        |
+| ------------------------- | ------ | --------------------------------------------------------- |
+| game_id                   | string | 游戏 ID                                                     |
+| branch_name               | string | 分支名                                                       |
+| build_id                  | string | 节点上缓存的构建 ID（字符串）                                          |
+| status                    | number | `0`=DOWNLOADING `1`=AVAILABLE `2`=REMOVED `3`=UNAVAILABLE |
+| path                      | string | 缓存路径（未设置时省略）                                              |
+| download_progress         | number | 下载进度 0~1（未设置时省略）                                          |
+| create_time / update_time | string | 创建 / 更新时间（未设置时省略）                                         |
 
 ### 2.8 实例状态机
 
@@ -235,19 +235,19 @@ queued --排队超时--> failed（FailReason=排队超时）
 任意阶段失败 → failed（可通过 retry 回到 pending）
 ```
 
-| 状态 | 说明 |
-| --- | --- |
-| `pending` | 等待调度（start 后的初始态） |
-| `scheduling` | 调度中（filter/score/预留事务） |
-| `queued` | 排队中（资源不足，等待唤醒；可取消） |
-| `preparing_build` | 在 node_agent 上准备游戏构建 |
-| `restoring_snapshot` | 还原快照（无快照则跳过） |
-| `starting` | 启动游戏进程 |
-| `running` | 运行中（终态） |
-| `stopping` | 停止中 |
-| `cleaning` | 清理实例资源 |
-| `stopped` | 已停止（终态） |
-| `failed` | 失败（可重试；`FailReason` 字段含失败原因） |
+| 状态                   | 说明                           |
+| -------------------- | ---------------------------- |
+| `pending`            | 等待调度（start 后的初始态）            |
+| `scheduling`         | 调度中（filter/score/预留事务）       |
+| `queued`             | 排队中（资源不足，等待唤醒；可取消）           |
+| `preparing_build`    | 在 node_agent 上准备游戏构建         |
+| `restoring_snapshot` | 还原快照（无快照则跳过）                 |
+| `starting`           | 启动游戏进程                       |
+| `running`            | 运行中（终态）                      |
+| `stopping`           | 停止中                          |
+| `cleaning`           | 清理实例资源                       |
+| `stopped`            | 已停止（终态）                      |
+| `failed`             | 失败（可重试；`FailReason` 字段含失败原因） |
 
 ### 2.9 GameContainerConfig 游戏容器配置
 
@@ -269,68 +269,68 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| ID | string | 配置 ID |
-| ContainerServerPath | string | 容器内游戏文件挂载路径（= 节点 game-cache 挂载点） |
-| PortMode | number | `0`=NAT（动态映射宿主端口） `1`=HOST（直用宿主端口） |
-| InjectGamePort | boolean | 端口注入：游戏端口 = 分配的宿主端口，通过 env 通告给 adapter |
-| PortExcerpt | array | 端口片段（[2.5](#25-containerportmapping-端口映射) 同款 Protocol 枚举；`IsGamePort` 标记对客户端公开的主端口） |
-| CPURequestMilli / MemoryRequestBytes / DiskRequestBytes | number | 资源默认请求（调度硬约束 H3；实例创建时可覆盖） |
-| BandwidthRxMbps / BandwidthTxMbps | number | 带宽默认请求（软约束，评分用） |
-| SingleThreaded | boolean | 单核应用声明（CPU 请求须整核；评分启用主频偏好） |
+| 字段                                                      | 类型      | 说明                                                                                  |
+| ------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| ID                                                      | string  | 配置 ID                                                                               |
+| ContainerServerPath                                     | string  | 容器内游戏文件挂载路径（= 节点 game-cache 挂载点）                                                    |
+| PortMode                                                | number  | `0`=NAT（动态映射宿主端口） `1`=HOST（直用宿主端口）                                                  |
+| InjectGamePort                                          | boolean | 端口注入：游戏端口 = 分配的宿主端口，通过 env 通告给 adapter                                              |
+| PortExcerpt                                             | array   | 端口片段（[2.5](#25-containerportmapping-端口映射) 同款 Protocol 枚举；`IsGamePort` 标记对客户端公开的主端口） |
+| CPURequestMilli / MemoryRequestBytes / DiskRequestBytes | number  | 资源默认请求（调度硬约束 H3；实例创建时可覆盖）                                                           |
+| BandwidthRxMbps / BandwidthTxMbps                       | number  | 带宽默认请求（软约束，评分用）                                                                     |
+| SingleThreaded                                          | boolean | 单核应用声明（CPU 请求须整核；评分启用主频偏好）                                                          |
 
 ---
 
 ## 3. 接口总览
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/api/games` | 创建游戏 |
-| GET | `/api/games` | 列出游戏 |
-| GET | `/api/games/:id` | 查询游戏 |
-| PUT | `/api/games/:id` | 更新游戏 |
-| DELETE | `/api/games/:id` | 删除游戏 |
-| GET | `/api/games/:id/container-config` | 查询游戏容器配置 |
-| PUT | `/api/games/:id/container-config` | 更新游戏容器配置（端口片段整体替换） |
-| POST | `/api/game-instances` | 创建实例（可带 region/priority/resources） |
-| GET | `/api/game-instances` | 列出实例（按状态过滤） |
-| GET | `/api/game-instances/:id` | 查询实例 |
-| GET | `/api/game-instances/:id/ports` | 查询实例端口映射 |
-| POST | `/api/game-instances/:id/start` | 启动实例 |
-| POST | `/api/game-instances/:id/stop` | 停止实例 |
-| POST | `/api/game-instances/:id/cancel` | 取消排队（queued → stopped） |
-| POST | `/api/game-instances/:id/retry` | 重试失败实例 |
-| POST | `/api/game-instances/:id/dispatch` | 强制入队调度（调试） |
-| DELETE | `/api/game-instances/:id` | 删除实例（排队中自动出队） |
-| POST | `/api/nodes` | 创建节点 |
-| GET | `/api/nodes` | 列出节点 |
-| GET | `/api/nodes/:id` | 查询节点 |
-| PUT | `/api/nodes/:id` | 更新节点（容量/地域/带宽上限） |
-| DELETE | `/api/nodes/:id` | 删除节点（被 node_agent 引用时 409） |
-| POST | `/api/node-agents` | 创建 node_agent |
-| GET | `/api/node-agents` | 列出 node_agent |
-| GET | `/api/node-agents/health` | 列出 node_agent 健康状态 |
-| POST | `/api/node-agents/:id/enable` | 启用 node_agent |
-| POST | `/api/node-agents/:id/disable` | 停用 node_agent |
-| GET | `/api/games/:id/branches` | 列出游戏分支（调试） |
-| POST | `/api/games/:id/branches/sync` | 手动同步分支（调试） |
-| POST | `/api/games/:id/branches/:branch/cache` | 手动触发节点缓存更新（调试） |
-| GET | `/api/node-agents/:id/cache` | 查询节点缓存状态（调试） |
-| GET | `/api/observe/nodes` | 调度观测：节点资源总览 |
-| GET | `/api/observe/nodes/:id/history` | 调度观测：节点资源采样曲线 |
-| GET | `/api/observe/cache` | 调度观测：节点 game-cache 状态 |
-| GET | `/api/observe/queue` | 调度观测：排队详情 |
-| GET | `/api/observe/events` | 调度观测：事件流（支持 DB 历史） |
-| GET | `/api/observe/scheduler/stats` | 调度观测：调度统计 |
-| POST | `/api/observe/scheduler/preview` | 调度观测：试调度干跑（不预留不落库） |
-| GET | `/metrics` | Prometheus 文本指标 |
-| GET | `/healthz` | 存活探针 |
-| GET | `/debug/version` | 构建信息 |
-| GET | `/debug/reconcile` | 调度器状态（调试） |
-| POST | `/debug/reconcile/recover` | 手动触发调度恢复（调试） |
-| GET | `/debug/instances` | 实例聚合视图（调试） |
-| GET | `/debug/pprof/*` | Go pprof 性能分析（调试） |
+| 方法     | 路径                                      | 说明                                 |
+| ------ | --------------------------------------- | ---------------------------------- |
+| POST   | `/api/games`                            | 创建游戏                               |
+| GET    | `/api/games`                            | 列出游戏                               |
+| GET    | `/api/games/:id`                        | 查询游戏                               |
+| PUT    | `/api/games/:id`                        | 更新游戏                               |
+| DELETE | `/api/games/:id`                        | 删除游戏                               |
+| GET    | `/api/games/:id/container-config`       | 查询游戏容器配置                           |
+| PUT    | `/api/games/:id/container-config`       | 更新游戏容器配置（端口片段整体替换）                 |
+| POST   | `/api/game-instances`                   | 创建实例（可带 region/priority/resources） |
+| GET    | `/api/game-instances`                   | 列出实例（按状态过滤）                        |
+| GET    | `/api/game-instances/:id`               | 查询实例                               |
+| GET    | `/api/game-instances/:id/ports`         | 查询实例端口映射                           |
+| POST   | `/api/game-instances/:id/start`         | 启动实例                               |
+| POST   | `/api/game-instances/:id/stop`          | 停止实例                               |
+| POST   | `/api/game-instances/:id/cancel`        | 取消排队（queued → stopped）             |
+| POST   | `/api/game-instances/:id/retry`         | 重试失败实例                             |
+| POST   | `/api/game-instances/:id/dispatch`      | 强制入队调度（调试）                         |
+| DELETE | `/api/game-instances/:id`               | 删除实例（排队中自动出队）                      |
+| POST   | `/api/nodes`                            | 创建节点                               |
+| GET    | `/api/nodes`                            | 列出节点                               |
+| GET    | `/api/nodes/:id`                        | 查询节点                               |
+| PUT    | `/api/nodes/:id`                        | 更新节点（容量/地域/带宽上限）                   |
+| DELETE | `/api/nodes/:id`                        | 删除节点（被 node_agent 引用时 409）         |
+| POST   | `/api/node-agents`                      | 创建 node_agent                      |
+| GET    | `/api/node-agents`                      | 列出 node_agent                      |
+| GET    | `/api/node-agents/health`               | 列出 node_agent 健康状态                 |
+| POST   | `/api/node-agents/:id/enable`           | 启用 node_agent                      |
+| POST   | `/api/node-agents/:id/disable`          | 停用 node_agent                      |
+| GET    | `/api/games/:id/branches`               | 列出游戏分支（调试）                         |
+| POST   | `/api/games/:id/branches/sync`          | 手动同步分支（调试）                         |
+| POST   | `/api/games/:id/branches/:branch/cache` | 手动触发节点缓存更新（调试）                     |
+| GET    | `/api/node-agents/:id/cache`            | 查询节点缓存状态（调试）                       |
+| GET    | `/api/observe/nodes`                    | 调度观测：节点资源总览                        |
+| GET    | `/api/observe/nodes/:id/history`        | 调度观测：节点资源采样曲线                      |
+| GET    | `/api/observe/cache`                    | 调度观测：节点 game-cache 状态              |
+| GET    | `/api/observe/queue`                    | 调度观测：排队详情                          |
+| GET    | `/api/observe/events`                   | 调度观测：事件流（支持 DB 历史）                 |
+| GET    | `/api/observe/scheduler/stats`          | 调度观测：调度统计                          |
+| POST   | `/api/observe/scheduler/preview`        | 调度观测：试调度干跑（不预留不落库）                 |
+| GET    | `/metrics`                              | Prometheus 文本指标                    |
+| GET    | `/healthz`                              | 存活探针                               |
+| GET    | `/debug/version`                        | 构建信息                               |
+| GET    | `/debug/reconcile`                      | 调度器状态（调试）                          |
+| POST   | `/debug/reconcile/recover`              | 手动触发调度恢复（调试）                       |
+| GET    | `/debug/instances`                      | 实例聚合视图（调试）                         |
+| GET    | `/debug/pprof/*`                        | Go pprof 性能分析（调试）                  |
 
 ---
 
@@ -351,10 +351,10 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| name | 是 | 游戏名称 |
-| app_id | 否 | Steam App ID（游戏 ID = app_id） |
+| 字段     | 必填  | 说明                           |
+| ------ | --- | ---------------------------- |
+| name   | 是   | 游戏名称                         |
+| app_id | 否   | Steam App ID（游戏 ID = app_id） |
 
 响应 `201`：
 
@@ -427,13 +427,13 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| game_id | 是 | 游戏 ID |
-| game_build_id | 否 | 构建 ID；不传时以 `public` channel 向 asset_service 解析最新可用构建 |
-| region | 否 | 区域偏好（调度倾向匹配节点，非强制） |
-| priority | 否 | 调度优先级（排队排序用，默认 100） |
-| resources | 否 | 资源显式覆盖（cpu_milli/memory_bytes/disk_bytes/bandwidth_rx_mbps/bandwidth_tx_mbps）；传入后该实例始终按此值调度，忽略容器配置后续变更 |
+| 字段            | 必填  | 说明                                                                                                     |
+| ------------- | --- | ------------------------------------------------------------------------------------------------------ |
+| game_id       | 是   | 游戏 ID                                                                                                  |
+| game_build_id | 否   | 构建 ID；不传时以 `public` channel 向 asset_service 解析最新可用构建                                                   |
+| region        | 否   | 区域偏好（调度倾向匹配节点，非强制）                                                                                     |
+| priority      | 否   | 调度优先级（排队排序用，默认 100）                                                                                    |
+| resources     | 否   | 资源显式覆盖（cpu_milli/memory_bytes/disk_bytes/bandwidth_rx_mbps/bandwidth_tx_mbps）；传入后该实例始终按此值调度，忽略容器配置后续变更 |
 
 响应 `201`：GameInstance 对象，初始 `Status: "stopped"`。
 
@@ -445,9 +445,9 @@ queued --排队超时--> failed（FailReason=排队超时）
 
 查询参数：
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| status | 否 | 按状态过滤，取值见 [2.6 实例状态机](#26-实例状态机)，如 `?status=running`；不传返回全部 |
+| 参数     | 必填  | 说明                                                          |
+| ------ | --- | ----------------------------------------------------------- |
+| status | 否   | 按状态过滤，取值见 [2.6 实例状态机](#26-实例状态机)，如 `?status=running`；不传返回全部 |
 
 响应 `200`：
 
@@ -574,9 +574,9 @@ queued --排队超时--> failed（FailReason=排队超时）
 { "ip": "192.168.1.10" }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| ip | 是 | 节点 IP |
+| 字段  | 必填  | 说明    |
+| --- | --- | ----- |
+| ip  | 是   | 节点 IP |
 
 响应 `201`：Node 对象（`Id` 为自增主键）。错误：`400`、`500`。
 
@@ -616,12 +616,12 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
+| 字段                                                          | 说明                  |
+| ----------------------------------------------------------- | ------------------- |
 | ip / core_num / core_frequency / memory_size / storage_size | 节点规格（修改后调度硬约束按新值判定） |
-| location | 地域（区域偏好匹配） |
-| service_provider | 云服务商 |
-| net_rx_limit_mbps / net_tx_limit_mbps | 带宽上限（带宽评分） |
+| location                                                    | 地域（区域偏好匹配）          |
+| service_provider                                            | 云服务商                |
+| net_rx_limit_mbps / net_tx_limit_mbps                       | 带宽上限（带宽评分）          |
 
 响应 `200`：更新后的 Node 对象。错误：`404`、`500`。
 
@@ -657,11 +657,11 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| name | 是 | node_agent 唯一名称（主键） |
-| node_id | 否 | 所属节点 ID（对应 Node.Id） |
-| port | 否 | gRPC 端口，默认 `9090` |
+| 字段      | 必填  | 说明                  |
+| ------- | --- | ------------------- |
+| name    | 是   | node_agent 唯一名称（主键） |
+| node_id | 否   | 所属节点 ID（对应 Node.Id） |
+| port    | 否   | gRPC 端口，默认 `9090`   |
 
 创建后默认 `Status: 1`（Enabled）。
 
@@ -734,14 +734,14 @@ queued --排队超时--> failed（FailReason=排队超时）
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| container_server_path | 容器内游戏文件挂载路径 |
-| port_mode | `0`=NAT `1`=HOST |
-| inject_game_port | 端口注入开关 |
+| 字段                                                                                                    | 说明                                         |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| container_server_path                                                                                 | 容器内游戏文件挂载路径                                |
+| port_mode                                                                                             | `0`=NAT `1`=HOST                           |
+| inject_game_port                                                                                      | 端口注入开关                                     |
 | cpu_request_milli / memory_request_bytes / disk_request_bytes / bandwidth_rx_mbps / bandwidth_tx_mbps | 资源默认请求（修改后**已创建实例下次调度即按新值预留**，除非实例创建时显式覆盖） |
-| single_threaded | 单核应用声明（CPU 请求须整核，否则调度失败） |
-| port_excerpts | 端口片段列表（整体替换；protocol `0`=tcp `1`=udp） |
+| single_threaded                                                                                       | 单核应用声明（CPU 请求须整核，否则调度失败）                   |
+| port_excerpts                                                                                         | 端口片段列表（整体替换；protocol `0`=tcp `1`=udp）      |
 
 响应 `200`：更新后的 GameContainerConfig 对象。
 
@@ -794,9 +794,9 @@ queued --排队超时--> failed（FailReason=排队超时）
 { "node_agent_id": "node-agent-1" }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| node_agent_id | 是 | 目标 node_agent ID |
+| 字段            | 必填  | 说明               |
+| ------------- | --- | ---------------- |
+| node_agent_id | 是   | 目标 node_agent ID |
 
 按本地分支记录的最新构建版本（`LastBuildId`）在指定 node_agent 上执行缓存检查，必要时触发下载。语义与后台循环一致：缓存已最新 / 正在下载 → 幂等成功；节点缓存不可用等 → 错误。
 
@@ -814,10 +814,10 @@ queued --排队超时--> failed（FailReason=排队超时）
 
 查询参数：
 
-| 参数 | 必填 | 说明 |
-| --- | --- | --- |
-| game_id | 是 | 游戏 ID |
-| branch | 否 | 分支名，缺省 `public` |
+| 参数      | 必填  | 说明              |
+| ------- | --- | --------------- |
+| game_id | 是   | 游戏 ID           |
+| branch  | 否   | 分支名，缺省 `public` |
 
 响应 `200`：
 
@@ -877,12 +877,12 @@ queued --排队超时--> failed（FailReason=排队超时）
 
 返回调度器运行状态：
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| queue_len | number | 当前调度队列长度 |
-| retry_counts | object | 各实例当前自动重试次数（`instance_id → count`） |
-| dispatchable_instances | array | 处于中间态（待调度）的实例列表 |
-| scheduler | object | 调度器状态（`type`=resource_aware、`stats` 调度统计、`queue` 排队统计、`weights` 评分权重） |
+| 字段                     | 类型     | 说明                                                                    |
+| ---------------------- | ------ | --------------------------------------------------------------------- |
+| queue_len              | number | 当前调度队列长度                                                              |
+| retry_counts           | object | 各实例当前自动重试次数（`instance_id → count`）                                    |
+| dispatchable_instances | array  | 处于中间态（待调度）的实例列表                                                       |
+| scheduler              | object | 调度器状态（`type`=resource_aware、`stats` 调度统计、`queue` 排队统计、`weights` 评分权重） |
 
 响应 `200` 示例：
 
@@ -935,13 +935,13 @@ queued --排队超时--> failed（FailReason=排队超时）
 
 Go 标准 `net/http/pprof` 接口，常用：
 
-| 路径 | 说明 |
-| --- | --- |
-| `/debug/pprof/` | 索引页 |
-| `/debug/pprof/goroutine?debug=1` | goroutine 堆栈（排查泄漏） |
-| `/debug/pprof/heap?debug=1` | 堆内存 |
-| `/debug/pprof/profile?seconds=30` | CPU profile |
-| `/debug/pprof/trace?seconds=5` | 执行 trace |
+| 路径                                | 说明                 |
+| --------------------------------- | ------------------ |
+| `/debug/pprof/`                   | 索引页                |
+| `/debug/pprof/goroutine?debug=1`  | goroutine 堆栈（排查泄漏） |
+| `/debug/pprof/heap?debug=1`       | 堆内存                |
+| `/debug/pprof/profile?seconds=30` | CPU profile        |
+| `/debug/pprof/trace?seconds=5`    | 执行 trace           |
 
 ---
 
@@ -970,14 +970,14 @@ Go 标准 `net/http/pprof` 接口，常用：
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| health | unknown/healthy/degraded/unhealthy/no_agent |
-| pressure | Normal/Warning/Critical |
-| cpu_allocatable_milli / mem_allocatable_bytes | **逻辑可分配量** = 容量×利用率目标(0.8) − 已预留（不含实际占用） |
-| cpu_used_milli / mem_used_bytes | **实际占用**（node_agent 心跳上报） |
-| cpu_reserved_milli / mem_reserved_bytes | **预留账本**（已调度实例 request 之和） |
-| bandwidth_ratio | 带宽余量占比 0~1（按预留视图，观测页展示） |
+| 字段                                            | 说明                                          |
+| --------------------------------------------- | ------------------------------------------- |
+| health                                        | unknown/healthy/degraded/unhealthy/no_agent |
+| pressure                                      | Normal/Warning/Critical                     |
+| cpu_allocatable_milli / mem_allocatable_bytes | **逻辑可分配量** = 容量×利用率目标(0.8) − 已预留（不含实际占用）    |
+| cpu_used_milli / mem_used_bytes               | **实际占用**（node_agent 心跳上报）                   |
+| cpu_reserved_milli / mem_reserved_bytes       | **预留账本**（已调度实例 request 之和）                  |
+| bandwidth_ratio                               | 带宽余量占比 0~1（按预留视图，观测页展示）                     |
 
 > 说明：**可用/占用/预留语义不同**——占用=心跳实际值、预留=调度承诺、可用=基于预留的计算值；节点实际负载兜底由压力状态机负责（pressure 列）。
 
@@ -1005,10 +1005,10 @@ Go 标准 `net/http/pprof` 接口，常用：
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
-| status | available/downloading/removed/unavailable/missing（来自 NodeCacheView 快照，刷新周期 30s） |
-| download_progress | 0~1（下载中） |
+| 字段                | 说明                                                                              |
+| ----------------- | ------------------------------------------------------------------------------- |
+| status            | available/downloading/removed/unavailable/missing（来自 NodeCacheView 快照，刷新周期 30s） |
+| download_progress | 0~1（下载中）                                                                        |
 
 > 与调度 H5 硬约束一致：仅 `available` 节点可被调度；快照刷新周期 `CACHE_VIEW_REFRESH_SEC`。
 
@@ -1025,19 +1025,19 @@ Go 标准 `net/http/pprof` 接口，常用：
 }
 ```
 
-| 字段 | 说明 |
-| --- | --- |
+| 字段                               | 说明                                    |
+| -------------------------------- | ------------------------------------- |
 | wait_seconds / remaining_seconds | 已等待秒数 / 距排队超时（30 分钟）剩余秒数（<0 = 已超时待清理） |
 
 ### 9A.5 调度事件流
 
 `GET /api/observe/events?type=&limit=&hours=`
 
-| 参数 | 说明 |
-| --- | --- |
-| type | 事件类型过滤（如 `instance_scheduled`/`instance_queued`/`node_pressure_changed`） |
-| limit | 数量上限（默认 100） |
-| hours | >0 时从 **DB 历史**查询（重启后可回溯，默认保留 7 天）；不传读内存实时缓冲 |
+| 参数    | 说明                                                                       |
+| ----- | ------------------------------------------------------------------------ |
+| type  | 事件类型过滤（如 `instance_scheduled`/`instance_queued`/`node_pressure_changed`） |
+| limit | 数量上限（默认 100）                                                             |
+| hours | >0 时从 **DB 历史**查询（重启后可回溯，默认保留 7 天）；不传读内存实时缓冲                             |
 
 响应 `200`：
 

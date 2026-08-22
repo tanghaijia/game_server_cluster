@@ -21,8 +21,8 @@ use crate::{
     error::NodeAgentError,
     ports::{
         AssetServiceFace, ContainerClient, ContainerError, DockerInstanceRepository,
-        GameCacheRepository, GameInstanceRepository, LocalGameBuildRepository, NodeHeartbeat,
-        OperationRepository, Snapshot_manager, SystemInfoProvider,
+        ExecOutput, GameCacheRepository, GameInstanceRepository, LocalGameBuildRepository,
+        NodeHeartbeat, OperationRepository, Snapshot_manager, SystemInfoProvider,
     },
     service::{SteamService, SteamServiceError},
 };
@@ -567,6 +567,21 @@ impl ContainerClient for FakeImageClient {
             .lock()
             .map_err(|_| ContainerError::Unknown)?;
         Ok(containers.len() as i32)
+    }
+
+    async fn exec(&self, container_id: String, cmd: Vec<String>) -> Result<ExecOutput, ContainerError> {
+        let containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        if !containers.contains_key(&container_id) {
+            return Err(ContainerError::NotFound(container_id));
+        }
+        Ok(ExecOutput {
+            exit_code: 0,
+            stdout: format!("fake exec: {}", cmd.join(" ")),
+            stderr: String::new(),
+        })
     }
 }
 

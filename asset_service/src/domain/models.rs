@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{AdapterId, AdapterVersion, BuildId, ModManifestId, SnapshotId};
+use super::{AdapterId, AdapterMetadata, AdapterVersion, BuildId, ModManifestId, SnapshotId};
 
 /// 指定要解析的游戏版本。
 ///
@@ -57,6 +57,11 @@ pub struct GameBuild {
     pub status: BuildStatus,
     /// 是否钉选。钉选的构建不会被自动清理回收
     pub pinned: bool,
+    /// 适配器运行时元数据（M4：端口注入 env、生命周期脚本路径），随构建注册携带
+    pub adapter_metadata: Option<AdapterMetadata>,
+    /// 配置 schema JSON（gen_manifest.py 生成的 AdapterSchema 序列化），
+    /// 天然绑定该 build 引用的适配器镜像版本；ResolveGameBuild 一次返回
+    pub schema_json: Option<String>,
     /// 解析完成的时间
     pub resolved_at: DateTime<Utc>,
     /// 首次注册到系统的时间

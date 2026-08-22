@@ -6,12 +6,15 @@ use crate::domain::{
     ImageRepository, ImageRepositoryCredentials, ImageStatus, LocalGameBuild, MappingPortType,
     RemoteImage,
 };
-use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository};
+use crate::ports::{ContainerClient, ContainerError, DockerInstanceRepository, ExecOutput};
 use async_trait::async_trait;
+use bollard::container::LogOutput;
+use bollard::exec::{CreateExecOptions, StartExecOptions};
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::{CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder};
 use bollard::Docker;
 use chrono::Utc;
+use futures_util::StreamExt;
 use lmrc_docker::{DockerClient, DockerCredentials};
 
 pub struct DockerContainerClient {
@@ -325,8 +328,7 @@ impl ContainerClient for DockerContainerClient {
      */
     async fn update_container_status(&self) -> Result<i32, ContainerError> {
         let client = DockerClient::new().map_err(to_io_error)?;
-        let summaries = client.containers().list(true).await.map_err(to_io_error)?;
-        let mut updated_count = 0i32;
+        let summaries = client.containers().list(true).await.map_err(to_io_error)?;        let mut updated_count = 0i32;
 
         for summary in &summaries {
             let container_id = match &summary.id {
@@ -366,6 +368,59 @@ impl ContainerClient for DockerContainerClient {
         }
 
         Ok(updated_count)
+    }
+
+    async fn exec(&self, container_id: String, cmd: Vec<String>) -> Result<ExecOutput, ContainerError> {
+        let docker = Docker::connect_with_socket_defaults().map_err(bollard_to_io_error)?;
+
+        let exec = docker
+            .create_exec(
+                &container_id,
+                CreateExecOptions::<String> {
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    cmd: Some(cmd),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(bollard_to_io_error)?;
+
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        match docker
+            .start_exec(&exec.id, None::<StartExecOptions>)
+            .await
+            .map_err(bollard_to_io_error)?
+        {
+            bollard::exec::StartExecResults::Attached { mut output, .. } => {
+                while let Some(frame) = output.next().await {
+                    match frame.map_err(bollard_to_io_error)? {
+                        LogOutput::StdOut { message } => {
+                            stdout.push_str(&String::from_utf8_lossy(&message))
+                        }
+                        LogOutput::StdErr { message } => {
+                            stderr.push_str(&String::from_utf8_lossy(&message))
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            bollard::exec::StartExecResults::Detached => {
+                // detach 模式无输出
+            }
+        }
+
+        let inspect = docker
+            .inspect_exec(&exec.id)
+            .await
+            .map_err(bollard_to_io_error)?;
+
+        Ok(ExecOutput {
+            exit_code: inspect.exit_code.unwrap_or(-1) as i32,
+            stdout,
+            stderr,
+        })
     }
 }
 

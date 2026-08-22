@@ -140,6 +140,10 @@ type registerGameBuildRequest struct {
 	ArtifactURI        string `json:"artifact_uri"`
 	ArtifactImageName  string `json:"artifact_image_name"`
 	ArtifactImageTag   string `json:"artifact_image_tag"`
+	// 收敛模型（M5）：适配器元数据/schema 随构建注册携带（gen_manifest.py 产物），
+	// 不再有独立 adapter 实体；以下字段可选，缺省时 build 无配置能力
+	AdapterMetadata *assetservicev1.AdapterMetadata `json:"adapter_metadata,omitempty"`
+	SchemaJSON      string                          `json:"schema_json,omitempty"`
 }
 
 // RegisterGameBuild 注册新构建版本
@@ -163,6 +167,8 @@ func (h *GameHandler) RegisterGameBuild(c *gin.Context) {
 			ArtifactUri:        optionalString(req.ArtifactURI),
 			ArtifactImageName:  optionalString(req.ArtifactImageName),
 			ArtifactImageTag:   optionalString(req.ArtifactImageTag),
+			AdapterMetadata:    req.AdapterMetadata,
+			SchemaJson:         optionalString(req.SchemaJSON),
 			// asset_service 的 rpc 层要求 status 非 0；新注册默认 Available（asset_service 内部也会置 Available）
 			Status:             assetservicev1.BuildStatus_BUILD_STATUS_AVAILABLE,
 		},

@@ -1,0 +1,321 @@
+{
+  "schema_version": 1,
+  "file": "/data/serverconfig.xml",
+  "settings": [
+    {
+      "key": "AllowSpawnNearFriend",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BedrollDeadZoneSize",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BedrollExpiryTime",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BuildCreate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "CameraRestrictionMode",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DynamicMeshEnabled",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DynamicMeshLandClaimBuffer",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DynamicMeshLandClaimOnly",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DynamicMeshMaxItemCache",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "EnableMapRendering",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "GameMode",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "GameName",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "GameWorld",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "HideCommandExecutionLog",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "IgnoreEOSSanctions",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimCount",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimDeadZone",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimDecayMode",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimExpiryTime",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimOfflineDelay",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimOfflineDurabilityModifier",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimOnlineDurabilityModifier",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LandClaimSize",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Language",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MaxChunkAge",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MaxQueuedMeshLayers",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MaxSpawnedAnimals",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MaxSpawnedZombies",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MaxUncoveredMapChunksPerPlayer",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PartySharedKillRange",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PersistentPlayerProfiles",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerKillingMode",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerSafeZoneHours",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerSafeZoneLevel",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Region",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "SandboxCode",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "SaveDataLimit",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerAdminSlots",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerAdminSlotsPermission",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerAllowCrossplay",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerDescription",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerDisabledNetworkProtocols",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerLoginConfirmationText",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerMaxAllowedViewDistance",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerMaxPlayerCount",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerMaxWorldTransferSpeedKiBs",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerName",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerPassword",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerReservedSlots",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerReservedSlotsPermission",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerVisibility",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerWebsiteURL",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TelnetFailedLoginLimit",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TelnetFailedLoginsBlocktime",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TelnetPassword",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TelnetPort",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TwitchBloodMoonAllowed",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "TwitchServerPermission",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WebDashboardEnabled",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WebDashboardPort",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WebDashboardUrl",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WorldGenSeed",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    },
+    {
+      "key": "WorldGenSize",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    }
+  ]
+}

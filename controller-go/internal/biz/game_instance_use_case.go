@@ -54,12 +54,15 @@ func NewGameInstanceUseCase(
 	}
 }
 
-// CreateInstanceOptions 创建实例的可选参数（region/priority/资源显式覆盖）
+// CreateInstanceOptions 创建实例的可选参数（region/priority/资源显式覆盖/实例配置）
 type CreateInstanceOptions struct {
 	GameBuildID string
 	Region      string
 	Priority    int // 0 = 默认 100
 	Resources   *entity.ResourceRequest // 显式指定资源（覆盖 config 默认，ResourceOverride=true）
+	// 实例配置（000024，M3）：platform + player 合并后的键值，
+	// 键集合需通过 adapter.toml config schema 校验（未知 key 拒绝），随调度下发
+	Config map[string]string
 }
 
 /**
@@ -92,6 +95,7 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID st
 		Priority:         priority,
 		ResourceReq:      opts.Resources,
 		ResourceOverride: opts.Resources != nil, // 创建时显式指定 → 覆盖 config 默认（000021）
+		Config:           opts.Config,           // 000024：实例配置（M3 下发链路）
 	}
 	err = uc.instanceRepo.Save(ctx, instance)
 	if err != nil {

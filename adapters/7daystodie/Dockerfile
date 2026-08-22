@@ -1,36 +1,25 @@
-FROM debian:bookworm-slim
+# ============================================================
+# adapters/7daystodie —— 7 Days to Die 游戏适配器
+#
+# 基于公共基础镜像（adapters/base）：
+#   - 公共运行环境（i386 运行库、steamcmd、工具链）来自 base
+#   - 生命周期框架（start/save/stop/players/health）来自 base
+#   - 本镜像只提供：差异钩子 hooks.sh + 配置模板 templates/
+#
+# 构建：
+#   1) 先构建 base：  docker build -t registry/game/base:2026.08 adapters/base
+#   2) 再构建本镜像： docker build -t registry/game/7daystodie-adapter:0.4.0 adapters/7daystodie
+# ============================================================
+FROM registry/game/base:2026.08
 
-# 安装运行 7 Days to Die 专用服务器所需的依赖
-# 该服务器基于 Unity 引擎，需要 32/64 位运行库；实际所需包以首次启动报错为准，可在此微调
-RUN dpkg --add-architecture i386 && \
-    apt-get update && apt-get install -y \
-      libstdc++6:i386 \
-      libc6:i386 \
-      libgcc-s1:i386 \
-      lib32gcc-s1 \
-      libcurl4 \
-      libssl3 \
-      ca-certificates \
-      curl \
-      bash \
-      jq \
-      procps \
-      && rm -rf /var/lib/apt/lists/*
+# 7dtd 专用默认值（hook 与框架读取）
+ENV GAME_BIN_NAME=7DaysToDieServer.x86_64 \
+    SDTD_TELNET_PORT=8081
 
-# 安装 steamcmd（与 DST 适配器保持一致；实际游戏下载由 node_agent 侧宿主机 steamcmd 完成）
-RUN mkdir -p /opt/steamcmd && \
-    cd /opt/steamcmd && \
-    curl -L -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz && \
-    tar -xvzf steamcmd_linux.tar.gz
-
-# 拷贝脚本和模板
-COPY scripts/ /scripts/
+# 差异钩子 + 配置模板 + 渲染清单（M4：adapter.toml 生成，平台配置渲染契约）
+COPY hooks.sh /scripts/hooks.sh
 COPY templates/ /templates/
-RUN chmod +x /scripts/*.sh
+COPY config-manifest.json /scripts/config-manifest.json
+RUN chmod +x /scripts/hooks.sh && mkdir -p /server /data
 
-# /server: 只读游戏缓存（node_agent 挂载，存放 7DTD 服务器安装文件）
-# /data:   可写实例数据（存档、世界、日志、Mods、serverconfig.xml）
-RUN mkdir -p /server /data
-
-WORKDIR /scripts
-ENTRYPOINT ["/scripts/start.sh"]
+# 容器契约入口由 base 提供（/scripts/start.sh → lifecycle/start.sh）

@@ -4,7 +4,7 @@
 // - protoc             v7.35.0
 // source: assetservice/v1/asset_service.proto
 
-package assetservicev1
+package v1
 
 import (
 	context "context"
@@ -44,6 +44,7 @@ type AssetServiceClient interface {
 	ResolveGameBuild(ctx context.Context, in *ResolveGameBuildRequest, opts ...grpc.CallOption) (*ResolveGameBuildResponse, error)
 	RegisterGameBuild(ctx context.Context, in *RegisterGameBuildRequest, opts ...grpc.CallOption) (*RegisterGameBuildResponse, error)
 	GetGameBuild(ctx context.Context, in *GetGameBuildRequest, opts ...grpc.CallOption) (*GetGameBuildResponse, error)
+	// 适配器管理（M4）：schema/metadata 随 GameBuild 注册携带，无独立 adapter 实体
 	CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*CreateSnapshotResponse, error)
 	CompleteSnapshot(ctx context.Context, in *CompleteSnapshotRequest, opts ...grpc.CallOption) (*CompleteSnapshotResponse, error)
 	FailSnapshot(ctx context.Context, in *FailSnapshotRequest, opts ...grpc.CallOption) (*FailSnapshotResponse, error)
@@ -223,6 +224,7 @@ type AssetServiceServer interface {
 	ResolveGameBuild(context.Context, *ResolveGameBuildRequest) (*ResolveGameBuildResponse, error)
 	RegisterGameBuild(context.Context, *RegisterGameBuildRequest) (*RegisterGameBuildResponse, error)
 	GetGameBuild(context.Context, *GetGameBuildRequest) (*GetGameBuildResponse, error)
+	// 适配器管理（M4）：schema/metadata 随 GameBuild 注册携带，无独立 adapter 实体
 	CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error)
 	CompleteSnapshot(context.Context, *CompleteSnapshotRequest) (*CompleteSnapshotResponse, error)
 	FailSnapshot(context.Context, *FailSnapshotRequest) (*FailSnapshotResponse, error)

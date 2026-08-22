@@ -1,0 +1,8 @@
+{
+  "port_inject_env": null,
+  "start_script": "/scripts/start.sh",
+  "save_script": "/scripts/save.sh",
+  "stop_script": "/scripts/stop.sh",
+  "players_script": "/scripts/players.sh",
+  "health_script": "/scripts/health.sh"
+}
