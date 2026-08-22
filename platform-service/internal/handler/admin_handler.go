@@ -66,6 +66,10 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.POST("/games/:id/builds", h.RegisterGameBuild)
 	group.GET("/games/:id/builds/:buildId", h.GetGameBuild)
 
+	// 平台运营方配置（M5：control=platform 项，按游戏全局）
+	group.GET("/games/:id/platform-config", h.GetPlatformConfig)
+	group.PUT("/games/:id/platform-config", h.UpdatePlatformConfig)
+
 	// 文件会话（管理员可对任意实例）
 	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
 
@@ -438,14 +442,17 @@ func (h *AdminHandler) ListGameBuilds(c *gin.Context) {
 }
 
 type registerGameBuildRequest struct {
-	BuildID           string `json:"build_id"`
-	Channel           string `json:"channel"`
-	AdapterID         string `json:"adapter_id"`
-	AdapterVersion    string `json:"adapter_version"`
-	UpstreamVersion   string `json:"upstream_version"`
-	ArtifactURI       string `json:"artifact_uri"`
-	ArtifactImageName string `json:"artifact_image_name"`
-	ArtifactImageTag  string `json:"artifact_image_tag"`
+	BuildID           string         `json:"build_id"`
+	Channel           string         `json:"channel"`
+	AdapterID         string         `json:"adapter_id"`
+	AdapterVersion    string         `json:"adapter_version"`
+	UpstreamVersion   string         `json:"upstream_version"`
+	ArtifactURI       string         `json:"artifact_uri"`
+	ArtifactImageName string         `json:"artifact_image_name"`
+	ArtifactImageTag  string         `json:"artifact_image_tag"`
+	// M5：配置 schema / 适配器元数据（gen_manifest.py 产物，可选）
+	SchemaJSON        string         `json:"schema_json,omitempty"`
+	AdapterMetadata   map[string]any `json:"adapter_metadata,omitempty"`
 }
 
 // RegisterGameBuild 注册新构建
@@ -471,6 +478,8 @@ func (h *AdminHandler) RegisterGameBuild(c *gin.Context) {
 		ArtifactUri:       strPtr(req.ArtifactURI),
 		ArtifactImageName: strPtr(req.ArtifactImageName),
 		ArtifactImageTag:  strPtr(req.ArtifactImageTag),
+		SchemaJson:        strPtr(req.SchemaJSON),
+		AdapterMetadata:   req.AdapterMetadata,
 	})
 	if err != nil {
 		fail(c, err); return
@@ -485,4 +494,30 @@ func (h *AdminHandler) GetGameBuild(c *gin.Context) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, build)
+}
+
+// GetPlatformConfig 获取平台运营方配置（M5，control=platform 项按游戏全局）
+func (h *AdminHandler) GetPlatformConfig(c *gin.Context) {
+	pc, err := h.controller.GetPlatformConfig(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, pc)
+}
+
+type updatePlatformConfigRequest struct {
+	Config map[string]string `json:"config"`
+}
+
+// UpdatePlatformConfig 更新平台运营方配置（controller 校验：仅 control=platform 的 key）
+func (h *AdminHandler) UpdatePlatformConfig(c *gin.Context) {
+	var req updatePlatformConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	pc, err := h.controller.UpdatePlatformConfig(c.Request.Context(), c.Param("id"), req.Config)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, pc)
 }

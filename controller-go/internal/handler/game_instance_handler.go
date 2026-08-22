@@ -26,6 +26,7 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 	group.POST("", h.CreateGameInstance)
 	group.GET("", h.ListGameInstances)
 	group.GET("/:id", h.GetGameInstance)
+	group.PUT("/:id/config", h.UpdateInstanceConfig)
 	group.GET("/:id/ports", h.GetInstancePorts)
 	group.GET("/:id/connect", h.GetInstanceConnect)
 	group.POST("/:id/start", h.StartGameInstance)
@@ -82,6 +83,25 @@ func (h *GameInstanceHandler) GetGameInstance(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, instance)
+}
+
+type updateInstanceConfigRequest struct {
+	Config map[string]string `json:"config"`
+}
+
+// UpdateInstanceConfig 更新实例配置（schema 校验后落库，重启生效）
+func (h *GameInstanceHandler) UpdateInstanceConfig(c *gin.Context) {
+	var req updateInstanceConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	instance, err := h.gameInstanceUseCase.UpdateInstanceConfig(c.Request.Context(), c.Param("id"), req.Config)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, instance)

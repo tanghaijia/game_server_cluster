@@ -36,6 +36,7 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	// 用户侧实例视图 + 文件会话
 	router.GET("/api/me/instances", auth, h.MyInstances)
 	router.POST("/api/me/instances/:orderId/file-session", auth, h.MyFileSession)
+	router.PUT("/api/me/instances/:orderId/config", auth, h.MyInstanceConfig)
 	router.GET("/api/instances", auth, RequireAdmin(), h.AllInstances)
 
 	// 游戏配置 schema（M5）：下单表单数据源（透传 controller → asset_service）
@@ -211,8 +212,7 @@ func (h *OrderHandler) MyInstances(c *gin.Context) {
 }
 
 // MyFileSession 为当前用户订单关联的实例签发文件会话（本人或管理员）。
-// 注意：路由参数是 :orderId，不能复用 loadOwnOrder（其内部取 c.Param("id")）。
-func (h *OrderHandler) MyFileSession(c *gin.Context) {
+// 注意：路由参数是 :orderId，不能复用 loadOwnOrder（其内部取 c.Param("id")）。func (h *OrderHandler) MyFileSession(c *gin.Context) {
 	orderID := c.Param("orderId")
 	order, err := h.orderUseCase.GetOrder(c.Request.Context(), orderID)
 	if err != nil {
@@ -242,6 +242,38 @@ func (h *OrderHandler) MyFileSession(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, session)
+}
+
+type updateInstanceConfigRequest struct {
+	Config map[string]string `json:"config"`
+}
+
+// MyInstanceConfig 更新当前用户订单关联实例的配置（本人或管理员；重启生效）。
+func (h *OrderHandler) MyInstanceConfig(c *gin.Context) {
+	orderID := c.Param("orderId")
+	order, err := h.orderUseCase.GetOrder(c.Request.Context(), orderID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !isAdmin(c) && order.UserID != CurrentUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot access other users instances"})
+		return
+	}
+	var req updateInstanceConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	if err := h.orderUseCase.UpdateInstanceConfig(c.Request.Context(), orderID, req.Config); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "config updated (takes effect on next start)"})
 }
 
 // AllInstances 全部实例（管理员；?game_id= 过滤）

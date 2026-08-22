@@ -32,6 +32,8 @@ type ReconcileDispatcher struct {
 	gameRepo                repository.GameRepository
 	gameContainerConfigRepo repository.GameContainerConfigRepository
 	gameContainerPortMapper GameContainerPortMapper
+	// 平台运营方配置（M5）：启动实例时与 player 配置合并下发
+	platformConfigRepo repository.GamePlatformConfigRepository
 
 	// 自动重试计数(进程内):instanceID -> 连续重试次数,成功后清零
 	retryMu              sync.Mutex
@@ -54,6 +56,7 @@ func NewReconcileDispatcher(
 	gameRepo repository.GameRepository,
 	gameContainerConfigRepo repository.GameContainerConfigRepository,
 	gameContainerPortMapper GameContainerPortMapper,
+	platformConfigRepo repository.GamePlatformConfigRepository,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
 		queue:                   make(chan *entity.GameInstance, 100),
@@ -69,6 +72,7 @@ func NewReconcileDispatcher(
 		gameRepo:                gameRepo,
 		gameContainerConfigRepo: gameContainerConfigRepo,
 		gameContainerPortMapper: gameContainerPortMapper,
+		platformConfigRepo:      platformConfigRepo,
 		operationRetryCounts:    make(map[string]int),
 	}
 }
@@ -388,7 +392,14 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.FailedInstance(ctx, instance)
 			return nil
 		}
+		// 平台运营方配置合并（M5）：platform 为底、player（实例配置）覆盖，
+		// 每次启动取最新 platform 配置（共享语义）
 		runtimeSpec := buildInstanceRuntimeSpec(instance, buildResp.Build, containerConfig, portMappings)
+		if merged := d.mergedInstanceConfig(ctx, instance); merged != nil {
+			specInstance := *instance
+			specInstance.Config = merged
+			runtimeSpec = buildInstanceRuntimeSpec(&specInstance, buildResp.Build, containerConfig, portMappings)
+		}
 		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "StartInstance")
@@ -719,6 +730,29 @@ func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, inst
 		d.eventBus.Publish(SchedulerEvent{Type: EventInstanceStopped, OccurredAt: time.Now(),
 			InstanceID: instance.ID, Detail: "实例停止（释放预留与端口）"})
 	}
+}
+
+// mergedInstanceConfig 合并平台配置与实例配置（M5）：platform 为底、player 覆盖。
+// 平台配置不存在或为空时返回 nil（保持原 instance.Config 语义，避免不必要复制）。
+func (d *ReconcileDispatcher) mergedInstanceConfig(ctx context.Context, instance *entity.GameInstance) map[string]string {
+	if d.platformConfigRepo == nil {
+		return nil
+	}
+	pc, err := d.platformConfigRepo.GetByGame(ctx, instance.GameID)
+	if err != nil || pc == nil || len(pc.Config) == 0 {
+		return nil
+	}
+	if len(instance.Config) == 0 {
+		return pc.Config
+	}
+	merged := make(map[string]string, len(pc.Config)+len(instance.Config))
+	for k, v := range pc.Config {
+		merged[k] = v
+	}
+	for k, v := range instance.Config {
+		merged[k] = v
+	}
+	return merged
 }
 
 /**

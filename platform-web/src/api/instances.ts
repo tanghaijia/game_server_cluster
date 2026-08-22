@@ -29,6 +29,11 @@ export async function stopOrderInstance(orderId: string): Promise<void> {
   await http.post('/orders/' + orderId + '/instance/stop')
 }
 
+// 更新订单关联实例的配置（PUT /api/me/instances/:orderId/config；重启生效）
+export async function updateInstanceConfig(orderId: string, config: Record<string, string>): Promise<void> {
+  await http.put('/me/instances/' + orderId + '/config', { config })
+}
+
 // 实例状态 → 可执行动作
 export function instanceActions(status: string | undefined): { label: string; action: 'start' | 'stop' } | null {
   const s = (status ?? '').trim().toLowerCase()

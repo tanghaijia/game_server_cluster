@@ -139,6 +139,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// 6. ReconcileDispatcher
 	// ---------------------------------------------------------------
+	platformConfigRepo := repogorm.NewGamePlatformConfigRepo(db)
 	dispatcher := biz.NewReconcileDispatcher(
 		gameInstanceRepo,
 		nodeAgentRepo,
@@ -152,6 +153,7 @@ func main() {
 		gameRepo,
 		gameContainerConfigRepo,
 		*gameContainerPortMapper,
+		platformConfigRepo,
 	)
 
 	// 排队唤醒器（P2，§8.3）
@@ -243,6 +245,8 @@ func main() {
 	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
 	handler.NewGameHandler(gameUseCase, assetClient).RegisterRoutes(router)
 	handler.NewGameContainerConfigHandler(biz.NewGameContainerConfigUseCase(gameRepo, gameContainerConfigRepo)).RegisterRoutes(router)
+	// 平台运营方配置（M5）：/api/games/:id/platform-config
+	handler.NewGamePlatformConfigHandler(biz.NewPlatformConfigUseCase(platformConfigRepo, assetClient)).RegisterRoutes(router)
 	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)

@@ -218,6 +218,42 @@ func (uc *GameInstanceUseCase) GetGameInstance(ctx context.Context, instanceID s
 }
 
 /**
+* UpdateInstanceConfig 更新实例配置（000025）：
+* - 校验：用该实例构建的 schema 校验 config（未知 key / locked / 类型 / 范围 / 枚举）
+* - 语义：配置在下次启动时生效（容器内 config-render 按新配置渲染游戏配置文件）；
+*   已运行实例需停止后重启（热更新为后续增强）。
+**/
+func (uc *GameInstanceUseCase) UpdateInstanceConfig(ctx context.Context, instanceID string, config map[string]string) (*entity.GameInstance, error) {
+	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	if len(config) > 0 {
+		build, err := uc.resolveBuild(ctx, instance.GameID, instance.GameBuildId)
+		if err != nil {
+			return nil, err
+		}
+		schemaJSON := build.GetSchemaJson()
+		if schemaJSON == "" {
+			return nil, errors.New("该构建未注册配置 schema，无法更新实例配置")
+		}
+		schema, err := ParseAdapterSchema(schemaJSON)
+		if err != nil {
+			return nil, err
+		}
+		if err := ValidateInstanceConfig(schema, config); err != nil {
+			return nil, err
+		}
+	}
+	instance.Config = config
+	instance.UpdateTime = time.Now()
+	if err := uc.instanceRepo.Save(ctx, instance); err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+/**
 * 列出 GameInstance；status 非空时按状态过滤，为空时列出全部（按创建时间排序）
 **/
 func (uc *GameInstanceUseCase) ListGameInstances(ctx context.Context, status *entity.InstanceStatus) ([]*entity.GameInstance, error) {

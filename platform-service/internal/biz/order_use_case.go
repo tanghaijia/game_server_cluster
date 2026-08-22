@@ -156,6 +156,21 @@ func (uc *OrderUseCase) StopInstance(ctx context.Context, orderID string) (*enti
 	return order, nil
 }
 
+// UpdateInstanceConfig 更新订单关联实例的配置（controller 校验 schema，重启生效）。
+func (uc *OrderUseCase) UpdateInstanceConfig(ctx context.Context, orderID string, config map[string]string) error {
+	order, err := uc.repo.GetByID(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if order.InstanceID == "" {
+		return errors.New("order has no instance, pay or provision first")
+	}
+	if _, err := uc.controller.UpdateInstanceConfig(ctx, order.InstanceID, config); err != nil {
+		return fmt.Errorf("update instance config via controller: %w", err)
+	}
+	return nil
+}
+
 // UserInstance 用户侧实例视图（订单 + controller 实例状态）
 type UserInstance struct {
 	OrderID        string `json:"order_id"`

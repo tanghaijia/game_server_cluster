@@ -57,6 +57,12 @@ const router = createRouter({
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {
+          path: 'admin/games/:gameId/platform-config',
+          name: 'admin-game-platform-config',
+          component: () => import('@/views/AdminGamePlatformConfigView.vue'),
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
           path: 'admin/nodes',
           name: 'admin-nodes',
           component: () => import('@/views/AdminNodesView.vue'),

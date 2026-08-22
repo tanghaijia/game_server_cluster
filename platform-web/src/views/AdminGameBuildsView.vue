@@ -2,6 +2,7 @@
   <div class="space-y-6">
     <div>
       <RouterLink to="/admin/games" class="text-sm text-muted-foreground hover:underline">← 游戏管理</RouterLink>
+      <RouterLink :to="{ name: 'admin-game-platform-config', params: { gameId } }" class="ml-3 text-sm text-muted-foreground hover:underline">平台配置</RouterLink>
       <h1 class="mt-1 text-2xl font-semibold">构建版本 · {{ gameId }}</h1>
       <p class="text-sm text-muted-foreground">管理游戏的资产构建版本（channel 分组、历史版本、注册新构建）。</p>
     </div>
@@ -35,6 +36,27 @@
       <div class="col-span-2">
         <label class="mb-1 block text-sm font-medium">artifact_uri</label>
         <input v-model="form.artifact_uri" type="text" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+      </div>
+      <!-- M5：配置 schema / 适配器元数据（gen_manifest.py 产物，可选） -->
+      <div class="col-span-2 rounded-md border border-dashed p-3">
+        <div class="mb-2 text-xs font-medium text-muted-foreground">
+          配置能力（可选）：上传 <code class="rounded bg-muted px-1">schema.json</code> 与
+          <code class="rounded bg-muted px-1">metadata.json</code>（
+          <code class="rounded bg-muted px-1">python adapters/tools/gen_manifest.py …</code> 产物），
+          注册后创建实例即可用平台配置表单。
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="mb-1 block text-sm font-medium">schema.json</label>
+            <input type="file" accept=".json" class="w-full text-sm" @change="readJson($event, 'schema_json')" />
+            <p v-if="form.schema_json" class="mt-1 truncate text-[11px] text-green-600">已载入（{{ schemaItems }} 个配置项）</p>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-medium">metadata.json</label>
+            <input type="file" accept=".json" class="w-full text-sm" @change="readJson($event, 'adapter_metadata')" />
+            <p v-if="form.adapter_metadata" class="mt-1 truncate text-[11px] text-green-600">已载入</p>
+          </div>
+        </div>
       </div>
       <div class="col-span-2 flex justify-end">
         <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
@@ -82,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { BUILD_STATUS, listGameBuilds, registerGameBuild, type GameBuild } from '@/api/admin'
@@ -92,7 +114,18 @@ const gameId = route.params.gameId as string
 
 const builds = ref<GameBuild[]>([])
 const error = ref('')
-const form = reactive<Record<string, string>>({})
+// form 支持平铺字符串字段 + schema_json（JSON 字符串）+ adapter_metadata（对象）
+const form = reactive<Record<string, any>>({})
+
+// schema.json 已载入时的配置项数量（展示用）
+const schemaItems = computed(() => {
+  if (!form.schema_json) return 0
+  try {
+    return JSON.parse(form.schema_json).settings?.length ?? 0
+  } catch {
+    return 0
+  }
+})
 
 function statusClass(s: number) {
   const st = BUILD_STATUS[s] ?? 'unknown'
@@ -100,6 +133,29 @@ function statusClass(s: number) {
   if (st === 'deprecated') return 'bg-yellow-100 text-yellow-700'
   if (st === 'deleted' || st === 'unavailable') return 'bg-red-100 text-red-700'
   return 'bg-muted'
+}
+
+// 读取上传的 JSON 文件：schema_json 存字符串，adapter_metadata 存对象
+function readJson(e: Event, field: 'schema_json' | 'adapter_metadata') {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const text = String(reader.result ?? '')
+    try {
+      const parsed = JSON.parse(text)
+      if (field === 'schema_json') {
+        form.schema_json = text // 字符串（asset_service 校验契约）
+      } else {
+        form.adapter_metadata = parsed // 对象（port_inject + lifecycle）
+      }
+      error.value = ''
+    } catch {
+      error.value = 'JSON 解析失败：' + file.name
+    }
+  }
+  reader.readAsText(file)
 }
 
 async function load() {
@@ -118,7 +174,7 @@ async function onRegister() {
     return
   }
   try {
-    await registerGameBuild(gameId, form)
+    await registerGameBuild(gameId, { ...form })
     Object.keys(form).forEach((k) => (form[k] = ''))
     await load()
   } catch (e: any) {

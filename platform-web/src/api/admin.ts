@@ -213,6 +213,8 @@ export interface GameBuild {
   status?: number
   created_at?: string
   updated_at?: string
+  schema_json?: string
+  adapter_metadata?: Record<string, any>
 }
 
 export const BUILD_STATUS = ['unknown', 'discovered', 'resolving', 'available', 'deprecated', 'unavailable', 'deleted']
@@ -222,8 +224,29 @@ export async function listGameBuilds(gameId: string, channel?: string): Promise<
   return resp.data.builds
 }
 
-export async function registerGameBuild(gameId: string, data: Record<string, string>): Promise<GameBuild> {
+// registerGameBuild 注册新构建；data 支持平铺字段 + schema_json（字符串）+ adapter_metadata（对象）
+export async function registerGameBuild(gameId: string, data: Record<string, any>): Promise<GameBuild> {
   const resp = await http.post('/admin/games/' + gameId + '/builds', data)
+  return resp.data
+}
+
+// ---- 平台运营方配置（M5：control=platform 项，按游戏全局） ----
+
+export interface PlatformConfig {
+  GameID: string
+  Config: Record<string, string>
+  Version: number
+  UpdatedBy: string
+  UpdateTime: string
+}
+
+export async function getPlatformConfig(gameId: string): Promise<PlatformConfig> {
+  const resp = await http.get('/admin/games/' + gameId + '/platform-config')
+  return resp.data
+}
+
+export async function updatePlatformConfig(gameId: string, config: Record<string, string>): Promise<PlatformConfig> {
+  const resp = await http.put('/admin/games/' + gameId + '/platform-config', { config })
   return resp.data
 }
 

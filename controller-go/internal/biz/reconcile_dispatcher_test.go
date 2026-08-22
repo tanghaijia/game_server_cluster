@@ -119,6 +119,7 @@ func TestFailedInstance_NoReleaseOnScheduleFailure(t *testing.T) {
 		NewSchedulerEventBus(100, nil),
 		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
 		GameContainerPortMapper{},
+		nil, // platformConfigRepo（本测试不涉及平台配置合并）
 	)
 
 	// 调度阶段失败：status=Scheduling + 残留上次绑定 → 不得释放
@@ -311,6 +312,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		&mockGameRepo{},
 		&mockGameContainerConfigRepo{},
 		*mapper,
+		nil, // platformConfigRepo
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

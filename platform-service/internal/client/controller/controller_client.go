@@ -132,6 +132,44 @@ func (c *Client) GetConfigSchema(ctx context.Context, gameID string) (*ConfigSch
 	return &s, nil
 }
 
+// PlatformConfig 平台运营方配置（按游戏全局，control=platform 项）
+type PlatformConfig struct {
+	GameID     string            `json:"GameID"`
+	Config     map[string]string `json:"Config"`
+	Version    int64             `json:"Version"`
+	UpdatedBy  string            `json:"UpdatedBy"`
+	UpdateTime string            `json:"UpdateTime"`
+}
+
+// GetPlatformConfig 获取平台运营方配置（controller /api/games/:id/platform-config）
+func (c *Client) GetPlatformConfig(ctx context.Context, gameID string) (*PlatformConfig, error) {
+	var pc PlatformConfig
+	if err := c.do(ctx, http.MethodGet, "/api/games/"+gameID+"/platform-config", nil, &pc); err != nil {
+		return nil, err
+	}
+	return &pc, nil
+}
+
+// UpdatePlatformConfig 更新平台运营方配置（仅 control=platform 的 key 允许）
+func (c *Client) UpdatePlatformConfig(ctx context.Context, gameID string, config map[string]string) (*PlatformConfig, error) {
+	var pc PlatformConfig
+	if err := c.do(ctx, http.MethodPut, "/api/games/"+gameID+"/platform-config",
+		map[string]any{"config": config}, &pc); err != nil {
+		return nil, err
+	}
+	return &pc, nil
+}
+
+// UpdateInstanceConfig 更新实例配置（controller 校验 schema 后落库，重启生效）
+func (c *Client) UpdateInstanceConfig(ctx context.Context, instanceID string, config map[string]string) (*GameInstance, error) {
+	var inst GameInstance
+	if err := c.do(ctx, http.MethodPut, "/api/game-instances/"+instanceID+"/config",
+		map[string]any{"config": config}, &inst); err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
 // StartGameInstance 启动实例（进入调度）
 func (c *Client) StartGameInstance(ctx context.Context, instanceID string) error {
 	return c.do(ctx, http.MethodPost, "/api/game-instances/"+instanceID+"/start", nil, nil)
@@ -372,18 +410,21 @@ func (c *Client) DeleteGame(ctx context.Context, id string) error {
 
 // GameBuild asset_service 的构建版本（JSON 字段为 snake_case，与 proto json tag 一致）
 type GameBuild struct {
-	BuildId           string  `json:"build_id"`
+	BuildId           string         `json:"build_id"`
 	Game              *struct{ Id string `json:"id"` } `json:"game,omitempty"`
-	Channel           *string `json:"channel,omitempty"`
-	AdapterId         string  `json:"adapter_id,omitempty"`
-	AdapterVersion    *string `json:"adapter_version,omitempty"`
-	UpstreamVersion   *string `json:"upstream_version,omitempty"`
-	ArtifactUri       *string `json:"artifact_uri,omitempty"`
-	ArtifactImageName *string `json:"artifact_image_name,omitempty"`
-	ArtifactImageTag  *string `json:"artifact_image_tag,omitempty"`
-	Status            int32   `json:"status,omitempty"`
-	CreatedAt         string  `json:"created_at,omitempty"`
-	UpdatedAt         string  `json:"updated_at,omitempty"`
+	Channel           *string        `json:"channel,omitempty"`
+	AdapterId         string         `json:"adapter_id,omitempty"`
+	AdapterVersion    *string        `json:"adapter_version,omitempty"`
+	UpstreamVersion   *string        `json:"upstream_version,omitempty"`
+	ArtifactUri       *string        `json:"artifact_uri,omitempty"`
+	ArtifactImageName *string        `json:"artifact_image_name,omitempty"`
+	ArtifactImageTag  *string        `json:"artifact_image_tag,omitempty"`
+	Status            int32          `json:"status,omitempty"`
+	CreatedAt         string         `json:"created_at,omitempty"`
+	UpdatedAt         string         `json:"updated_at,omitempty"`
+	// M5：配置 schema / 适配器元数据（gen_manifest.py 产物），随构建注册携带
+	SchemaJson        *string        `json:"schema_json,omitempty"`
+	AdapterMetadata   map[string]any `json:"adapter_metadata,omitempty"`
 }
 
 func (c *Client) ListGameBuilds(ctx context.Context, gameID, channel string) ([]*GameBuild, error) {
@@ -402,8 +443,9 @@ func (c *Client) ListGameBuilds(ctx context.Context, gameID, channel string) ([]
 
 // RegisterGameBuild 注册新构建。controller 的注册接口是平铺字段（build_id + game_id），
 // 这里显式拼平铺 body，避免 proto 风格嵌套导致 game_id 解析为空。
+// schema_json / adapter_metadata 可选（gen_manifest.py 产物），有则透传。
 func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *GameBuild) (*GameBuild, error) {
-	body := map[string]string{
+	body := map[string]any{
 		"build_id":            build.BuildId,
 		"game_id":             gameID,
 		"channel":             derefStr(build.Channel),
@@ -413,6 +455,12 @@ func (c *Client) RegisterGameBuild(ctx context.Context, gameID string, build *Ga
 		"artifact_uri":        derefStr(build.ArtifactUri),
 		"artifact_image_name": derefStr(build.ArtifactImageName),
 		"artifact_image_tag":  derefStr(build.ArtifactImageTag),
+	}
+	if build.SchemaJson != nil && *build.SchemaJson != "" {
+		body["schema_json"] = *build.SchemaJson
+	}
+	if build.AdapterMetadata != nil {
+		body["adapter_metadata"] = build.AdapterMetadata
 	}
 	var out GameBuild
 	if err := c.do(ctx, http.MethodPost, "/api/games/"+gameID+"/builds", body, &out); err != nil {
