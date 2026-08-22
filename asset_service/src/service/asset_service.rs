@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     domain::{
-        instance_data_path, BuildCompatibility, BuildId, BuildStatus, GameBuild, ModManifest,
-        ModManifestId, SnapshotId, SnapshotRecord, SnapshotRestorePlan, SnapshotStatus,
-        SnapshotType, VersionSelector,
+        instance_data_path, validate_adapter_schema, AdapterSchema, BuildCompatibility, BuildId,
+        BuildStatus, GameBuild, ModManifest, ModManifestId, SnapshotId, SnapshotRecord,
+        SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
     ports::{
@@ -134,6 +134,25 @@ where
         request: RegisterBuildRequest,
     ) -> Result<GameBuild, AssetServiceError> {
         let mut build = request.build;
+
+        // schema 契约校验（携带时）：反序列化 + 规则校验 + adapter_id 一致性
+        if let Some(schema_json) = &build.schema_json {
+            let schema: AdapterSchema = serde_json::from_str(schema_json).map_err(|e| {
+                AssetServiceError::InvalidRequest {
+                    message: format!("schema_json 解析失败: {e}"),
+                }
+            })?;
+            validate_adapter_schema(&schema)
+                .map_err(|message| AssetServiceError::InvalidRequest { message })?;
+            if schema.adapter_id != build.adapter_id.0 {
+                return Err(AssetServiceError::InvalidRequest {
+                    message: format!(
+                        "schema.adapter_id ({}) 与 build.adapter_id ({}) 不一致",
+                        schema.adapter_id, build.adapter_id.0
+                    ),
+                });
+            }
+        }
 
         // 镜像 tag 即版本：build_id 由规则生成，保证不同 tag → 不同 build_id，
         // 从而同 channel 下保留多版本历史（旧版本不会被覆盖）。

@@ -37,12 +37,16 @@ func (h *OrderHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	router.GET("/api/me/instances", auth, h.MyInstances)
 	router.POST("/api/me/instances/:orderId/file-session", auth, h.MyFileSession)
 	router.GET("/api/instances", auth, RequireAdmin(), h.AllInstances)
+
+	// 游戏配置 schema（M5）：下单表单数据源（透传 controller → asset_service）
+	router.GET("/api/games/:id/config-schema", auth, h.ConfigSchema)
 }
 
 type createOrderRequest struct {
-	UserID string `json:"user_id"` // 仅管理员可指定；普通用户忽略，取自 token
-	GameID string `json:"game_id"`
-	Amount int64  `json:"amount"` // 单位：分
+	UserID string            `json:"user_id"` // 仅管理员可指定；普通用户忽略，取自 token
+	GameID string            `json:"game_id"`
+	Amount int64             `json:"amount"` // 单位：分
+	Config map[string]string `json:"config,omitempty"` // 实例配置（游戏配置 schema 声明的键值）
 }
 
 // CreateOrder 创建订单（user_id 强制取自 token，普通用户不可伪造）
@@ -58,12 +62,22 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		userID = req.UserID
 	}
 
-	order, err := h.orderUseCase.CreateOrder(c.Request.Context(), userID, req.GameID, req.Amount)
+	order, err := h.orderUseCase.CreateOrder(c.Request.Context(), userID, req.GameID, req.Amount, req.Config)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, order)
+}
+
+// ConfigSchema 游戏配置 schema（下单表单数据源，透传 controller → asset_service）
+func (h *OrderHandler) ConfigSchema(c *gin.Context) {
+	schema, err := h.orderUseCase.ConfigSchema(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, schema)
 }
 
 // ListOrders 列出订单：普通用户只看自己的；管理员看全部（可用 ?user_id=、?game_id= 过滤）

@@ -35,6 +35,8 @@ func (h *GameHandler) RegisterRoutes(router *gin.Engine) {
 	group.GET("/:id/builds", h.ListGameBuilds)
 	group.POST("/:id/builds", h.RegisterGameBuild)
 	group.GET("/:id/builds/:buildId", h.GetGameBuild)
+	// 配置 schema（000025）：前端表单生成 / 实例配置校验数据源
+	group.GET("/:id/config-schema", h.GetConfigSchema)
 }
 
 type gameRequest struct {
@@ -128,6 +130,30 @@ func (h *GameHandler) ListGameBuilds(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
 	}
 	c.JSON(http.StatusOK, gin.H{"game_id": gameID, "builds": resp.Builds})
+}
+
+// GetConfigSchema 游戏配置 schema（000025，前端表单生成 / 实例配置校验数据源）。
+// 返回该游戏最新携带 schema_json 的构建（含 adapter_metadata）。
+func (h *GameHandler) GetConfigSchema(c *gin.Context) {
+	gameID := c.Param("id")
+	resp, err := h.assetClient.ListGameBuilds(c.Request.Context(), &assetservicev1.ListGameBuildsRequest{
+		GameId: gameID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()}); return
+	}
+	for _, b := range resp.Builds {
+		if b.GetSchemaJson() != "" {
+			c.JSON(http.StatusOK, gin.H{
+				"game_id":          gameID,
+				"build_id":         b.BuildId,
+				"schema_json":      b.GetSchemaJson(),
+				"adapter_metadata": b.GetAdapterMetadata(),
+			})
+			return
+		}
+	}
+	c.JSON(http.StatusNotFound, gin.H{"error": "game has no build with config schema"})
 }
 
 type registerGameBuildRequest struct {

@@ -79,6 +79,22 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID st
 		return nil, err
 	}
 
+	// 000025：实例配置 schema 校验（未知 key / locked / 类型 / 范围 / 枚举）
+	if len(opts.Config) > 0 {
+		schemaJSON := build.GetSchemaJson()
+		if schemaJSON == "" {
+			return nil, fmt.Errorf("游戏 %s 的构建 %s 未注册配置 schema，无法接收实例配置",
+				gameID, build.GetBuildId())
+		}
+		schema, err := ParseAdapterSchema(schemaJSON)
+		if err != nil {
+			return nil, err
+		}
+		if err := ValidateInstanceConfig(schema, opts.Config); err != nil {
+			return nil, err
+		}
+	}
+
 	priority := opts.Priority
 	if priority <= 0 {
 		priority = 100 // D7 默认

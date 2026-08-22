@@ -98,17 +98,38 @@ func (c *Client) UpdateContainerConfig(ctx context.Context, gameID string, u Con
 	return &cfg, nil
 }
 
-// CreateGameInstance 在 controller 上创建实例（初始 stopped）
-func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID string) (*GameInstance, error) {
-	body := map[string]string{"game_id": gameID}
+// CreateGameInstance 在 controller 上创建实例（初始 stopped）。
+// config 为实例配置（游戏配置 schema 声明的键值，nil 表示不传）。
+func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID string, config map[string]string) (*GameInstance, error) {
+	body := map[string]any{"game_id": gameID}
 	if buildID != "" {
 		body["game_build_id"] = buildID
+	}
+	if len(config) > 0 {
+		body["config"] = config
 	}
 	var inst GameInstance
 	if err := c.do(ctx, http.MethodPost, "/api/game-instances", body, &inst); err != nil {
 		return nil, err
 	}
 	return &inst, nil
+}
+
+// ConfigSchema 游戏配置 schema（controller 透传 asset_service，供前端表单生成）
+type ConfigSchema struct {
+	GameID          string         `json:"game_id"`
+	BuildID         string         `json:"build_id"`
+	SchemaJSON      string         `json:"schema_json"`
+	AdapterMetadata map[string]any `json:"adapter_metadata,omitempty"`
+}
+
+// GetConfigSchema 获取游戏配置 schema（controller /api/games/:id/config-schema）
+func (c *Client) GetConfigSchema(ctx context.Context, gameID string) (*ConfigSchema, error) {
+	var s ConfigSchema
+	if err := c.do(ctx, http.MethodGet, "/api/games/"+gameID+"/config-schema", nil, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // StartGameInstance 启动实例（进入调度）

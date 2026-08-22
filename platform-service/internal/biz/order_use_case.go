@@ -21,8 +21,8 @@ func NewOrderUseCase(repo repository.OrderRepository, controllerClient *controll
 	return &OrderUseCase{repo: repo, controller: controllerClient}
 }
 
-// CreateOrder 创建订单（初始状态 created）
-func (uc *OrderUseCase) CreateOrder(ctx context.Context, userID, gameID string, amount int64) (*entity.Order, error) {
+// CreateOrder 创建订单（初始状态 created）。config 为实例配置（游戏配置 schema 声明的键值）
+func (uc *OrderUseCase) CreateOrder(ctx context.Context, userID, gameID string, amount int64, config map[string]string) (*entity.Order, error) {
 	if userID == "" {
 		return nil, errors.New("user_id is required")
 	}
@@ -40,6 +40,7 @@ func (uc *OrderUseCase) CreateOrder(ctx context.Context, userID, gameID string, 
 		GameID:     gameID,
 		Amount:     amount,
 		Status:     entity.OrderStatusCreated,
+		Config:     config,
 		CreateTime: now,
 		UpdateTime: now,
 	}
@@ -60,6 +61,11 @@ func (uc *OrderUseCase) GetOrder(ctx context.Context, id string) (*entity.Order,
 // FileSession 获取实例的文件会话（controller 签发短效 JWT，供浏览器直连 node_agent）
 func (uc *OrderUseCase) FileSession(ctx context.Context, instanceID string) (*controller.FileSession, error) {
 	return uc.controller.CreateFileSession(ctx, instanceID)
+}
+
+// ConfigSchema 游戏配置 schema（下单表单数据源，透传 controller → asset_service）
+func (uc *OrderUseCase) ConfigSchema(ctx context.Context, gameID string) (*controller.ConfigSchema, error) {
+	return uc.controller.GetConfigSchema(ctx, gameID)
 }
 
 // ListOrders 列出订单；userID 非空只列该用户，gameID 非空按游戏过滤（组合生效）
@@ -103,10 +109,10 @@ func (uc *OrderUseCase) ProvisionOrder(ctx context.Context, orderID string) (*en
 }
 
 // provisionInstance 共用"开单"逻辑：调 controller 创建实例（stopped，不启动），
-// 回填 instance_id，订单进入 finalStatus 并落库。
+// 携带订单配置（config），回填 instance_id，订单进入 finalStatus 并落库。
 // 启动由用户/管理员通过 StartInstance 显式触发（创建与开服解耦）。
 func (uc *OrderUseCase) provisionInstance(ctx context.Context, order *entity.Order, finalStatus entity.OrderStatus) (*entity.Order, error) {
-	inst, err := uc.controller.CreateGameInstance(ctx, order.GameID, "")
+	inst, err := uc.controller.CreateGameInstance(ctx, order.GameID, "", order.Config)
 	if err != nil {
 		return nil, fmt.Errorf("create game instance via controller: %w", err)
 	}
