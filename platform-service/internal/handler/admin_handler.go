@@ -70,6 +70,12 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.GET("/games/:id/platform-config", h.GetPlatformConfig)
 	group.PUT("/games/:id/platform-config", h.UpdatePlatformConfig)
 
+	// M8：外部受限凭证池（如 DST cluster_token）
+	group.GET("/games/:id/credentials", h.ListCredentials)
+	group.POST("/games/:id/credentials", h.CreateCredentials)
+	group.DELETE("/games/:id/credentials/:credentialId", h.DeleteCredential)
+	group.POST("/games/:id/credentials/:credentialId/force-release", h.ForceReleaseCredential)
+
 	// 文件会话（管理员可对任意实例）
 	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
 
@@ -521,4 +527,53 @@ func (h *AdminHandler) UpdatePlatformConfig(c *gin.Context) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, pc)
+}
+
+// ------------------------- 凭证池（M8） -------------------------
+
+// ListCredentials 列出游戏凭证池（?resource_type= 过滤）
+func (h *AdminHandler) ListCredentials(c *gin.Context) {
+	rows, err := h.controller.ListCredentials(c.Request.Context(), c.Param("id"), c.Query("resource_type"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"game_id": c.Param("id"), "credentials": rows})
+}
+
+type createCredentialsRequest struct {
+	ResourceType string   `json:"resource_type"`
+	Secrets      []string `json:"secrets"`
+	Remark       string   `json:"remark"`
+}
+
+// CreateCredentials 批量录入凭证
+func (h *AdminHandler) CreateCredentials(c *gin.Context) {
+	var req createCredentialsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	if req.ResourceType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "resource_type is required"}); return
+	}
+	n, err := h.controller.CreateCredentials(c.Request.Context(), c.Param("id"), req.ResourceType, req.Secrets, req.Remark)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusCreated, gin.H{"created": n})
+}
+
+// DeleteCredential 删除凭证（in_use 拒绝）
+func (h *AdminHandler) DeleteCredential(c *gin.Context) {
+	if err := h.controller.DeleteCredential(c.Request.Context(), c.Param("id"), c.Param("credentialId")); err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// ForceReleaseCredential 强制释放（orphan → available）
+func (h *AdminHandler) ForceReleaseCredential(c *gin.Context) {
+	if err := h.controller.ForceReleaseCredential(c.Request.Context(), c.Param("id"), c.Param("credentialId")); err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "released"})
 }

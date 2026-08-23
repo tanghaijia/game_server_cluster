@@ -140,6 +140,9 @@ func main() {
 	// 6. ReconcileDispatcher
 	// ---------------------------------------------------------------
 	platformConfigRepo := repogorm.NewGamePlatformConfigRepo(db)
+	// M8：外部受限凭证池（如 DST cluster_token）
+	credentialPoolRepo := repogorm.NewCredentialPoolRepo(db)
+	credentialUC := biz.NewCredentialUseCase(credentialPoolRepo)
 	dispatcher := biz.NewReconcileDispatcher(
 		gameInstanceRepo,
 		nodeAgentRepo,
@@ -154,6 +157,7 @@ func main() {
 		gameContainerConfigRepo,
 		*gameContainerPortMapper,
 		platformConfigRepo,
+		credentialUC,
 	)
 
 	// 排队唤醒器（P2，§8.3）
@@ -247,6 +251,8 @@ func main() {
 	handler.NewGameContainerConfigHandler(biz.NewGameContainerConfigUseCase(gameRepo, gameContainerConfigRepo)).RegisterRoutes(router)
 	// 平台运营方配置（M5）：/api/games/:id/platform-config
 	handler.NewGamePlatformConfigHandler(biz.NewPlatformConfigUseCase(platformConfigRepo, assetClient)).RegisterRoutes(router)
+	// M8：凭证池管理
+	handler.NewCredentialPoolHandler(credentialUC).RegisterRoutes(router)
 	handler.NewNodeHandler(nodeUseCase).RegisterRoutes(router)
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)

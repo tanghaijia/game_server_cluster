@@ -495,6 +495,7 @@ fn map_instance_runtime_spec(
         port_mapping: value.port_mapping.map(map_port_mapping),
         env: value.env,
         config: value.config,
+        credentials: value.credentials,
     })
 }
 

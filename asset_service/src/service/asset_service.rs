@@ -1114,6 +1114,11 @@ mod tests {
             stop_script: "/scripts/stop.sh".to_string(),
             players_script: "/scripts/players.sh".to_string(),
             health_script: "/scripts/health.sh".to_string(),
+            credentials: vec![crate::domain::CredentialSpec {
+                key: "cluster_token".to_string(),
+                pool: "dst_cluster_token".to_string(),
+                required: true,
+            }],
         });
         service
             .register_game_build(RegisterBuildRequest::new(base))
@@ -1132,5 +1137,58 @@ mod tests {
             iterated.adapter_metadata.as_ref().and_then(|m| m.port_inject_env.as_deref()),
             Some("GAME_HOST_PORT")
         );
+        // 凭证声明随 metadata 往返（M8）：继承后仍保留
+        assert_eq!(
+            iterated.adapter_metadata.as_ref().and_then(|m| m.credentials.first()),
+            Some(&crate::domain::CredentialSpec {
+                key: "cluster_token".to_string(),
+                pool: "dst_cluster_token".to_string(),
+                required: true,
+            })
+        );
+    }
+
+    // M8：credentials 声明随注册携带并随 build 返回（controller 据此从凭证池分配）
+    #[tokio::test]
+    async fn test_register_roundtrips_credentials_declaration() {
+        let service = new_service();
+        let now = Utc::now();
+        let mut build = make_build("dst", Some("public"), "0.3.0", now);
+        build.adapter_metadata = Some(crate::domain::AdapterMetadata {
+            port_inject_env: None,
+            start_script: "/scripts/start.sh".to_string(),
+            save_script: "/scripts/save.sh".to_string(),
+            stop_script: "/scripts/stop.sh".to_string(),
+            players_script: "/scripts/players.sh".to_string(),
+            health_script: "/scripts/health.sh".to_string(),
+            credentials: vec![crate::domain::CredentialSpec {
+                key: "cluster_token".to_string(),
+                pool: "dst_cluster_token".to_string(),
+                required: true,
+            }],
+        });
+
+        let registered = service
+            .register_game_build(RegisterBuildRequest::new(build))
+            .await
+            .unwrap();
+        let fetched = service
+            .resolve_game_build(
+                "dst",
+                VersionSelector::BuildId {
+                    build_id: "dst-public-0.3.0".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            fetched.adapter_metadata.as_ref().and_then(|m| m.credentials.first()),
+            Some(&crate::domain::CredentialSpec {
+                key: "cluster_token".to_string(),
+                pool: "dst_cluster_token".to_string(),
+                required: true,
+            })
+        );
+        assert_eq!(registered.build_id, BuildId("dst-public-0.3.0".to_string()));
     }
 }

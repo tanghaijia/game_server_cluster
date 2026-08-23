@@ -195,6 +195,9 @@ message InstanceRuntimeSpec {
   // 实例配置（platform + player 合并后的键值，node_agent 写入
   // /data/.platform/game-config.json 供容器内 config-render.sh 渲染游戏配置文件）
   map<string, string> config = 8;
+  // 外部受限凭证（M8：credential pool 分配，如 DST cluster_token），
+  // node_agent 逐个写入 /data/.platform/{key} 供容器内 hook 复制到游戏配置目录
+  map<string, string> credentials = 9;
 }
 
 message BuildPreparationResult {

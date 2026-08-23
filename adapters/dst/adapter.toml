@@ -37,6 +37,15 @@ enabled = false
 [config_render]
 file = ""
 
+# 外部受限凭证（M8）：Klei 官方发放的 cluster token。
+# 管理员从官网创建多个录入平台凭证池（resource_type=dst_cluster_token），
+# 实例启动时平台分配 → 注入 /data/.platform/cluster_token → hook 复制到 cluster_token.txt；
+# 实例停止/失败时归还池复用。真实 token 永不进镜像/进 Git（模板只留占位符）。
+[[credentials]]
+key = "cluster_token"
+pool = "dst_cluster_token"
+required = true
+
 # ── 配置项 schema（用户可配置项少；DST 内部多由 /data 文件管理） ──
 [config."DST_SHARD"]
 label_key = "cfg.DST_SHARD.label"

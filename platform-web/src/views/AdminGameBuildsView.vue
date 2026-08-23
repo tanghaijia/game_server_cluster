@@ -3,6 +3,7 @@
     <div>
       <RouterLink to="/admin/games" class="text-sm text-muted-foreground hover:underline">← 游戏管理</RouterLink>
       <RouterLink :to="{ name: 'admin-game-platform-config', params: { gameId } }" class="ml-3 text-sm text-muted-foreground hover:underline">平台配置</RouterLink>
+      <RouterLink :to="{ name: 'admin-game-credentials', params: { gameId } }" class="ml-3 text-sm text-muted-foreground hover:underline">凭证池</RouterLink>
       <h1 class="mt-1 text-2xl font-semibold">构建版本 · {{ gameId }}</h1>
       <p class="text-sm text-muted-foreground">管理游戏的资产构建版本（channel 分组、历史版本、增量迭代注册）。</p>
     </div>

@@ -253,3 +253,37 @@ export async function updatePlatformConfig(gameId: string, config: Record<string
 export async function updateBranchCache(gameId: string, branch: string, nodeAgentId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/branches/' + branch + '/cache', { node_agent_id: nodeAgentId })
 }
+
+// ---- 外部受限凭证池（M8：如 DST cluster_token） ----
+
+export interface Credential {
+  id: string
+  game_id: string
+  resource_type: string
+  secret_masked: string
+  status: 'available' | 'in_use' | 'orphan'
+  instance_id: string
+  last_instance_id: string
+  allocated_at?: string
+  released_at?: string
+  remark: string
+  create_time: string
+}
+
+export async function listCredentials(gameId: string, resourceType?: string): Promise<Credential[]> {
+  const resp = await http.get('/admin/games/' + gameId + '/credentials', { params: resourceType ? { resource_type: resourceType } : {} })
+  return resp.data.credentials
+}
+
+export async function createCredentials(gameId: string, resourceType: string, secrets: string[], remark: string): Promise<number> {
+  const resp = await http.post('/admin/games/' + gameId + '/credentials', { resource_type: resourceType, secrets, remark })
+  return resp.data.created
+}
+
+export async function deleteCredential(gameId: string, credentialId: string): Promise<void> {
+  await http.delete('/admin/games/' + gameId + '/credentials/' + credentialId)
+}
+
+export async function forceReleaseCredential(gameId: string, credentialId: string): Promise<void> {
+  await http.post('/admin/games/' + gameId + '/credentials/' + credentialId + '/force-release')
+}

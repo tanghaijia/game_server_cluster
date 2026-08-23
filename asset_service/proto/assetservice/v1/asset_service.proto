@@ -192,7 +192,7 @@ message GameBuild {
   optional string schema_json = 16;
 }
 
-// 适配器运行时元数据（adapter.toml 的 [lifecycle] / [port_inject] 段解析结果）
+// 适配器运行时元数据（adapter.toml 的 [lifecycle] / [port_inject] / [[credentials]] 段解析结果）
 message AdapterMetadata {
   // 端口注入环境变量名（空 = 无注入），如 GAME_HOST_PORT
   optional string port_inject_env = 1;
@@ -202,6 +202,19 @@ message AdapterMetadata {
   string stop_script = 4;
   string players_script = 5;
   string health_script = 6;
+  // 外部受限凭证声明（M8）：如 DST cluster_token，由平台凭证池在实例启动时分配注入
+  repeated CredentialSpec credentials = 7;
+}
+
+// 外部受限凭证声明（adapter.toml `[[credentials]]` 段）。
+// 平台侧通用：按 pool 从凭证池分配，实例启动时写入 /data/.platform/{key}。
+message CredentialSpec {
+  // 注入到 /data/.platform/{key} 的文件名（hook 据此读取）
+  string key = 1;
+  // 从哪个凭证池分配（credential_pool.resource_type，如 dst_cluster_token）
+  string pool = 2;
+  // 池空时是否导致实例启动失败（false = 无凭证也允许启动）
+  bool required = 3;
 }
 
 message BuildCompatibility {

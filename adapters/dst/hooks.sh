@@ -30,19 +30,30 @@ hook_pre_start() {
   copy_dir_files_if_missing "${TEMPLATE_DIR}/Master" "${DST_BASE}/Master"
   copy_dir_files_if_missing "${TEMPLATE_DIR}/Caves"  "${DST_BASE}/Caves"
 
-  # cluster_token.txt：模板有则复制，无则创建空文件（保留原行为）
-  if [ ! -f "${DST_BASE}/cluster_token.txt" ]; then
-    if [ -f "${TEMPLATE_DIR}/cluster_token.txt" ]; then
-      cp "${TEMPLATE_DIR}/cluster_token.txt" "${DST_BASE}/cluster_token.txt"
-    else
-      touch "${DST_BASE}/cluster_token.txt"
+  # cluster_token.txt：平台注入的凭证（M8：凭证池分配 → /data/.platform/cluster_token）
+  # 优先使用；无注入则回退模板（占位符，校验失败兜底）。
+  if [ -f "${DATA_ROOT}/.platform/cluster_token" ] && [ -s "${DATA_ROOT}/.platform/cluster_token" ]; then
+    cp "${DATA_ROOT}/.platform/cluster_token" "${DST_BASE}/cluster_token.txt"
+    log "cluster_token.txt 使用平台注入凭证"
+  else
+    if [ ! -f "${DST_BASE}/cluster_token.txt" ]; then
+      if [ -f "${TEMPLATE_DIR}/cluster_token.txt" ]; then
+        cp "${TEMPLATE_DIR}/cluster_token.txt" "${DST_BASE}/cluster_token.txt"
+      else
+        touch "${DST_BASE}/cluster_token.txt"
+      fi
+      log_warn "cluster_token.txt 缺失或为占位，请编辑: ${DST_BASE}/cluster_token.txt"
     fi
-    log_warn "cluster_token.txt 缺失或为占位，请编辑: ${DST_BASE}/cluster_token.txt"
   fi
 
   # 校验：占位符 / 空 token 直接失败（对齐原 prepare-runtime.sh 退出码）
   assert_no_placeholder "${DST_BASE}/cluster_token.txt" "PASTE_YOUR_KLEI_CLUSTER_TOKEN_HERE" || exit $?
   assert_non_empty "${DST_BASE}/cluster_token.txt" || exit $?
+  # DST 要求 cluster_token.txt 首字符即 token，不允许注释行（真实 token 无注释前缀）
+  if [ "$(head -c 1 "${DST_BASE}/cluster_token.txt")" = "#" ]; then
+    log_error "cluster_token.txt 首字符为 #，DST 不允许注释行，token 必须是文件首字符"
+    exit 22
+  fi
 
   log "generated files:"
   list_generated_files "${DST_BASE}" 3

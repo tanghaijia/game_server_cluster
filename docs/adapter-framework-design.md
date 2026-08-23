@@ -394,6 +394,84 @@ controller 生成 env 的知识来源：端口注入变量名来自 `port_inject
   （`{game_id}-{channel}-{tag}`）；留空字段不提交（服务端继承），schema/metadata 不重新上传
   则继承基准的配置能力。
 
+#### 3.6.5 外部受限凭证池（credential pool）：DST cluster_token 等
+
+> **背景（2026-08-21）**：DST 开服需要 Klei 官网发放的 `cluster_token.txt`。token 是**受限外部
+> 资源**：由管理员手动从官网创建多个、录入系统池化，实例启动时分配、停止时释放复用——
+> 实例停用不能永久占用 token。
+>
+> **设计原则：平台侧全通用，游戏专用性只存在于声明里**。controller 不写任何"DST token"专用
+> 逻辑；DST 只是第一个使用该机制的实例。新增游戏的凭证需求 = 录一个 `resource_type` + 在
+> adapter.toml 声明一行，平台零代码改动。
+
+- **通用凭证池实体**（controller 新表 `credential_pool`）：
+
+  ```sql
+  credential_pool (
+    id              UUID PRIMARY KEY,
+    game_id         TEXT NOT NULL,        -- 哪个游戏使用
+    resource_type   TEXT NOT NULL,        -- 'dst_cluster_token' / 'steam_web_api_key' / ...
+    secret          TEXT NOT NULL,        -- 加密存储（secret 处理同配置项）
+    status          TEXT NOT NULL,        -- available / in_use / orphan(悬挂)
+    instance_id     TEXT,                 -- 当前占用实例
+    last_instance_id TEXT,                -- 上次占用者（优先复用）
+    allocated_at    TIMESTAMPTZ,
+    released_at     TIMESTAMPTZ,
+    remark          TEXT
+  )
+  ```
+
+- **adapter.toml 声明**（随 build 的 adapter_metadata 下发，controller 读到才处理）：
+
+  ```toml
+  # adapters/dst/adapter.toml 新增
+  [[credentials]]
+  key      = "cluster_token"        # 注入到 /data/.platform/{key} 的文件名
+  pool     = "dst_cluster_token"    # 从哪个资源类型池分配
+  required = true                   # 池空则实例启动失败
+  ```
+
+- **生命周期挂钩：不新增实例状态**（token 分配是瞬时副作用，不是生命周期阶段）：
+
+  | 时机 | 挂钩点（reconcile_dispatcher.go） | 动作 |
+  | --- | --- | --- |
+  | 分配（晚分配） | `case StatusStarting:` 构造 InstanceRuntimeSpec 之前 | 池取 available → `in_use`；优先复用 `last_instance_id` 的 token；幂等（该实例已有 in_use 则复用） |
+  | 释放（晚释放） | `onCleanInstanceSucceeded` 进入 `StatusStopped` 时 | → `available`，清 instance_id（彻底停完才归还） |
+  | 失败释放 | `FailedInstance` | 幂等释放 |
+  | 池空 | 走现有 `FailedInstance` 路径 | 错误信息「token 池为空，请管理员录入」 |
+  | 悬挂回收 | 节点失联 + 心跳超时 | token → `orphan`，admin 可 force-release（超时自动回收 = 后续增强） |
+
+  不新增实例状态的理由：分配是同步 DB 事务，成功→继续启动、失败→Failed，无中间态需要
+  观察/恢复；现有状态机转换点已覆盖全部时机；一致性由"释放钩子幂等执行"保证，悬挂由
+  token 侧 orphan 标记处理。
+
+- **注入通道**：`InstanceRuntimeSpec` 增加通用字段 `credentials: map[string]string`
+  （不专设 cluster_token 字段），node_agent 全部写入 `/data/.platform/{key}`
+  （与 game-config.json 同一通道）。dst `hook_pre_start` 通用化：
+
+  ```bash
+  # 平台注入的 token 优先；无则回退模板占位符（校验失败兜底）
+  if [ -f "${PLATFORM_DIR}/cluster_token" ] && [ -s "${PLATFORM_DIR}/cluster_token" ]; then
+    cp "${PLATFORM_DIR}/cluster_token" "${DST_BASE}/cluster_token.txt"
+  else
+    copy_if_missing "${TEMPLATE_DIR}/cluster_token.txt" "${DST_BASE}/cluster_token.txt"
+  fi
+  assert_no_placeholder "${DST_BASE}/cluster_token.txt" "PASTE_YOUR_KLEI_CLUSTER_TOKEN_HERE" || exit $?
+  assert_non_empty "${DST_BASE}/cluster_token.txt" || exit $?
+  ```
+
+- **token 不进 config schema**：它是受限凭证资源，不是玩家/平台可配置项；不参与
+  `mergedInstanceConfig`，走独立注入通道；**真实 token 永不进镜像、永不进 Git**（模板只留
+  占位符）。
+
+- **admin UI**：按 `resource_type` 通用渲染——类型下拉 + 粘贴录入（支持批量）+ 状态列表
+  （available/in_use/orphan，含占用实例与分配时间）+ force-release。新凭证类型 = 录一条，
+  无代码。
+
+- **边界**：DST 一个 token 支持一个集群（Master+Caves 共享），分配粒度 = 实例；重启时
+  token 短暂释放再优先拿回原 token（`last_instance_id` 命中），避免身份频繁漂移；token 与
+  存档无关（换 token 不影响 `/data` 世界数据）。
+
 ### 3.7 目录结构（目标形态）
 
 ```text
@@ -430,7 +508,8 @@ adapters/
 | M5 ✅ | 前后端校验 + 配置表单 + GameBuild 注册适配 | **已完成**：schema 契约校验（key 唯一/control/apply/render/type/enum/render_file 绝对路径，asset_service 单测 23 过）；实例配置校验（controller `ValidateInstanceConfig`：未知 key/locked/int 范围/bool/enum）；`GET /api/games/:id/config-schema`（controller → platform-service 透传）；下单带 config（orders 表加列 → 支付时透传创建实例）；前端 MyOrdersView 按 schema 渲染 player 配置表单（string/int/bool/enum/secret + i18n 中英 + 默认值预填 + 分组）；**GameBuild 注册全链路适配**（admin 表单上传 schema.json/metadata.json → platform-service 透传 → controller → asset_service 校验落库，proto json tag 为 snake_case 天然兼容 gen_manifest 产物） | ✅ |
 | M6 ✅ | admin 平台配置页 + 实例配置更新 | **已完成**：`game_platform_configs` 表（按游戏全局，control=platform 项）+ `GET/PUT /api/games/:id/platform-config`（controller，仅 platform key 允许）+ platform-service 透传 `/api/admin/games/:id/platform-config` + 前端 AdminGamePlatformConfigView（schema 驱动表单）；启动时合并下发（platform 为底、player 覆盖，`mergedInstanceConfig`）；实例配置更新 `PUT /api/game-instances/:id/config`（schema 校验，重启生效）+ platform-service 透传 `/api/me/instances/:orderId/config` + MyServersView 配置弹层 | ✅ |
 | M7 ✅ | GameBuild 增量迭代注册（build_id 系统生成） | **已完成**（§3.6.4）：注册改为增量语义——`build_id` 由系统按 `{game_id}-{channel}-{tag}` 生成（请求自定义 → 拒绝），新增 `base_build_id` 迭代基准（缺省 = 同 channel 最新 Available），未显式设置字段（channel/adapter_id/adapter_version/upstream/artifact/metadata/schema/pinned）从基准继承，仅 `artifact_image_tag` 必填；proto 加 `base_build_id` 并重新生成（asset_service tonic + controller-go protoc）；controller/platform-service 去掉 build_id 手填校验、透传 base_build_id；前端 AdminGameBuildsView 改为「迭代基准」下拉 + 只读 build_id 预览 + 留空即继承（schema/metadata 不重新上传则继承）；asset_service 单测 31 过、三端编译 + 前端 vue-tsc 通过 | ✅ |
-| 后续 | 配置热更新（游戏内命令如 7dtd setgamepref）、配置版本对比/回滚 | — |
+| M8 ✅ | 外部受限凭证池（credential pool） | **已完成**（§3.6.5）：通用凭证池 `credential_pool` 表（000026，resource_type 泛化）+ controller `CredentialUseCase`（批量录入/列表脱敏/删除/force-release + `AllocateForInstance` 幂等分配：优先复用上次占用者、FIFO、池空报错）；生命周期挂钩**不新增实例状态**——`StatusStarting` 晚分配（`allocateCredentials` 按 build 的 `adapter_metadata.credentials` 声明，required 池空 → FailedInstance）、`onCleanInstanceSucceeded` 晚释放、`FailedInstance` 幂等释放；`InstanceRuntimeSpec.credentials: map[string]string`（proto 9）→ node_agent 写入 `/data/.platform/{key}`；asset_service `AdapterMetadata.credentials: []CredentialSpec`（proto 7 + domain + gen_manifest.py `[[credentials]]` 解析）；dst adapter：adapter.toml 声明 `[[credentials]] cluster_token/dst_cluster_token/required` + hook_pre_start 优先读平台注入的 `/data/.platform/cluster_token` + **模板只留占位符（真实 token 已从镜像/Git 移除）**；platform-service admin 透传 `/api/admin/games/:id/credentials`（CRUD + force-release）；前端 AdminGameCredentialsView（批量粘贴录入/状态列表/释放/删除）+ 路由与入口；asset_service 单测 32 过、node_agent 编译过、三端编译 + 前端 vue-tsc 通过 | ✅ |
+| 后续 | 配置热更新（游戏内命令如 7dtd setgamepref）、配置版本对比/回滚、凭证悬挂超时自动回收 | — |
 
 > 建议：M1+M2 先行（纯适配器目录内重构，平台零感知，立即消除全部脚本重复）；M3 作为独立第二阶段（动平台两侧，需联调）。
 

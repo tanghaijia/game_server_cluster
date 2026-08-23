@@ -562,3 +562,63 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	return nil
 }
+
+// ---------------------------------------------------------------------------
+// 外部受限凭证池（M8：如 DST cluster_token，admin 录入/管理）
+// ---------------------------------------------------------------------------
+
+// Credential 凭证池记录（secret 脱敏展示，完整值不返回）
+type Credential struct {
+	ID             string     `json:"id"`
+	GameID         string     `json:"game_id"`
+	ResourceType   string     `json:"resource_type"`
+	SecretMasked   string     `json:"secret_masked"`
+	Status         string     `json:"status"`
+	InstanceID     string     `json:"instance_id"`
+	LastInstanceID string     `json:"last_instance_id"`
+	AllocatedAt    *time.Time `json:"allocated_at"`
+	ReleasedAt     *time.Time `json:"released_at"`
+	Remark         string     `json:"remark"`
+	CreateTime     time.Time  `json:"create_time"`
+}
+
+// ListCredentials 列出某游戏凭证池（?resource_type= 过滤）
+func (c *Client) ListCredentials(ctx context.Context, gameID, resourceType string) ([]Credential, error) {
+	var out struct {
+		Credentials []Credential `json:"credentials"`
+	}
+	path := "/api/games/" + gameID + "/credentials"
+	if resourceType != "" {
+		path += "?resource_type=" + resourceType
+	}
+	if err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Credentials, nil
+}
+
+// CreateCredentials 批量录入凭证（admin 从官网创建后粘贴）
+func (c *Client) CreateCredentials(ctx context.Context, gameID, resourceType string, secrets []string, remark string) (int, error) {
+	var out struct {
+		Created int `json:"created"`
+	}
+	body := map[string]any{
+		"resource_type": resourceType,
+		"secrets":       secrets,
+		"remark":        remark,
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/games/"+gameID+"/credentials", body, &out); err != nil {
+		return 0, err
+	}
+	return out.Created, nil
+}
+
+// DeleteCredential 删除凭证（in_use 拒绝）
+func (c *Client) DeleteCredential(ctx context.Context, gameID, credentialID string) error {
+	return c.do(ctx, http.MethodDelete, "/api/games/"+gameID+"/credentials/"+credentialID, nil, nil)
+}
+
+// ForceReleaseCredential 强制释放（orphan → available）
+func (c *Client) ForceReleaseCredential(ctx context.Context, gameID, credentialID string) error {
+	return c.do(ctx, http.MethodPost, "/api/games/"+gameID+"/credentials/"+credentialID+"/force-release", nil, nil)
+}

@@ -34,6 +34,8 @@ type ReconcileDispatcher struct {
 	gameContainerPortMapper GameContainerPortMapper
 	// 平台运营方配置（M5）：启动实例时与 player 配置合并下发
 	platformConfigRepo repository.GamePlatformConfigRepository
+	// 外部受限凭证池（M8）：StatusStarting 分配 / 停止或失败释放
+	credentialUC *CredentialUseCase
 
 	// 自动重试计数(进程内):instanceID -> 连续重试次数,成功后清零
 	retryMu              sync.Mutex
@@ -57,6 +59,7 @@ func NewReconcileDispatcher(
 	gameContainerConfigRepo repository.GameContainerConfigRepository,
 	gameContainerPortMapper GameContainerPortMapper,
 	platformConfigRepo repository.GamePlatformConfigRepository,
+	credentialUC *CredentialUseCase,
 ) *ReconcileDispatcher {
 	return &ReconcileDispatcher{
 		queue:                   make(chan *entity.GameInstance, 100),
@@ -73,6 +76,7 @@ func NewReconcileDispatcher(
 		gameContainerConfigRepo: gameContainerConfigRepo,
 		gameContainerPortMapper: gameContainerPortMapper,
 		platformConfigRepo:      platformConfigRepo,
+		credentialUC:            credentialUC,
 		operationRetryCounts:    make(map[string]int),
 	}
 }
@@ -400,6 +404,14 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			specInstance.Config = merged
 			runtimeSpec = buildInstanceRuntimeSpec(&specInstance, buildResp.Build, containerConfig, portMappings)
 		}
+		// M8：外部受限凭证分配（按 build 的 adapter_metadata.credentials 声明）。
+		// 晚分配：调度/构建/快照阶段失败不占用稀缺凭证；池空（required）→ 启动失败。
+		if creds, err := d.allocateCredentials(ctx, instance, buildResp.Build); err != nil {
+			d.failWithReason(ctx, instance, err.Error())
+			return nil
+		} else if len(creds) > 0 {
+			runtimeSpec.Credentials = creds
+		}
 		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "StartInstance")
@@ -479,6 +491,13 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 }
 
 func (d *ReconcileDispatcher) FailedInstance(ctx context.Context, instance *entity.GameInstance) {
+	// M8：失败即释放凭证占用（幂等：未分配则无操作），避免凭证被失败实例长期占用
+	if d.credentialUC != nil {
+		if err := d.credentialUC.ReleaseByInstance(ctx, instance.ID); err != nil {
+			slog.Error("[ReconcileDispatcher] 释放凭证失败",
+				"instanceId", instance.ID, "err", err)
+		}
+	}
 	// 释放预留（7.2）：仅当实例已绑定节点且失败发生在"调度成功之后"（阶段失败/运行中失败）。
 	// 调度阶段失败（Scheduling→Failed）本次从未成功绑定/扣减——不应释放任何预留，
 	// 否则会误释放实例残留的上次预留（NodeAgentID/ResourceReq 未清时），
@@ -612,6 +631,44 @@ func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance 
 }
 
 /**
+* M8：按 build 的 adapter_metadata.credentials 声明分配外部受限凭证。
+* 返回 map[注入key]secret（node_agent 写入 /data/.platform/{key}）。
+* required 且池空 → 返回错误（调用方标记实例失败）。
+**/
+func (d *ReconcileDispatcher) allocateCredentials(ctx context.Context, instance *entity.GameInstance, build *assetservicev1.GameBuild) (map[string]string, error) {
+	if d.credentialUC == nil || build.GetAdapterMetadata() == nil {
+		return nil, nil
+	}
+	specs := build.GetAdapterMetadata().GetCredentials()
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(specs))
+	for _, spec := range specs {
+		secret, err := d.credentialUC.AllocateForInstance(ctx, instance.GameID, spec.GetPool(), instance.ID)
+		if err != nil {
+			if spec.GetRequired() {
+				return nil, fmt.Errorf("allocate credential %s (pool=%s): %w", spec.GetKey(), spec.GetPool(), err)
+			}
+			// 非必需凭证池空：跳过注入，不影响启动
+			slog.Warn("[ReconcileDispatcher] 非必需凭证池空，跳过注入",
+				"instanceId", instance.ID, "pool", spec.GetPool())
+			continue
+		}
+		out[spec.GetKey()] = secret
+		slog.Info("[ReconcileDispatcher] 凭证已分配",
+			"instanceId", instance.ID, "key", spec.GetKey(), "pool", spec.GetPool())
+	}
+	return out, nil
+}
+
+// failWithReason 设置失败原因并标记实例失败（同时幂等释放凭证占用）
+func (d *ReconcileDispatcher) failWithReason(ctx context.Context, instance *entity.GameInstance, reason string) {
+	instance.FailReason = reason
+	d.FailedInstance(ctx, instance)
+}
+
+/**
  * 开启一个轮询线程轮询操作结果，如果成功则请求下一步调度
  */
 func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
@@ -722,6 +779,13 @@ func (d *ReconcileDispatcher) onStopInstanceSucceeded(ctx context.Context, insta
 * 7.2 挂点：释放端口映射 + 预留；并触发资源释放事件（S14 排队唤醒）。
 **/
 func (d *ReconcileDispatcher) onCleanInstanceSucceeded(ctx context.Context, instance *entity.GameInstance) {
+	// M8：实例彻底停止 → 释放凭证占用（幂等），归还池复用
+	if d.credentialUC != nil {
+		if err := d.credentialUC.ReleaseByInstance(ctx, instance.ID); err != nil {
+			slog.Error("[ReconcileDispatcher] 停止释放凭证失败",
+				"instanceId", instance.ID, "err", err)
+		}
+	}
 	// 先释放预留（依赖 NodeAgentID），再清空绑定
 	d.releaseReservation(ctx, instance)
 	instance.Status = entity.StatusStopped

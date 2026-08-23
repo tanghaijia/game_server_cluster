@@ -41,6 +41,16 @@ def build_metadata(data: dict) -> dict:
         "stop_script": lifecycle.get("stop", DEFAULT_SCRIPTS["stop"]),
         "players_script": lifecycle.get("players", DEFAULT_SCRIPTS["players"]),
         "health_script": lifecycle.get("health", DEFAULT_SCRIPTS["health"]),
+        # M8：外部受限凭证声明（如 DST cluster_token），随 metadata 下发，
+        # 平台凭证池在实例启动时按 pool 分配并注入 /data/.platform/{key}
+        "credentials": [
+            {
+                "key": cred.get("key"),
+                "pool": cred.get("pool"),
+                "required": cred.get("required", False),
+            }
+            for cred in data.get("credentials", [])
+        ],
     }
     port_inject = data.get("port_inject", {})
     if port_inject.get("enabled", False):

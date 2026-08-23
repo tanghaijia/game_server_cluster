@@ -4,5 +4,12 @@
   "save_script": "/scripts/save.sh",
   "stop_script": "/scripts/stop.sh",
   "players_script": "/scripts/players.sh",
-  "health_script": "/scripts/health.sh"
+  "health_script": "/scripts/health.sh",
+  "credentials": [
+    {
+      "key": "cluster_token",
+      "pool": "dst_cluster_token",
+      "required": true
+    }
+  ]
 }

@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// 适配器运行时元数据（adapter.toml [lifecycle] + [port_inject] 解析结果）。
+/// 适配器运行时元数据（adapter.toml [lifecycle] + [port_inject] + [[credentials]] 解析结果）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdapterMetadata {
     /// 端口注入 env 变量名（空 = 无注入），如 GAME_HOST_PORT
@@ -21,6 +21,23 @@ pub struct AdapterMetadata {
     pub stop_script: String,
     pub players_script: String,
     pub health_script: String,
+    /// 外部受限凭证声明（M8：如 DST cluster_token），由平台凭证池在实例启动时分配注入
+    #[serde(default)]
+    pub credentials: Vec<CredentialSpec>,
+}
+
+/// 外部受限凭证声明（adapter.toml `[[credentials]]` 段）。
+/// 平台侧通用：按 `pool` 从凭证池分配，实例启动时写入 /data/.platform/{key}，
+/// 供容器内 hook 复制到游戏配置目录；实例停止/失败时归还池复用。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CredentialSpec {
+    /// 注入到 /data/.platform/{key} 的文件名（hook 据此读取）
+    pub key: String,
+    /// 从哪个凭证池分配（credential_pool.resource_type，如 dst_cluster_token）
+    pub pool: String,
+    /// 池空时是否导致实例启动失败（false = 无凭证也允许启动）
+    #[serde(default)]
+    pub required: bool,
 }
 
 impl Default for AdapterMetadata {
@@ -32,6 +49,7 @@ impl Default for AdapterMetadata {
             stop_script: "/scripts/stop.sh".to_string(),
             players_script: "/scripts/players.sh".to_string(),
             health_script: "/scripts/health.sh".to_string(),
+            credentials: Vec::new(),
         }
     }
 }

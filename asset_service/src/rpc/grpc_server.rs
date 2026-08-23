@@ -14,10 +14,10 @@ use crate::{
     proto::asset_service::{
         self, AdapterMetadata as ProtoAdapterMetadata, BuildCompatibility as ProtoBuildCompatibility,
         CompleteSnapshotRequest, CompleteSnapshotResponse, CreateSnapshotRequest,
-        CreateSnapshotResponse, FailSnapshotRequest, FailSnapshotResponse,
-        GameBuild as ProtoGameBuild, GetGameBuildRequest, GetGameBuildResponse,
-        GetLatestSnapshotRequest, GetLatestSnapshotResponse, GetModManifestRequest,
-        GetModManifestResponse, GetSnapshotRequest, GetSnapshotResponse,
+        CreateSnapshotResponse, CredentialSpec as ProtoCredentialSpec, FailSnapshotRequest,
+        FailSnapshotResponse, GameBuild as ProtoGameBuild, GetGameBuildRequest,
+        GetGameBuildResponse, GetLatestSnapshotRequest, GetLatestSnapshotResponse,
+        GetModManifestRequest, GetModManifestResponse, GetSnapshotRequest, GetSnapshotResponse,
         GetSnapshotRestorePlanRequest, GetSnapshotRestorePlanResponse, ListGameBuildsRequest,
         ListGameBuildsResponse, ListSnapshotsRequest, ListSnapshotsResponse,
         ModEntry as ProtoModEntry, ModManifest as ProtoModManifest, RegisterGameBuildRequest,
@@ -438,6 +438,23 @@ fn map_metadata(value: AdapterMetadata) -> ProtoAdapterMetadata {
         stop_script: value.stop_script,
         players_script: value.players_script,
         health_script: value.health_script,
+        credentials: value.credentials.into_iter().map(map_credential_spec).collect(),
+    }
+}
+
+fn map_credential_spec(value: crate::domain::CredentialSpec) -> ProtoCredentialSpec {
+    ProtoCredentialSpec {
+        key: value.key,
+        pool: value.pool,
+        required: value.required,
+    }
+}
+
+fn map_credential_spec_from_proto(value: ProtoCredentialSpec) -> crate::domain::CredentialSpec {
+    crate::domain::CredentialSpec {
+        key: value.key,
+        pool: value.pool,
+        required: value.required,
     }
 }
 
@@ -469,6 +486,7 @@ fn map_metadata_from_proto(value: ProtoAdapterMetadata) -> AdapterMetadata {
         } else {
             value.health_script
         },
+        credentials: value.credentials.into_iter().map(map_credential_spec_from_proto).collect(),
     }
 }
 

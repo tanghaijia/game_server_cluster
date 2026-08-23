@@ -120,6 +120,7 @@ func TestFailedInstance_NoReleaseOnScheduleFailure(t *testing.T) {
 		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
 		GameContainerPortMapper{},
 		nil, // platformConfigRepo（本测试不涉及平台配置合并）
+		nil, // credentialUC（M8：本测试不涉及凭证分配）
 	)
 
 	// 调度阶段失败：status=Scheduling + 残留上次绑定 → 不得释放
@@ -162,6 +163,7 @@ func TestFailedInstance_KeepBindingOnStopFailure(t *testing.T) {
 		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
 		GameContainerPortMapper{},
 		nil, // platformConfigRepo
+		nil, // credentialUC（M8：本测试不涉及凭证分配）
 	)
 
 	agentID := "node-agent-1"
@@ -196,7 +198,8 @@ func TestFailedInstance_ClearBindingOnStartFailure(t *testing.T) {
 		NewSchedulerEventBus(100, nil),
 		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
 		GameContainerPortMapper{},
-		nil,
+		nil, // platformConfigRepo
+		nil, // credentialUC
 	)
 
 	agentID := "node-agent-1"
@@ -375,6 +378,7 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		&mockGameContainerConfigRepo{},
 		*mapper,
 		nil, // platformConfigRepo
+		nil, // credentialUC（M8：本测试不涉及凭证分配）
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -51,6 +51,9 @@ pub struct StartInstanceArgument {
     /// 实例配置（platform + player 合并后的键值），写入 /data/.platform/game-config.json
     /// 供容器内 config-render.sh 按 manifest 渲染游戏配置文件
     pub config: HashMap<String, String>,
+    /// 外部受限凭证（M8：credential pool 分配，如 DST cluster_token），
+    /// 逐个写入 /data/.platform/{key} 供容器内 hook 使用
+    pub credentials: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

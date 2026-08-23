@@ -1,3 +1,1 @@
-# 把本文件复制为 cluster_token.txt，并替换为你的 Klei Cluster Token。
-# 注意：正式 token 不要提交到 Git。
-pds-g^KU_HQp7A5FW^CCGZfGyFyQkG49gWZP1sk0VrLc7OGuEGYyzzuLRFfco=
+PASTE_YOUR_KLEI_CLUSTER_TOKEN_HERE

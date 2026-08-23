@@ -480,29 +480,47 @@ where
         // 平台下发配置 → /data/.platform/game-config.json
         // 供容器内 config-render.sh 按 config-manifest.json 渲染游戏配置文件
         // （7dtd serverconfig.xml 等，见 adapter-framework-design.md §3.4）
-        if !argument.config.is_empty() {
-            let config_json = serde_json::to_string(&argument.config).map_err(|e| {
-                NodeAgentError::Internal {
-                    message: format!("serialize instance config: {e}"),
-                }
-            })?;
+        if !argument.config.is_empty() || !argument.credentials.is_empty() {
             let platform_dir = PathBuf::from(&data_host_path).join(".platform");
             tokio::fs::create_dir_all(&platform_dir)
                 .await
                 .map_err(|e| NodeAgentError::PathError {
                     message: format!("create platform config dir failed: {e}"),
                 })?;
-            tokio::fs::write(platform_dir.join("game-config.json"), config_json)
-                .await
-                .map_err(|e| NodeAgentError::PathError {
-                    message: format!("write game-config.json failed: {e}"),
+            if !argument.config.is_empty() {
+                let config_json = serde_json::to_string(&argument.config).map_err(|e| {
+                    NodeAgentError::Internal {
+                        message: format!("serialize instance config: {e}"),
+                    }
                 })?;
-            log::info!(
-                "instance {} platform config written to {}/.platform/game-config.json ({} keys)",
-                instance_id.0,
-                data_host_path,
-                argument.config.len()
-            );
+                tokio::fs::write(platform_dir.join("game-config.json"), config_json)
+                    .await
+                    .map_err(|e| NodeAgentError::PathError {
+                        message: format!("write game-config.json failed: {e}"),
+                    })?;
+                log::info!(
+                    "instance {} platform config written to {}/.platform/game-config.json ({} keys)",
+                    instance_id.0,
+                    data_host_path,
+                    argument.config.len()
+                );
+            }
+            // M8：外部受限凭证 → /data/.platform/{key}
+            // （如 cluster_token，供容器内 hook 复制到游戏配置目录）
+            for (key, value) in &argument.credentials {
+                tokio::fs::write(platform_dir.join(key), value)
+                    .await
+                    .map_err(|e| NodeAgentError::PathError {
+                        message: format!("write .platform/{key} failed: {e}"),
+                    })?;
+                log::info!(
+                    "instance {} credential {} written to {}/.platform/{}",
+                    instance_id.0,
+                    key,
+                    data_host_path,
+                    key
+                );
+            }
         }
 
         let container = self
