@@ -38,6 +38,9 @@ pub trait ContainerClient: Send + Sync {
 
     /// 在容器内执行命令（生命周期脚本驱动：stop.sh / save.sh / players.sh / health.sh）
     async fn exec(&self, container_id: String, cmd: Vec<String>) -> Result<ExecOutput, ContainerError>;
+
+    /// 取容器日志尾部（失败诊断：游戏进程崩溃时抓取退出原因）
+    async fn container_logs(&self, container_id: String, tail: usize) -> Result<String, ContainerError>;
 }
 
 /// 容器内命令执行结果。

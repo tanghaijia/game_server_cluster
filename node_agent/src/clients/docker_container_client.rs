@@ -422,6 +422,35 @@ impl ContainerClient for DockerContainerClient {
             stderr,
         })
     }
+
+    /// 取容器日志尾部（失败诊断：容器/游戏进程退出时抓取原因）
+    async fn container_logs(&self, container_id: String, tail: usize) -> Result<String, ContainerError> {
+        use bollard::container::LogsOptions;
+        use futures_util::StreamExt;
+
+        let docker = Docker::connect_with_socket_defaults().map_err(bollard_to_io_error)?;
+        let options = Some(LogsOptions::<String> {
+            stdout: true,
+            stderr: true,
+            timestamps: true,
+            tail: tail.max(1).to_string(),
+            ..Default::default()
+        });
+        let mut stream = docker.logs(&container_id, options);
+        let mut out = String::new();
+        while let Some(frame) = stream.next().await {
+            match frame.map_err(bollard_to_io_error)? {
+                LogOutput::StdOut { message } | LogOutput::StdErr { message } => {
+                    out.push_str(&String::from_utf8_lossy(&message));
+                    if !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(out)
+    }
 }
 
 impl DockerContainerClient {

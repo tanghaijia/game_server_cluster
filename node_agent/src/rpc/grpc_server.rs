@@ -652,6 +652,7 @@ fn map_game_instance_to_proto(instance: GameInstance) -> NodeAgentGameInstance {
             seconds: instance.update_time.timestamp(),
             nanos: instance.update_time.timestamp_subsec_nanos() as i32,
         }),
+        fail_reason: instance.fail_reason,
     }
 }
 

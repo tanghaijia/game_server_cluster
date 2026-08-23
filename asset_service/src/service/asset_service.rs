@@ -191,6 +191,14 @@ where
                     .ok_or_else(|| AssetServiceError::BuildNotFound {
                         build_id: base_id.clone(),
                     })?;
+                if base.game_id != build.game_id {
+                    return Err(AssetServiceError::InvalidRequest {
+                        message: format!(
+                            "迭代基准 {} 属于游戏 {}，与请求游戏 {} 不一致",
+                            base_id, base.game_id, build.game_id
+                        ),
+                    });
+                }
                 if let Some(req_channel) = &build.channel {
                     if base.channel.as_deref() != Some(req_channel.as_str()) {
                         return Err(AssetServiceError::InvalidRequest {

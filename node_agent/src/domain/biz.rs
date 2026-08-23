@@ -28,6 +28,9 @@ pub struct GameInstance {
     pub host_data_path: HostSnapShotDataPath,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
+    /// 失败原因（容器退出/游戏进程崩溃等；status == Failed 时填充，
+    /// 供 controller 展示给用户——启动失败用户可见性闭环）
+    pub fail_reason: String,
 }
 
 impl GameInstance {
@@ -45,6 +48,7 @@ impl GameInstance {
             host_data_path: HostSnapShotDataPath::new(id),
             create_time: Utc::now(),
             update_time: Utc::now(),
+            fail_reason: String::new(),
         }
     }
 }

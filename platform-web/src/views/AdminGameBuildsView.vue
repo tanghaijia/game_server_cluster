@@ -177,11 +177,19 @@ function readJson(e: Event, field: 'schema_json' | 'adapter_metadata') {
     try {
       const parsed = JSON.parse(text)
       if (field === 'schema_json') {
+        // 预检：schema 的 adapter_id 必须与当前游戏匹配（防止上传错游戏的 schema.json）
+        const schemaAdapterId = parsed?.adapter_id
+        const knownAdapterIds = new Set(builds.value.map((b) => b.adapter_id).filter(Boolean))
+        if (typeof schemaAdapterId === 'string' && schemaAdapterId && knownAdapterIds.size > 0 && !knownAdapterIds.has(schemaAdapterId)) {
+          error.value = `警告：该 schema.json 属于 "${schemaAdapterId}"，而当前游戏 ${gameId} 的构建适配器是 ${[...knownAdapterIds].join(' / ')}——请确认没选错文件`
+        } else {
+          error.value = ''
+        }
         form.schema_json = text // 字符串（asset_service 校验契约）
       } else {
         form.adapter_metadata = parsed // 对象（port_inject + lifecycle）
+        error.value = ''
       }
-      error.value = ''
     } catch {
       error.value = 'JSON 解析失败：' + file.name
     }

@@ -12,14 +12,23 @@
 | 文件 | 作用 |
 | --- | --- |
 | `gcdebug-bridge.js` | 执行桥（Node 子进程程序）：HTTP fetch + 自研 PostgreSQL v3 线协议客户端（无 npm 依赖）。由插件在每次工具调用时经 `node -e` 启动，stdin 传 `{script, request}`，stdout 返回单个 JSON。 |
-| 动态插件 `gdbg-1` | 注册 4 个模型工具：`controller_api` / `pg_query` / `pg_exec` / `pg_meta`。桥接文件按会话工作区（`workspaceRegistry`）定位读取。 |
+| `gcdebug-plugin.js` | **插件定义存档**：DSH 动态插件是进程内存级的，进程重启后注册丢失。此文件保存完整插件定义（`HOST_CODE`），供新会话重放恢复（见下）。 |
+| 动态插件（`gdbg-*`） | 注册 4 个模型工具：`controller_api` / `pg_query` / `pg_exec` / `pg_meta`。桥接文件按会话工作区（`workspaceRegistry`）定位读取。 |
+
+## 进程重启 / 新会话恢复
+
+动态插件在 DSH 进程重启后会消失（设计如此：动态能力属于进程内存，重启即清空，需重新激活）。恢复方式：
+
+> 在新会话里对 agent 说：**"读取 `dsh-tools/gcdebug-plugin.js`，按文件头说明重放 gcdebug 调试工具并激活"**。
+
+agent 会按存档执行 `cordis_define`（`kind:'new'`、`idPrefix:'gdbg'`、`code.host = HOST_CODE`）→ `cordis_run` 激活 → 4 个工具立即可用（默认已连本机真实库 `cluster_game_server_db` / schema `controller` 与 controller `:8088`）。桥接文件在仓库中，无需重建。
 
 ## 工具
 
 ### controller_api — 调用 controller HTTP 接口
 参数：`method`（默认 GET）、`path`（支持 `{param}` 占位，如 `/api/game-instances/{id}/start`）、
 `path_params`、`query`、`body`（对象自动 JSON 序列化）、`headers`、`base_url`（默认
-`http://127.0.0.1:8090`，本机实际部署常为 `8088`）、`timeout_ms`。
+`http://127.0.0.1:8088`，本机实际部署端口）、`timeout_ms`。
 返回 `{ ok, status, statusText, headers, body }`；非 2xx 也正常返回（含错误信息）。
 
 ### pg_query — 只读 SQL

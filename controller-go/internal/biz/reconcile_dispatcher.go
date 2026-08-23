@@ -967,3 +967,55 @@ func (d *ReconcileDispatcher) Recover(ctx context.Context) error {
 	slog.Info("[Recover] 恢复待调度实例", "count", len(instances))
 	return nil
 }
+
+/**
+* WatchRunningInstances 运行实例健康巡检（启动失败/运行崩溃用户可见性闭环）：
+* node_agent 的 BackendContainerChecker 每秒检测容器状态（Exited → 本地实例 Failed，
+* 并采集容器日志尾部作为 fail_reason），但不会主动上报 controller —— 本方法周期拉取
+* InspectInstance 补齐断链：发现 node_agent 侧实例已 Failed → controller 标记失败并
+* 透传原因（前端展示 fail_reason），同时走 FailedInstance 完整失败路径（释放凭证/预留）。
+* 由 main 启动的 ticker goroutine 周期调用。
+**/
+func (d *ReconcileDispatcher) WatchRunningInstances(ctx context.Context) {
+	instances, err := d.instanceRepo.ListByStatuses(ctx, entity.StatusRunning)
+	if err != nil {
+		slog.Error("[WatchRunningInstances] 查询 running 实例失败", "err", err)
+		return
+	}
+	for _, instance := range instances {
+		if instance.NodeAgentID == nil {
+			continue
+		}
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil || nodeAgent == nil {
+			continue
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil || node == nil {
+			continue
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			continue
+		}
+		resp, err := client.InspectInstance(ctx, &nodeagentv1.InspectInstanceRequest{InstanceId: instance.ID})
+		if err != nil {
+			// 节点不可达：节点健康监控另行处理，这里不误杀
+			continue
+		}
+		naInstance := resp.GetInstance()
+		if naInstance == nil {
+			continue
+		}
+		if naInstance.GetStatus() != nodeagentv1.NodeAgentGameInstanceStatus_FAILED {
+			continue
+		}
+		reason := naInstance.GetFailReason()
+		if reason == "" {
+			reason = "游戏进程退出（node_agent 检测到容器异常）"
+		}
+		slog.Warn("[WatchRunningInstances] 检测到运行实例实际已失败",
+			"instanceId", instance.ID, "reason", reason)
+		d.failWithReason(ctx, instance, reason)
+	}
+}

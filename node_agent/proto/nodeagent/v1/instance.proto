@@ -19,4 +19,6 @@ message NodeAgentGameInstance {
     string game_build_id = 4;
     google.protobuf.Timestamp create_time = 5;
     google.protobuf.Timestamp update_time = 6;
+    // 失败原因（容器退出等；status == FAILED 时填充，供 controller 展示给用户）
+    string fail_reason = 7;
 }

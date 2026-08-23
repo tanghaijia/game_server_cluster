@@ -12,6 +12,14 @@
 # ============================================================
 FROM registry/game/base:2026.08
 
+# DST 特有依赖（M2 迁移回归修复）：
+# dontstarve_dedicated_server_nullrenderer 是 32 位程序，链接 curl 的 gnutls 变体
+# libcurl-gnutls.so.4 —— base 公共依赖只有 64 位 openssl 变体（libcurl4），
+# 旧独立 dst 镜像（git 历史）装过 libcurl4-gnutls-dev:i386，迁移时遗漏，需在此补回。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libcurl4-gnutls-dev:i386 \
+      && rm -rf /var/lib/apt/lists/*
+
 # DST 专用默认值（hook 与框架读取）
 ENV GAME_BIN_NAME=dontstarve_dedicated_server_nullrenderer \
     DST_CONF_DIR=DoNotStarveTogether \

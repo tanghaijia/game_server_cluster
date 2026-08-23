@@ -583,6 +583,17 @@ impl ContainerClient for FakeImageClient {
             stderr: String::new(),
         })
     }
+
+    async fn container_logs(&self, container_id: String, _tail: usize) -> Result<String, ContainerError> {
+        let containers = self
+            .containers
+            .lock()
+            .map_err(|_| ContainerError::Unknown)?;
+        if !containers.contains_key(&container_id) {
+            return Err(ContainerError::NotFound(container_id));
+        }
+        Ok("(fake container logs)".to_string())
+    }
 }
 
 // ============================================================

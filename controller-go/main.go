@@ -242,6 +242,23 @@ func main() {
 		slog.Error("恢复实例调度失败", "err", err)
 	}
 
+	// 运行实例健康巡检（启动失败/运行崩溃用户可见性闭环）：
+	// 周期拉取 node_agent InspectInstance，发现实际已失败则标记实例 Failed 并透传原因
+	instanceWatchInterval := 15 * time.Second
+	go func() {
+		ticker := time.NewTicker(instanceWatchInterval)
+		defer ticker.Stop()
+		slog.Info("运行实例健康巡检已启动", "interval", instanceWatchInterval.String())
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				dispatcher.WatchRunningInstances(ctx)
+			}
+		}
+	}()
+
 	// ---------------------------------------------------------------
 	// 9. HTTP API (gin)
 	// ---------------------------------------------------------------

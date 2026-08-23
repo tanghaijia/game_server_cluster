@@ -17,8 +17,14 @@
         <select v-model="form.resource_type" :disabled="!credentialTypes.length" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2">
           <option v-for="t in credentialTypes" :key="t" :value="t">{{ t }}</option>
         </select>
-        <p v-if="!credentialTypes.length" class="mt-1 text-[11px] text-amber-600">
-          该游戏尚无带凭证声明的构建（adapter.toml [[credentials]]）——请先到「构建版本」页注册/迭代一个携带 metadata.json 的构建，此处才能选择类型。
+        <p v-if="!credentialTypes.length && buildsCount === 0" class="mt-1 text-[11px] text-amber-600">
+          该游戏尚无任何构建——请先到「构建版本」页注册一个构建，此处才能选择类型。
+        </p>
+        <p v-else-if="!credentialTypes.length" class="mt-1 text-[11px] text-amber-600">
+          该游戏已有 {{ buildsCount }} 个构建，但均未携带凭证声明——请确认注册时上传的是
+          <b>最新生成</b>的 metadata.json（含 credentials 数组，可用
+          <code class="rounded bg-muted px-1">python adapters/tools/gen_manifest.py …</code> 重新生成），
+          旧版 metadata.json 没有 credentials 字段，重新上传后迭代注册一次即可。
         </p>
         <p v-else class="mt-1 text-[11px] text-muted-foreground">
           类型来自该游戏构建的声明（不可手填，防止拼写错误录了用不上）。
@@ -92,12 +98,14 @@ import {
   listCredentials,
   type Credential,
 } from '@/api/admin'
+import { listGameBuilds } from '@/api/admin'
 
 const route = useRoute()
 const gameId = route.params.gameId as string
 
 const credentials = ref<Credential[]>([])
 const credentialTypes = ref<string[]>([])
+const buildsCount = ref(0)
 const error = ref('')
 const form = reactive({ resource_type: '', secrets_text: '', remark: '' })
 
@@ -115,9 +123,14 @@ function statusClass(s: string) {
 async function load() {
   error.value = ''
   try {
-    const [rows, types] = await Promise.all([listCredentials(gameId), listCredentialTypes(gameId)])
+    const [rows, types, builds] = await Promise.all([
+      listCredentials(gameId),
+      listCredentialTypes(gameId),
+      listGameBuilds(gameId),
+    ])
     credentials.value = rows
     credentialTypes.value = types
+    buildsCount.value = builds.length
     if (!form.resource_type && types.length) form.resource_type = types[0]
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载凭证失败'

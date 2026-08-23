@@ -62,7 +62,25 @@ impl BackendContainerChecker {
                                                 if let Some(status) = new_status {
                                                     if instance.status != status {
                                                         if let Ok(mut game_instance) = repos.get(instance.id.clone()).await {
-                                                            game_instance.status = status;
+                                                            // 失败时抓取容器日志尾部作为 fail_reason（启动失败用户可见性闭环：
+                                                            // controller 巡检时透传给用户展示，如缺库报错）
+                                                            if status == GameInstanceStatus::Failed && game_instance.fail_reason.is_empty() {
+                                                                match client.container_logs(container_id.clone(), 30).await {
+                                                                    Ok(logs) => {
+                                                                        let trimmed = logs.trim();
+                                                                        game_instance.fail_reason = if trimmed.is_empty() {
+                                                                            "游戏进程退出（容器 Exited，无日志）".to_string()
+                                                                        } else {
+                                                                            format!("游戏进程退出，容器日志尾部: {}", &trimmed[..trimmed.len().min(500)])
+                                                                        };
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::warn!("[BackendContainerChecker] 抓取容器日志失败 instance={} error={:?}", instance.id, e);
+                                                                        game_instance.fail_reason = "游戏进程退出（容器 Exited）".to_string();
+                                                                    }
+                                                                }
+                                                            }
+                                                            game_instance.status = status.clone();
                                                             if let Err(e) = repos.save(&game_instance).await {
                                                                 log::error!("[BackendContainerChecker] 更新实例状态失败 instance={} error={:?}", instance.id, e);
                                                             }
