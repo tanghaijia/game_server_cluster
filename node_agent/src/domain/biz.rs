@@ -30,6 +30,8 @@ pub struct GameInstance {
     pub update_time: DateTime<Utc>,
     /// 失败原因（容器退出/游戏进程崩溃等；status == Failed 时填充，
     /// 供 controller 展示给用户——启动失败用户可见性闭环）
+    /// #[serde(default)]：兼容库里已存在的旧记录（无该字段）
+    #[serde(default)]
     pub fail_reason: String,
 }
 
