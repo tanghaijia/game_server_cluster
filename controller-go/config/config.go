@@ -55,6 +55,10 @@ type Config struct {
 	StaleReservationTimeoutMin int
 	StaleReservationScanSec    int
 
+	// reconcile 稳定性（B-12/B-14，P0）：
+	RPCTimeoutSec       int // 单条 node_agent/asset_service RPC 超时（防挂起冻结单消费管线）
+	NodeOfflineFenceMin int // 节点失联 fencing 阈值：Running 实例在 unhealthy 节点上失联超此时长 → 置 Failed
+
 	// 排队（P2，§8）
 	QueueScanIntervalSec int
 	QueueBackoffBaseSec  int
@@ -114,6 +118,10 @@ func Load() *Config {
 		// 中间态卡死哨兵（7.4）
 		StaleReservationTimeoutMin: getEnvInt("STALE_RESERVATION_TIMEOUT_MIN", 10),
 		StaleReservationScanSec:    getEnvInt("STALE_RESERVATION_SCAN_SEC", 60),
+
+		// reconcile 稳定性（B-12/B-14，P0）
+		RPCTimeoutSec:       getEnvInt("RPC_TIMEOUT_SEC", 30),
+		NodeOfflineFenceMin: getEnvInt("NODE_OFFLINE_FENCE_MIN", 3),
 
 		// 排队（P2，§8/D9）
 		QueueScanIntervalSec: getEnvInt("QUEUE_SCAN_INTERVAL_SEC", 5),

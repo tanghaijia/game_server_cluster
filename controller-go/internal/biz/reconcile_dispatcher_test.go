@@ -2,6 +2,8 @@ package biz
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +11,8 @@ import (
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gorm.io/gorm"
 )
 
@@ -129,6 +133,8 @@ func TestFailedInstance_NoReleaseOnScheduleFailure(t *testing.T) {
 		GameContainerPortMapper{},
 		nil, // platformConfigRepo（本测试不涉及平台配置合并）
 		nil, // credentialUC（M8：本测试不涉及凭证分配）
+		30*time.Second, // B-12：RPC 超时
+		3*time.Minute,  // B-14：节点失联 fencing 阈值
 	)
 
 	// 调度阶段失败：status=Scheduling + 残留上次绑定 → 不得释放
@@ -172,6 +178,8 @@ func TestFailedInstance_KeepBindingOnStopFailure(t *testing.T) {
 		GameContainerPortMapper{},
 		nil, // platformConfigRepo
 		nil, // credentialUC（M8：本测试不涉及凭证分配）
+		30*time.Second, // B-12：RPC 超时
+		3*time.Minute,  // B-14：节点失联 fencing 阈值
 	)
 
 	agentID := "node-agent-1"
@@ -208,6 +216,8 @@ func TestFailedInstance_ClearBindingOnStartFailure(t *testing.T) {
 		GameContainerPortMapper{},
 		nil, // platformConfigRepo
 		nil, // credentialUC
+		30*time.Second, // B-12
+		3*time.Minute,  // B-14
 	)
 
 	agentID := "node-agent-1"
@@ -387,6 +397,8 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 		*mapper,
 		nil, // platformConfigRepo
 		nil, // credentialUC（M8：本测试不涉及凭证分配）
+		30*time.Second, // B-12：RPC 超时
+		3*time.Minute,  // B-14：节点失联 fencing 阈值
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -419,4 +431,110 @@ func TestReconcileDispatcher_DispatchAndProcess(t *testing.T) {
 	}
 
 	cancel()
+}
+
+// ------------------------- P0 稳定性回归测试（B-12/13/14） -------------------------
+
+// B-12：RPC 瞬态错误可重试分类（超时/Unavailable 不误杀实例，非瞬态照旧失败）
+func TestIsRetryableRPCErr(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"plain", errors.New("boom"), false},
+		{"deadline", context.DeadlineExceeded, true},
+		{"grpc_unavailable", status.Error(codes.Unavailable, "node down"), true},
+		{"grpc_deadline", status.Error(codes.DeadlineExceeded, "too slow"), true},
+		{"grpc_aborted", status.Error(codes.Aborted, "retry"), true},
+		{"grpc_notfound", status.Error(codes.NotFound, "op gone"), false},
+		{"wrapped_deadline", fmt.Errorf("wrap: %w", context.DeadlineExceeded), true},
+	}
+	for _, c := range cases {
+		if got := isRetryableRPCErr(c.err); got != c.want {
+			t.Errorf("%s: isRetryableRPCErr(%v) = %v, want %v", c.name, c.err, got, c.want)
+		}
+	}
+}
+
+// B-13：队列满时 RequestDispatch 非阻塞（防消费端自入队自死锁），且溢出实例不丢失
+func TestRequestDispatch_QueueFull_NonBlocking(t *testing.T) {
+	rd := NewReconcileDispatcher(
+		&mockInstanceRepo{saveFunc: func(ctx context.Context, inst *entity.GameInstance) error { return nil }},
+		&mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, &mockReservationRepo{},
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100, nil),
+		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
+		GameContainerPortMapper{},
+		nil, // platformConfigRepo
+		nil, // credentialUC
+		30*time.Second, // B-12
+		3*time.Minute,  // B-14
+	)
+	ctx := context.Background()
+
+	// 填满内部 channel（容量 100）
+	for i := 0; i < 100; i++ {
+		inst := &entity.GameInstance{ID: fmt.Sprintf("inst-%03d", i), Status: entity.StatusPending}
+		if err := rd.RequestDispatch(ctx, inst); err != nil {
+			t.Fatalf("填充队列失败: %v", err)
+		}
+	}
+
+	// 第 101 个：旧实现会阻塞（自死锁隐患），新实现必须立即返回
+	done := make(chan error, 1)
+	go func() {
+		inst := &entity.GameInstance{ID: "inst-overflow", Status: entity.StatusPending}
+		done <- rd.RequestDispatch(ctx, inst)
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("满队列入队不应报错: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("B-13: 队列满时 RequestDispatch 必须非阻塞，疑似自死锁")
+	}
+
+	// 消费端优先取 overflow：第一个被消费的应是溢出实例，其余 100 个来自 channel
+	first := rd.nextDispatchInstance(ctx)
+	if first == nil || first.ID != "inst-overflow" {
+		t.Fatalf("消费端应优先消费溢出实例, got: %v", first)
+	}
+	for i := 0; i < 100; i++ {
+		if inst := rd.nextDispatchInstance(ctx); inst == nil {
+			t.Fatalf("drain 第 %d 个实例意外为 nil", i)
+		}
+	}
+}
+
+// B-14：节点失联计时——首次记账不触发，持续超阈值才触发；恢复后清零重计
+func TestFenceOfflineTiming(t *testing.T) {
+	rd := NewReconcileDispatcher(
+		&mockInstanceRepo{saveFunc: func(ctx context.Context, inst *entity.GameInstance) error { return nil }},
+		&mockNodeAgentRepo{}, &mockNodeRepo{}, &mockScheduler{}, &mockReservationRepo{},
+		NewQueueManager(&mockQueueRepo{}, 15*time.Second, 5*time.Minute, 30*time.Minute),
+		NewSchedulerEventBus(100, nil),
+		nodeagent.NewClientRegistry(), nil, &mockGameRepo{}, &mockGameContainerConfigRepo{},
+		GameContainerPortMapper{},
+		nil, // platformConfigRepo
+		nil, // credentialUC
+		30*time.Second,
+		50*time.Millisecond, // 缩短阈值便于测试
+	)
+
+	if rd.markOfflineAndShouldFence("inst-1") {
+		t.Fatal("首次观测失联不应立即触发 fencing")
+	}
+	time.Sleep(60 * time.Millisecond)
+	if !rd.markOfflineAndShouldFence("inst-1") {
+		t.Fatal("持续失联超过阈值应触发 fencing")
+	}
+
+	// 恢复可达 → 清零 → 重新计时
+	rd.clearOffline("inst-1")
+	if rd.markOfflineAndShouldFence("inst-1") {
+		t.Fatal("clearOffline 后应重新计时，不立即触发")
+	}
 }

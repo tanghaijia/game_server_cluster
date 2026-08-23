@@ -158,6 +158,8 @@ func main() {
 		*gameContainerPortMapper,
 		platformConfigRepo,
 		credentialUC,
+		time.Duration(cfg.RPCTimeoutSec)*time.Second,   // B-12：单条 RPC 超时
+		time.Duration(cfg.NodeOfflineFenceMin)*time.Minute, // B-14：节点失联 fencing 阈值
 	)
 
 	// 排队唤醒器（P2，§8.3）

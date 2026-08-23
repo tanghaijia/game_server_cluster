@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	nodeagentv1 "controller-go/internal/third/nodeagent/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 // NodeAgentFaceClient 封装 protobuf 生成的 NodeAgentServiceClient，
@@ -55,6 +57,13 @@ func (r *ClientRegistry) Get(ctx context.Context, nodeId, addr string) (*NodeAge
 
 	conn, err := grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// B-12：keepalive 主动探测半开连接，配合调用方 per-RPC 超时，
+		// 避免"TCP 能连但应用层不回包"的失联节点让 RPC 永久挂起。
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                30 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to node %s at %s: %w", nodeId, addr, err)

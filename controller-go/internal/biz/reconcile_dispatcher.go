@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -43,6 +44,21 @@ type ReconcileDispatcher struct {
 
 	// 资源释放事件回调（S14：实例停止释放资源后唤醒排队）
 	resourceReleasedHook func()
+
+	// B-12：单条 node_agent/asset_service RPC 超时。reconcile 消费端是单 goroutine，
+	// 一条挂起的 RPC 会冻结整条管线；所有同步 RPC 均以 withRPCTimeout 包裹。
+	rpcTimeout time.Duration
+
+	// B-13：派发队列满时的溢出缓冲（非阻塞入队兜底）。
+	// 消费端优先取 overflow，再取 queue；避免"队列满 + 消费端自入队"自死锁。
+	overflowMu sync.Mutex
+	overflow   []*entity.GameInstance
+
+	// B-14：节点失联 fencing。Running 实例在其节点被健康监控判为 unhealthy 且
+	// InspectInstance 持续不可达超过 fencingTimeout 后，置 Failed 释放槽位/凭证/预留。
+	offlineMu      sync.Mutex
+	offlineSince   map[string]time.Time // instanceID -> 首次观测到"节点不可达"的时间
+	fencingTimeout time.Duration
 }
 
 func NewReconcileDispatcher(
@@ -60,7 +76,15 @@ func NewReconcileDispatcher(
 	gameContainerPortMapper GameContainerPortMapper,
 	platformConfigRepo repository.GamePlatformConfigRepository,
 	credentialUC *CredentialUseCase,
+	rpcTimeout time.Duration,
+	fencingTimeout time.Duration,
 ) *ReconcileDispatcher {
+	if rpcTimeout <= 0 {
+		rpcTimeout = 30 * time.Second
+	}
+	if fencingTimeout <= 0 {
+		fencingTimeout = 3 * time.Minute
+	}
 	return &ReconcileDispatcher{
 		queue:                   make(chan *entity.GameInstance, 100),
 		instanceRepo:            instanceRepo,
@@ -78,6 +102,10 @@ func NewReconcileDispatcher(
 		platformConfigRepo:      platformConfigRepo,
 		credentialUC:            credentialUC,
 		operationRetryCounts:    make(map[string]int),
+		rpcTimeout:              rpcTimeout,
+		overflow:                make([]*entity.GameInstance, 0, 64),
+		offlineSince:            make(map[string]time.Time),
+		fencingTimeout:          fencingTimeout,
 	}
 }
 
@@ -105,6 +133,11 @@ func isDispatchableStatus(status entity.InstanceStatus) bool {
 
 /**
 * 请求对一个GameInstance进行派遣
+*
+* B-13（P0）：非阻塞入队。队列满时落入 overflow 溢出缓冲（而非阻塞发送），
+* 消费端在取队列前先取 overflow。这消除了"队列打满 + 消费端处理中自入队"的自死锁：
+* 消费端（唯一 drainer）永远不会因为向自己的队列塞回实例而把自己堵死。
+* 实例不会丢失：overflow 由消费端在下一轮消费。
 **/
 func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *entity.GameInstance) error {
 	if instance == nil {
@@ -112,8 +145,16 @@ func (d *ReconcileDispatcher) RequestDispatch(ctx context.Context, instance *ent
 	}
 
 	if isDispatchableStatus(instance.Status) {
-		d.queue <- instance
-		return nil
+		select {
+		case d.queue <- instance:
+			return nil
+		default:
+			// 队列满：非阻塞落入 overflow（消费端优先取 overflow）
+			d.overflowMu.Lock()
+			d.overflow = append(d.overflow, instance)
+			d.overflowMu.Unlock()
+			return nil
+		}
 	}
 
 	return errors.New("instance is not in a dispatchable state")
@@ -131,9 +172,12 @@ func (d *ReconcileDispatcher) ForceDispatch(ctx context.Context, instance *entit
 	return nil
 }
 
-// QueueLen 返回当前派遣队列长度（调试用）
+// QueueLen 返回当前派遣队列长度（调试用；含 overflow 溢出缓冲）
 func (d *ReconcileDispatcher) QueueLen() int {
-	return len(d.queue)
+	d.overflowMu.Lock()
+	ov := len(d.overflow)
+	d.overflowMu.Unlock()
+	return len(d.queue) + ov
 }
 
 // RetryCounts 返回各实例当前自动重试次数快照（调试用）
@@ -148,14 +192,37 @@ func (d *ReconcileDispatcher) RetryCounts() map[string]int {
 }
 
 /**
-* 派遣下一个需要派遣的GameInstance, 若队列中为空则会阻塞
+* 派遣下一个需要派遣的GameInstance, 若队列与溢出缓冲均为空则会阻塞。
+* ctx 取消时返回 ctx.Err()，配合 Start 让消费 goroutine 优雅退出（B-12/B-17 相关）。
 **/
 func (d *ReconcileDispatcher) NextDispatch(ctx context.Context) error {
-	instance := <-d.queue
+	instance := d.nextDispatchInstance(ctx)
+	if instance == nil {
+		return ctx.Err()
+	}
 
 	d.Dispatch(ctx, instance)
 
 	return nil
+}
+
+// nextDispatchInstance 取下一个待派遣实例：优先取 overflow（满队列兜底），
+// 否则阻塞等待队列；ctx 取消返回 nil。
+func (d *ReconcileDispatcher) nextDispatchInstance(ctx context.Context) *entity.GameInstance {
+	d.overflowMu.Lock()
+	if n := len(d.overflow); n > 0 {
+		inst := d.overflow[0]
+		d.overflow = d.overflow[1:]
+		d.overflowMu.Unlock()
+		return inst
+	}
+	d.overflowMu.Unlock()
+	select {
+	case inst := <-d.queue:
+		return inst
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.GameInstance) error {
@@ -270,7 +337,9 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		req := &nodeagentv1.PrepareGameBuildRequest{
 			BuildId: instance.GameBuildId,
 		}
-		resp, err := client.PrepareGameBuild(ctx, req)
+		callCtx, cancel := d.withRPCTimeout(ctx)
+		resp, err := client.PrepareGameBuild(callCtx, req)
+		cancel()
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "PrepareGameBuild")
 			return nil
@@ -300,9 +369,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.FailedInstance(ctx, instance)
 			return nil
 		}
-		snapshotResp, err := d.assetClient.GetLatestSnapshot(ctx, &assetservicev1.GetLatestSnapshotRequest{
+		acallCtx, acancel := d.withRPCTimeout(ctx)
+		snapshotResp, err := d.assetClient.GetLatestSnapshot(acallCtx, &assetservicev1.GetLatestSnapshotRequest{
 			InstanceId: instance.ID,
 		})
+		acancel()
 		if err != nil {
 			slog.Error("[AssetService] GetLatestSnapshot fail",
 				"instanceId", instance.ID, "err", err,
@@ -320,10 +391,12 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.RequestDispatch(ctx, instance)
 			return nil
 		}
-		restoreResp, err := client.RestoreSnapshot(ctx, &nodeagentv1.RestoreSnapshotRequest{
+		rcallCtx, rcancel := d.withRPCTimeout(ctx)
+		restoreResp, err := client.RestoreSnapshot(rcallCtx, &nodeagentv1.RestoreSnapshotRequest{
 			InstanceId: instance.ID,
 			SnapshotId: snapshotResp.Snapshot.SnapshotId,
 		})
+		rcancel()
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "RestoreSnapshot")
 			return nil
@@ -354,9 +427,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			return nil
 		}
 		// 从 asset_service 获取该实例对应的 game build
-		buildResp, err := d.assetClient.GetGameBuild(ctx, &assetservicev1.GetGameBuildRequest{
+		bcallCtx, bcancel := d.withRPCTimeout(ctx)
+		buildResp, err := d.assetClient.GetGameBuild(bcallCtx, &assetservicev1.GetGameBuildRequest{
 			BuildId: instance.GameBuildId,
 		})
+		bcancel()
 		if err != nil {
 			slog.Error("[AssetService] GetGameBuild fail",
 				"instanceId", instance.ID, "GameBuildId", instance.GameBuildId, "err", err,
@@ -412,7 +487,9 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 		} else if len(creds) > 0 {
 			runtimeSpec.Credentials = creds
 		}
-		startResp, err := client.StartInstance(ctx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
+		scallCtx, scancel := d.withRPCTimeout(ctx)
+		startResp, err := client.StartInstance(scallCtx, &nodeagentv1.StartInstanceRequest{Instance: runtimeSpec})
+		scancel()
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "StartInstance")
 			return nil
@@ -442,9 +519,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.FailedInstance(ctx, instance)
 			return nil
 		}
-		stopResp, err := client.StopInstance(ctx, &nodeagentv1.StopInstanceRequest{
+		tcallCtx, tcancel := d.withRPCTimeout(ctx)
+		stopResp, err := client.StopInstance(tcallCtx, &nodeagentv1.StopInstanceRequest{
 			InstanceId: instance.ID,
 		})
+		tcancel()
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "StopInstance")
 			return nil
@@ -474,9 +553,11 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			d.FailedInstance(ctx, instance)
 			return nil
 		}
-		cleanResp, err := client.CleanInstance(ctx, &nodeagentv1.CleanInstanceRequest{
+		ccallCtx, ccancel := d.withRPCTimeout(ctx)
+		cleanResp, err := client.CleanInstance(ccallCtx, &nodeagentv1.CleanInstanceRequest{
 			InstanceId: instance.ID,
 		})
+		ccancel()
 		if err != nil {
 			d.handleDispatchError(ctx, instance, err, "CleanInstance")
 			return nil
@@ -578,6 +659,43 @@ func extractErrorDetail(err error) *nodeagentv1.ErrorDetail {
 }
 
 /**
+* B-12（P0）：为单条 node_agent/asset_service RPC 派生带超时的调用 ctx。
+* reconcile 消费端是单 goroutine，无超时的挂起 RPC 会冻结整条管线；
+* 所有同步 RPC（PrepareGameBuild/RestoreSnapshot/Start/Stop/Clean/GetOperation/Inspect/asset 查询）
+* 必须经由本方法包裹。
+**/
+func (d *ReconcileDispatcher) withRPCTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if d.rpcTimeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, d.rpcTimeout)
+}
+
+/**
+* B-12（P0）：RPC 瞬态错误判定（网络层/超时类，可重试）：
+* - context.DeadlineExceeded（调用方超时）
+* - gRPC Unavailable（对端不可达）/ DeadlineExceeded / Aborted（服务端重入冲突）
+* 与 node_agent rich error 的 Retryable 标志互补（后者只覆盖业务层可重试）。
+**/
+func isRetryableRPCErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	switch st.Code() {
+	case codes.Unavailable, codes.DeadlineExceeded, codes.Aborted:
+		return true
+	}
+	return false
+}
+
+/**
 * 自动重试计数:返回 false 表示已达重试上限,不应再重试。
 * 计数按实例累积,成功时由 clearRetryCount 清零。
 **/
@@ -604,9 +722,11 @@ func (d *ReconcileDispatcher) clearRetryCount(instanceID string) {
 /**
 * 统一处理派发阶段的同步 RPC 失败:记录结构化错误;可重试错误重新入队,否则标记失败。
 * opName 用于日志标识(如 "PrepareGameBuild")。
+* 可重试 = node_agent rich error 的 Retryable 标志，或 B-12 网络层瞬态（超时/Unavailable）。
 **/
 func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance *entity.GameInstance, err error, opName string) {
 	detail := extractErrorDetail(err)
+	retryable := isRetryableRPCErr(err)
 	if detail != nil {
 		slog.Error("[NodeAgentClients] "+opName+" fail",
 			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
@@ -614,7 +734,8 @@ func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance 
 			"Retryable", detail.GetRetryable(), "Params", detail.GetParams(),
 			"Message", detail.GetMessage(),
 		)
-		if detail.GetRetryable() && d.retryOperation(ctx, instance) {
+		retryable = retryable || detail.GetRetryable()
+		if retryable && d.retryOperation(ctx, instance) {
 			slog.Warn("[NodeAgentClients] "+opName+" 失败可重试,重新入队调度",
 				"instanceId", instance.ID, "Status", instance.Status,
 			)
@@ -624,7 +745,16 @@ func (d *ReconcileDispatcher) handleDispatchError(ctx context.Context, instance 
 		}
 	} else {
 		slog.Error("[NodeAgentClients] "+opName+" fail",
-			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err)
+			"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID, "err", err,
+		)
+		if retryable && d.retryOperation(ctx, instance) {
+			slog.Warn("[NodeAgentClients] "+opName+" 网络层瞬态失败,重新入队调度",
+				"instanceId", instance.ID, "Status", instance.Status,
+			)
+			if err := d.RequestDispatch(ctx, instance); err == nil {
+				return
+			}
+		}
 	}
 	instance.FailReason = opName + " 失败: " + err.Error()
 	d.FailedInstance(ctx, instance)
@@ -681,8 +811,20 @@ func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 		req := &nodeagentv1.GetOperationRequest{
 			OperationId: operation_id,
 		}
-		resp, err := client.GetOperation(ctx, req)
+		callCtx, cancel := d.withRPCTimeout(ctx)
+		resp, err := client.GetOperation(callCtx, req)
+		cancel()
 		if err != nil {
+			// B-12：网络层瞬态（超时/Unavailable）→ 继续轮询（操作可能仍在 node_agent 上推进），
+			// 不误杀；非瞬态错误才标记失败。
+			if isRetryableRPCErr(err) {
+				slog.Warn("[NodeAgentClients] GetOperation 瞬态错误,继续轮询",
+					"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
+					"OperationId", operation_id, "err", err,
+				)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
 			slog.Error("[NodeAgentClients] GetOperation fail",
 				"NodeAgentID", instance.NodeAgentID, "instanceId", instance.ID,
 				"OperationId", operation_id, "err", err,
@@ -945,8 +1087,10 @@ func mapPortMapping(config *entity.GameContainerConfig, mappings []entity.Contai
 func (d *ReconcileDispatcher) Start(ctx context.Context) {
 	go func() {
 		for {
-			// 处理派遣逻辑
-			d.NextDispatch(ctx)
+			if err := d.NextDispatch(ctx); err != nil {
+				slog.Info("ReconcileDispatcher 退出", "err", err)
+				return
+			}
 		}
 	}()
 }
@@ -974,6 +1118,8 @@ func (d *ReconcileDispatcher) Recover(ctx context.Context) error {
 * 并采集容器日志尾部作为 fail_reason），但不会主动上报 controller —— 本方法周期拉取
 * InspectInstance 补齐断链：发现 node_agent 侧实例已 Failed → controller 标记失败并
 * 透传原因（前端展示 fail_reason），同时走 FailedInstance 完整失败路径（释放凭证/预留）。
+* B-14（P0）：节点失联 fencing —— Inspect 不可达且健康监控判失联超阈值 → 置 Failed，
+* 释放订阅槽位/凭证/预留，避免失联节点的运行实例永久占用。
 * 由 main 启动的 ticker goroutine 周期调用。
 **/
 func (d *ReconcileDispatcher) WatchRunningInstances(ctx context.Context) {
@@ -998,11 +1144,29 @@ func (d *ReconcileDispatcher) WatchRunningInstances(ctx context.Context) {
 		if err != nil {
 			continue
 		}
-		resp, err := client.InspectInstance(ctx, &nodeagentv1.InspectInstanceRequest{InstanceId: instance.ID})
+		callCtx, cancel := d.withRPCTimeout(ctx)
+		resp, err := client.InspectInstance(callCtx, &nodeagentv1.InspectInstanceRequest{InstanceId: instance.ID})
+		cancel()
 		if err != nil {
-			// 节点不可达：节点健康监控另行处理，这里不误杀
+			// B-14（P0）：节点不可达 → fencing。
+			// 健康监控已判失联（Alive=false / unhealthy）且 Inspect 持续失败超过阈值 →
+			// 置 Failed（释放槽位/凭证/预留，走 FailedInstance 完整失败路径）；
+			// 健康未判失联的瞬态（心跳正常但本 RPC 抖动）不累计，避免误杀。
+			if !nodeAgent.Alive || nodeAgent.HealthStatus == entity.HealthUnhealthy {
+				if d.markOfflineAndShouldFence(instance.ID) {
+					d.clearOffline(instance.ID)
+					slog.Warn("[WatchRunningInstances] 节点失联超阈值，运行实例置失败（fencing）",
+						"instanceId", instance.ID, "nodeAgentId", *instance.NodeAgentID,
+						"threshold", d.fencingTimeout.String())
+					d.failWithReason(ctx, instance,
+						"节点失联超过 "+d.fencingTimeout.String()+"，实例已终止（fencing）；节点恢复后请重试")
+				}
+			} else {
+				d.clearOffline(instance.ID) // 瞬态不可达：不累计
+			}
 			continue
 		}
+		d.clearOffline(instance.ID)
 		naInstance := resp.GetInstance()
 		if naInstance == nil {
 			continue
@@ -1018,4 +1182,25 @@ func (d *ReconcileDispatcher) WatchRunningInstances(ctx context.Context) {
 			"instanceId", instance.ID, "reason", reason)
 		d.failWithReason(ctx, instance, reason)
 	}
+}
+
+// markOfflineAndShouldFence 记录实例首次"节点不可达"时间；累计超过 fencingTimeout 返回 true。
+// 幂等：重复调用只记账，不重置计时（保证"持续失联"而非"多次瞬时抖动"才触发）。
+func (d *ReconcileDispatcher) markOfflineAndShouldFence(instanceID string) bool {
+	d.offlineMu.Lock()
+	defer d.offlineMu.Unlock()
+	first, ok := d.offlineSince[instanceID]
+	now := time.Now()
+	if !ok {
+		d.offlineSince[instanceID] = now
+		return false
+	}
+	return now.Sub(first) >= d.fencingTimeout
+}
+
+// clearOffline 清除实例的失联计时（节点恢复可达/实例已置失败时调用）。
+func (d *ReconcileDispatcher) clearOffline(instanceID string) {
+	d.offlineMu.Lock()
+	defer d.offlineMu.Unlock()
+	delete(d.offlineSince, instanceID)
 }
