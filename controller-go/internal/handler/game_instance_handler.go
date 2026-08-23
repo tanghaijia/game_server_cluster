@@ -44,6 +44,9 @@ type createGameInstanceRequest struct {
 	Priority    int                     `json:"priority,omitempty"`             // D7 优先级（默认 100）
 	Resources   *entity.ResourceRequest `json:"resources,omitempty"`            // 显式资源覆盖（创建时指定生效）
 	Config      map[string]string       `json:"config,omitempty"`               // 000024：实例配置（platform+player 合并，adapter.toml schema 校验）
+	// 000027（M10）：订阅归属。nil = 未归属（老实例豁免单活跃约束）。
+	// 创建时仅记录归属（初始 stopped 不占槽位），单活跃约束在 start/retry 校验。
+	SubscriptionID *string `json:"subscription_id,omitempty"`
 }
 
 // CreateGameInstance 新建 game_instance，初始状态为 StatusStopped。
@@ -60,11 +63,12 @@ func (h *GameInstanceHandler) CreateGameInstance(c *gin.Context) {
 	}
 
 	instance, err := h.gameInstanceUseCase.CreateGameInstance(c.Request.Context(), req.GameID, biz.CreateInstanceOptions{
-		GameBuildID: req.GameBuildID,
-		Region:      req.Region,
-		Priority:    req.Priority,
-		Resources:   req.Resources,
-		Config:      req.Config,
+		GameBuildID:    req.GameBuildID,
+		Region:         req.Region,
+		Priority:       req.Priority,
+		Resources:      req.Resources,
+		Config:         req.Config,
+		SubscriptionID: req.SubscriptionID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -115,6 +119,10 @@ func (h *GameInstanceHandler) StartGameInstance(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
 			return
 		}
+		if errors.Is(err, biz.ErrSubscriptionConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -135,7 +143,7 @@ func (h *GameInstanceHandler) StopGameInstance(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "stopping"})
 }
 
-// ListGameInstances 列出全部实例，支持 ?status=<状态字符串> 过滤
+// ListGameInstances 列出实例，支持 ?status=<状态字符串> 与 ?subscription_id=<订阅ID>（M11）过滤
 func (h *GameInstanceHandler) ListGameInstances(c *gin.Context) {
 	var status *entity.InstanceStatus
 	if s := c.Query("status"); s != "" {
@@ -147,7 +155,7 @@ func (h *GameInstanceHandler) ListGameInstances(c *gin.Context) {
 		status = &parsed
 	}
 
-	instances, err := h.gameInstanceUseCase.ListGameInstances(c.Request.Context(), status)
+	instances, err := h.gameInstanceUseCase.ListGameInstances(c.Request.Context(), status, c.Query("subscription_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -187,6 +195,10 @@ func (h *GameInstanceHandler) RetryGameInstance(c *gin.Context) {
 	if err := h.gameInstanceUseCase.RetryGameInstance(c.Request.Context(), id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		if errors.Is(err, biz.ErrSubscriptionConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})

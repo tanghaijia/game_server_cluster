@@ -56,6 +56,8 @@ func main() {
 	userRepo := repogorm.NewUserRepo(db)
 	orderRepo := repogorm.NewOrderRepo(db)
 	gameProfileRepo := repogorm.NewGameProfileRepo(db)
+	serverPlanRepo := repogorm.NewServerPlanRepo(db)
+	subscriptionRepo := repogorm.NewSubscriptionRepo(db)
 
 	// ---------------------------------------------------------------
 	// 4. Use Cases
@@ -66,6 +68,10 @@ func main() {
 	controllerClient := controller.NewClient(cfg.ControllerAddr)
 	orderUseCase := biz.NewOrderUseCase(orderRepo, controllerClient)
 	gameCatalogUseCase := biz.NewGameCatalogUseCase(gameProfileRepo, orderRepo, controllerClient)
+
+	// M9：套餐 / 订阅
+	planUseCase := biz.NewPlanUseCase(serverPlanRepo, subscriptionRepo)
+	subscriptionUseCase := biz.NewSubscriptionUseCase(subscriptionRepo, planUseCase, controllerClient)
 
 	// 管理员播种（ADR 方案1）：ADMIN_USERNAME/ADMIN_PASSWORD 已设置且用户不存在时创建
 	if cfg.AdminUsername != "" {
@@ -102,12 +108,27 @@ func main() {
 	handler.NewOrderHandler(orderUseCase).RegisterRoutes(router, authMiddleware)
 	handler.NewGameCatalogHandler(gameCatalogUseCase).RegisterRoutes(router, authMiddleware)
 	handler.NewAdminHandler(controllerClient, gameCatalogUseCase).RegisterRoutes(router, authMiddleware)
+	handler.NewAdminPlanHandler(planUseCase, subscriptionUseCase).RegisterRoutes(router, authMiddleware)
+	handler.NewSubscriptionHandler(subscriptionUseCase).RegisterRoutes(router, authMiddleware)
 
 	// 静态资源（游戏图标等）
 	if err := os.MkdirAll("static", 0o755); err != nil {
 		slog.Error("创建 static 目录失败", "err", err)
 	}
 	router.Static("/static", "./static")
+
+	// M12：到期 sweep（1 分钟周期；进程退出即停止，无需显式取消）
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if n, err := subscriptionUseCase.ExpireOverdue(context.Background()); err != nil {
+				slog.Warn("到期 sweep 失败", "err", err)
+			} else if n > 0 {
+				slog.Info("到期 sweep", "expired_subscriptions", n)
+			}
+		}
+	}()
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),

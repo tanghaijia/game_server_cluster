@@ -60,6 +60,34 @@ func (r *GameInstanceRepo) ListByGame(ctx context.Context, gameID string) ([]*en
 	return instances, nil
 }
 
+// ListActiveBySubscription 查询订阅下所有活跃实例（status NOT IN (stopped, failed)）。
+// 谓词与迁移 000027 部分唯一索引保持一致（防漂移测试钉死）。
+func (r *GameInstanceRepo) ListActiveBySubscription(ctx context.Context, subscriptionID string) ([]*entity.GameInstance, error) {
+	var instances []*entity.GameInstance
+	err := r.db.WithContext(ctx).
+		Where("subscription_id = ?", subscriptionID).
+		Where("status NOT IN ?", []entity.InstanceStatus{entity.StatusStopped, entity.Failed}).
+		Order("create_time").
+		Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+	return instances, nil
+}
+
+// ListBySubscription 查询订阅下全部实例（含 stopped/failed，M11）
+func (r *GameInstanceRepo) ListBySubscription(ctx context.Context, subscriptionID string) ([]*entity.GameInstance, error) {
+	var instances []*entity.GameInstance
+	err := r.db.WithContext(ctx).
+		Where("subscription_id = ?", subscriptionID).
+		Order("create_time").
+		Find(&instances).Error
+	if err != nil {
+		return nil, err
+	}
+	return instances, nil
+}
+
 func (r *GameInstanceRepo) ListAll(ctx context.Context) ([]*entity.GameInstance, error) {
 	var instances []*entity.GameInstance
 	err := r.db.WithContext(ctx).

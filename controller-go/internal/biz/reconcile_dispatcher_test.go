@@ -41,6 +41,14 @@ func (m *mockInstanceRepo) ListByGame(ctx context.Context, gameID string) ([]*en
 	return nil, nil
 }
 
+func (m *mockInstanceRepo) ListActiveBySubscription(ctx context.Context, subscriptionID string) ([]*entity.GameInstance, error) {
+	return nil, nil
+}
+
+func (m *mockInstanceRepo) ListBySubscription(ctx context.Context, subscriptionID string) ([]*entity.GameInstance, error) {
+	return nil, nil
+}
+
 func (m *mockInstanceRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }

@@ -14,12 +14,13 @@ import (
 
 // GameInstance controller-go 返回的实例（JSON 字段为 PascalCase，Go 解码对大小写不敏感）
 type GameInstance struct {
-	ID          string  `json:"ID"`
-	GameID      string  `json:"GameID"`
-	NodeAgentID *string `json:"NodeAgentID"`
-	Status      string  `json:"Status"`
-	GameBuildId string  `json:"GameBuildId"`
-	FailReason  string  `json:"FailReason"` // 失败原因（调度/阶段失败等，前端展示）
+	ID             string  `json:"ID"`
+	GameID         string  `json:"GameID"`
+	NodeAgentID    *string `json:"NodeAgentID"`
+	Status         string  `json:"Status"`
+	GameBuildId    string  `json:"GameBuildId"`
+	FailReason     string  `json:"FailReason"` // 失败原因（调度/阶段失败等，前端展示）
+	SubscriptionID *string `json:"SubscriptionID"` // M10：订阅归属（NULL = 未归属）
 }
 
 // Client controller-go HTTP 客户端（ADR-0001：platform-service 编排 controller）
@@ -40,6 +41,9 @@ func NewClient(baseURL string) *Client {
 
 // ErrNotFound controller 返回 404（资源不存在）
 var ErrNotFound = errors.New("controller: not found")
+
+// ErrConflict controller 返回 409（资源冲突，如订阅单活跃约束）
+var ErrConflict = errors.New("controller: conflict")
 
 // ContainerConfig 游戏容器配置（controller 返回，PascalCase JSON）
 type ContainerConfig struct {
@@ -100,10 +104,14 @@ func (c *Client) UpdateContainerConfig(ctx context.Context, gameID string, u Con
 
 // CreateGameInstance 在 controller 上创建实例（初始 stopped）。
 // config 为实例配置（游戏配置 schema 声明的键值，nil 表示不传）。
-func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID string, config map[string]string) (*GameInstance, error) {
+// subscriptionID 可选（M10）：归属订阅；空 = 未归属（老实例豁免单活跃约束）。
+func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID, subscriptionID string, config map[string]string) (*GameInstance, error) {
 	body := map[string]any{"game_id": gameID}
 	if buildID != "" {
 		body["game_build_id"] = buildID
+	}
+	if subscriptionID != "" {
+		body["subscription_id"] = subscriptionID
 	}
 	if len(config) > 0 {
 		body["config"] = config
@@ -113,6 +121,17 @@ func (c *Client) CreateGameInstance(ctx context.Context, gameID, buildID string,
 		return nil, err
 	}
 	return &inst, nil
+}
+
+// ListGameInstancesBySubscription 订阅内实例列表（controller /api/game-instances?subscription_id=，M11）
+func (c *Client) ListGameInstancesBySubscription(ctx context.Context, subscriptionID string) ([]GameInstance, error) {
+	var out struct {
+		Instances []GameInstance `json:"instances"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/game-instances?subscription_id="+subscriptionID, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Instances, nil
 }
 
 // ConfigSchema 游戏配置 schema（controller 透传 asset_service，供前端表单生成）
@@ -553,6 +572,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		err := fmt.Errorf("controller %s %s returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(b)))
 		if resp.StatusCode == http.StatusNotFound {
 			return fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		if resp.StatusCode == http.StatusConflict {
+			return fmt.Errorf("%w: %v", ErrConflict, err)
 		}
 		return err
 	}

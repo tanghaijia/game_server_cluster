@@ -127,6 +127,17 @@ type GameInstance struct {
 	// 由 adapter.toml config schema 校验，随 InstanceRuntimeSpec.config 下发，
 	// node_agent 写入 /data/.platform/game-config.json 供容器内 config-render 渲染
 	Config map[string]string `gorm:"column:config;serializer:json"`
+
+	// 订阅归属（000027 迁移，M10）：实例所属订阅。NULL = 未归属（老实例豁免单活跃约束）。
+	// 创建后不可变；部分唯一索引 uq_subscription_single_active 保证同订阅至多一个活跃实例。
+	SubscriptionID *string `gorm:"column:subscription_id"`
+}
+
+// IsActive 该状态是否占用"订阅单活跃槽位"：一切非终态（pending/scheduling/…/queued）。
+// ⚠️ 必须与迁移 000027 部分唯一索引谓词 `status NOT IN (8, 10)` 保持一致——
+//    防漂移测试（game_instance_test.go）解析迁移文件校验，新增状态必须同步索引谓词。
+func (s InstanceStatus) IsActive() bool {
+	return s != StatusStopped && s != Failed
 }
 
 func (GameInstance) TableName() string {

@@ -293,3 +293,74 @@ export async function deleteCredential(gameId: string, credentialId: string): Pr
 export async function forceReleaseCredential(gameId: string, credentialId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/credentials/' + credentialId + '/force-release')
 }
+
+// ---- M9：订阅制套餐（SKU） ----
+
+export interface PlanBasketItem {
+  game_id: string
+  config?: Record<string, string>
+}
+
+export interface ServerPlan {
+  ID: string
+  DisplayName: string
+  Description: string
+  PriceCents: number // 分
+  DurationHours: number // 小时（0 = 永久）
+  ResourceCPUMilli: number
+  ResourceMemoryBytes: number
+  ResourceDiskBytes: number
+  MaxInstances: number // 订阅内实例数量上限（0 = 不限）
+  Basket: PlanBasketItem[]
+  Enabled: boolean
+  CreateTime: string
+  UpdateTime: string
+}
+
+export interface ServerPlanInput {
+  display_name: string
+  description?: string
+  price_cents: number
+  duration_hours: number
+  resource_cpu_milli?: number
+  resource_memory_bytes?: number
+  resource_disk_bytes?: number
+  max_instances?: number
+  basket: PlanBasketItem[]
+  enabled?: boolean
+}
+
+export async function listPlans(): Promise<ServerPlan[]> {
+  const resp = await http.get('/admin/plans')
+  return resp.data.plans
+}
+
+export async function createPlan(data: ServerPlanInput): Promise<ServerPlan> {
+  const resp = await http.post('/admin/plans', data)
+  return resp.data
+}
+
+export async function updatePlan(id: string, data: ServerPlanInput): Promise<ServerPlan> {
+  const resp = await http.put('/admin/plans/' + id, data)
+  return resp.data
+}
+
+export async function deletePlan(id: string): Promise<void> {
+  await http.delete('/admin/plans/' + id)
+}
+
+export interface Subscription {
+  ID: string
+  UserID: string
+  PlanID: string
+  Status: 'active' | 'expired' | 'cancelled' | 'suspended'
+  ExpiresAt?: string
+  BasketSnapshot: PlanBasketItem[]
+  CreateTime: string
+  UpdateTime: string
+}
+
+export async function listSubscriptions(): Promise<Subscription[]> {
+  const resp = await http.get('/admin/subscriptions')
+  return resp.data.subscriptions
+}

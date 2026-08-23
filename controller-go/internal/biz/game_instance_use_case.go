@@ -12,6 +12,8 @@ import (
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 	assetservicev1 "controller-go/internal/third/assetservice/v1"
+
+	"gorm.io/gorm"
 )
 
 // GameInstanceUseCase 业务逻辑执行器
@@ -63,7 +65,13 @@ type CreateInstanceOptions struct {
 	// 实例配置（000024，M3）：platform + player 合并后的键值，
 	// 键集合需通过 adapter.toml config schema 校验（未知 key 拒绝），随调度下发
 	Config map[string]string
+	// 订阅归属（000027，M10）：nil = 未归属（老实例豁免单活跃约束）。
+	// 仅记录归属，不参与状态机；单活跃约束在 start/retry 前置校验 + 部分唯一索引落地。
+	SubscriptionID *string
 }
+
+// ErrSubscriptionConflict 订阅内已有其他活跃实例（M10 单活跃约束）
+var ErrSubscriptionConflict = errors.New("subscription already has an active instance")
 
 /**
 * 创建一个GameInstance，状态会被初始化为StatusStopped。
@@ -112,6 +120,7 @@ func (uc *GameInstanceUseCase) CreateGameInstance(ctx context.Context, gameID st
 		ResourceReq:      opts.Resources,
 		ResourceOverride: opts.Resources != nil, // 创建时显式指定 → 覆盖 config 默认（000021）
 		Config:           opts.Config,           // 000024：实例配置（M3 下发链路）
+		SubscriptionID:   opts.SubscriptionID,   // 000027：订阅归属（M10）
 	}
 	err = uc.instanceRepo.Save(ctx, instance)
 	if err != nil {
@@ -162,6 +171,28 @@ func newGameInstanceID() string {
 }
 
 /**
+* checkSubscriptionSlot 单活跃前置校验（M10）：实例所属订阅内不得有其他活跃实例。
+* 应用层先查后写 + 迁移 000027 部分唯一索引 DB 兜底（并发双 start 撞索引被拒）。
+* 返回错误带占用实例 ID/状态，供用户跳转处理；nil 表示通过。
+**/
+func (uc *GameInstanceUseCase) checkSubscriptionSlot(ctx context.Context, instance *entity.GameInstance) error {
+	if instance.SubscriptionID == nil || *instance.SubscriptionID == "" {
+		return nil // 未归属订阅：豁免
+	}
+	active, err := uc.instanceRepo.ListActiveBySubscription(ctx, *instance.SubscriptionID)
+	if err != nil {
+		return err
+	}
+	for _, a := range active {
+		if a.ID != instance.ID { // 排除自己（幂等重复 start 不视为冲突）
+			return fmt.Errorf("%w: %s（状态 %s，游戏 %s），请先停止它",
+				ErrSubscriptionConflict, a.ID, a.Status, a.GameID)
+		}
+	}
+	return nil
+}
+
+/**
 * 启动一个GameInstance，状态被设置为StatusPending
 **/
 func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID string) error {
@@ -174,6 +205,10 @@ func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID
 		return fmt.Errorf("invalid instance status：%s",
 			instance.Status)
 	}
+	// M10：订阅单活跃约束（应用层前置；DB 部分唯一索引兜底并发）
+	if err := uc.checkSubscriptionSlot(ctx, instance); err != nil {
+		return err
+	}
 
 	instance.Status = entity.StatusPending
 	instance.FailReason = "" // 重新启动清失败原因
@@ -181,10 +216,20 @@ func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID
 	// Save 全字段（确保 fail_reason 清除落库）
 	err = uc.instanceRepo.Save(ctx, instance)
 	if err != nil {
-		return err
+		return mapSaveConflict(err)
 	}
 	uc.ReconcileDispatcher.RequestDispatch(ctx, instance)
 	return nil
+}
+
+// mapSaveConflict 保存时的唯一约束冲突（并发双 start 撞 uq_subscription_single_active，
+// gorm 把 PG 23505 翻译为 gorm.ErrDuplicatedKey）→ 翻译为 ErrSubscriptionConflict，
+// 否则用户会看到裸 DB 错误。
+func mapSaveConflict(err error) error {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return fmt.Errorf("%w（并发冲突：同一订阅同时启动了多个实例，请刷新后重试）", ErrSubscriptionConflict)
+	}
+	return err
 }
 
 /**
@@ -254,9 +299,13 @@ func (uc *GameInstanceUseCase) UpdateInstanceConfig(ctx context.Context, instanc
 }
 
 /**
-* 列出 GameInstance；status 非空时按状态过滤，为空时列出全部（按创建时间排序）
+* 列出 GameInstance；status 非空时按状态过滤，为空时列出全部（按创建时间排序）。
+* subscriptionID 非空时按订阅过滤（M11：订阅内实例列表，优先级最高）。
 **/
-func (uc *GameInstanceUseCase) ListGameInstances(ctx context.Context, status *entity.InstanceStatus) ([]*entity.GameInstance, error) {
+func (uc *GameInstanceUseCase) ListGameInstances(ctx context.Context, status *entity.InstanceStatus, subscriptionID string) ([]*entity.GameInstance, error) {
+	if subscriptionID != "" {
+		return uc.instanceRepo.ListBySubscription(ctx, subscriptionID)
+	}
 	if status != nil {
 		return uc.instanceRepo.ListByStatuses(ctx, *status)
 	}
@@ -274,12 +323,16 @@ func (uc *GameInstanceUseCase) RetryGameInstance(ctx context.Context, instanceID
 	if instance.Status != entity.Failed {
 		return fmt.Errorf("invalid instance status：%s（仅 failed 状态可重试）", instance.Status)
 	}
+	// M10：订阅单活跃约束（retry = failed → pending，同样占用槽位）
+	if err := uc.checkSubscriptionSlot(ctx, instance); err != nil {
+		return err
+	}
 
 	instance.Status = entity.StatusPending
 	instance.FailReason = "" // 重试清失败原因
 	instance.LastPendingTime = time.Now()
 	if err := uc.instanceRepo.Save(ctx, instance); err != nil {
-		return err
+		return mapSaveConflict(err)
 	}
 	return uc.ReconcileDispatcher.RequestDispatch(ctx, instance)
 }

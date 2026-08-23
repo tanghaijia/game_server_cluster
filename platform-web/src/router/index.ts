@@ -21,9 +21,21 @@ const router = createRouter({
         { path: 'games/:gameId/settings', name: 'game-settings', component: () => import('@/views/GameSettingsView.vue'), meta: { requiresAuth: true, roles: ['admin'] } },
         { path: 'my-servers/:orderId/files', name: 'my-instance-files', component: () => import('@/views/InstanceFilesView.vue') },
         {
+          path: 'subscriptions',
+          name: 'my-subscriptions',
+          component: () => import('@/views/MySubscriptionsView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'admin/users',
           name: 'admin-users',
           component: () => import('@/views/AdminUsersView.vue'),
+          meta: { requiresAuth: true, roles: ['admin'] },
+        },
+        {
+          path: 'admin/plans',
+          name: 'admin-plans',
+          component: () => import('@/views/AdminPlansView.vue'),
           meta: { requiresAuth: true, roles: ['admin'] },
         },
         {

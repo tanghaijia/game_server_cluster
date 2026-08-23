@@ -48,7 +48,7 @@ useGameTheme()
 const gameId = computed(() => route.params.gameId as string | undefined)
 
 const menu = computed(() => {
-  const items = [{ to: '/', label: '游戏列表' }]
+  const items = [{ to: '/', label: '游戏列表' }, { to: '/subscriptions', label: '我的订阅' }]
   // 游戏空间内动态显示该游戏的入口
   if (gameId.value) {
     items.push(
@@ -62,6 +62,7 @@ const menu = computed(() => {
   if (auth.isAdmin) {
     items.push(
       { to: '/admin/users', label: '用户管理' },
+      { to: '/admin/plans', label: '套餐管理' },
       { to: '/admin/orders', label: '订单管理' },
       { to: '/admin/instances', label: '实例总览' },
       { to: '/admin/games', label: '游戏管理' },

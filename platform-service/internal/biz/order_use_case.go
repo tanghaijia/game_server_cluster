@@ -112,7 +112,7 @@ func (uc *OrderUseCase) ProvisionOrder(ctx context.Context, orderID string) (*en
 // 携带订单配置（config），回填 instance_id，订单进入 finalStatus 并落库。
 // 启动由用户/管理员通过 StartInstance 显式触发（创建与开服解耦）。
 func (uc *OrderUseCase) provisionInstance(ctx context.Context, order *entity.Order, finalStatus entity.OrderStatus) (*entity.Order, error) {
-	inst, err := uc.controller.CreateGameInstance(ctx, order.GameID, "", order.Config)
+	inst, err := uc.controller.CreateGameInstance(ctx, order.GameID, "", "", order.Config)
 	if err != nil {
 		return nil, fmt.Errorf("create game instance via controller: %w", err)
 	}
