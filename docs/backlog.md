@@ -9,7 +9,7 @@
 | 优先级 | 含义 | 条目 |
 | --- | --- | --- |
 | P0 | 稳定性/可靠性硬伤，会造成全局不可用或永久状态漂移 | B-12、B-13、B-14 |
-| P1 | 上线/运营底线，不做会出事故 | B-01、B-02、B-15、B-16、B-17、B-18、B-19、B-20 |
+| P1 | 上线/运营底线，不做会出事故 | B-01、B-02、B-15、B-16、B-17、B-18、B-19、B-20、B-27 |
 | P2 | 产品价值/韧性，主链路稳定后做 | B-03、B-04、B-21、B-22、B-23、B-24、B-25、B-26 |
 | P3 | 体验优化或依赖外部条件 | B-05、B-06、B-07、B-08、B-09 |
 | 已决议 | 经论证不做/暂缓 | B-10、B-11 |
@@ -261,6 +261,22 @@
 - **背景**：gorm 默认连接池，瞬时 DB 抖动时部分写操作直接失败（部分被 reconcile 重试兜住，部分没有）。
 - **方案**：显式配置 pool 大小/超时；对幂等写加轻量重试。
 - **涉及**：controller-go、platform-service（main.go gorm 初始化）
+
+### B-27 node_agent stop/clean 清理非幂等 + 本地状态残留（P1）
+
+- **状态**：⬜
+- **背景**：本次"停止失败可重试停止"（Failed+保留绑定 → 重试 stop→clean）依赖 node_agent 侧
+  stop/clean 幂等，但当前实现有缺口（`node_agent/src/service/node_agent_service.rs`）：
+  1) `clean_instance` 每次执行都 `create_snapshot_record(FinalStop)` + 重新上传并 `complete/set_latest`，
+     即便上一次已成功完成快照、只是后续 `remove_container` 失败——重试会**重复生成 FinalStop 快照**，
+     放大 B-02（S3 无界增长）；
+  2) `remove_container` 成功后未清空本地 `game_instance.container_id`，若该步"实际已删但上报失败"，
+     重试 `stop_instance` 会对已不存在的容器 `stop_container` 再次失败 → 用户"停止（清理残留）"仍可能卡住；
+  3) `remove_dir_all`（删本地数据目录）失败只 `log::error` 不返回错误 → 数据目录泄漏且无重试/告警。
+- **方案**：clean 按 instance_id 幂等（已有已完成快照则跳过上传；snapshot record 复用/去重）；
+  `remove_container` 成功后清空本地 `container_id`；`remove_dir_all` 失败计入错误/重试或至少告警指标。
+- **涉及**：node_agent（node_agent_service.rs 的 clean_instance/stop_instance）、asset_service（快照去重）
+- **参考**：B-02（快照 GC）、B-15（孤儿容器）、B-22（start 幂等）
 
 ---
 

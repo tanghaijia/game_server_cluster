@@ -90,11 +90,11 @@
                 </td>
                 <td class="px-3 py-2">
                   <button
-                    v-if="inst.Status === 'running' || inst.Status === 'starting' || inst.Status === 'pending'"
+                    v-if="inst.Status === 'running' || inst.Status === 'starting' || inst.Status === 'pending' || (inst.Status === 'failed' && inst.NodeAgentID)"
                     class="rounded-md border px-3 py-1 text-xs hover:bg-muted"
                     @click="onStop(sub, inst)"
                   >
-                    停止
+                    {{ inst.Status === 'failed' ? '停止（清理残留）' : '停止' }}
                   </button>
                   <button
                     v-else-if="inst.Status === 'stopped' || inst.Status === 'failed'"

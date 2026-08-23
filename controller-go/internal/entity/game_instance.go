@@ -140,6 +140,14 @@ func (s InstanceStatus) IsActive() bool {
 	return s != StatusStopped && s != Failed
 }
 
+// IsStopFailure 是否"停止失败"：Failed 且保留 node_agent 绑定。
+// ReconcileDispatcher.FailedInstance 仅在停止/清理阶段（Stopping/Cleaning）失败时保留绑定
+// （其余失败清空 NodeAgentID），因此 Failed + NodeAgentID != nil 精确标识"停止失败"——
+// node_agent 上可能残留容器。此时应重试停止/清理，而非重新启动（会撞同名容器）。
+func (g *GameInstance) IsStopFailure() bool {
+	return g.Status == Failed && g.NodeAgentID != nil
+}
+
 func (GameInstance) TableName() string {
 	return "game_instances"
 }

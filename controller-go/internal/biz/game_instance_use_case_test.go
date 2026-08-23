@@ -302,3 +302,112 @@ func TestConcurrentStart_DifferentSubscriptions_BothSucceed(t *testing.T) {
 		}
 	}
 }
+
+// ------------------------- 停止失败 vs 开启失败（可靠性增强） -------------------------
+
+// failedStopInstance：停止/清理阶段失败 → Failed 且保留 node_agent 绑定（容器可能残留）
+func failedStopInstance(id, sub string) *entity.GameInstance {
+	agentID := "node-agent-1"
+	return &entity.GameInstance{ID: id, GameID: "343050", Status: entity.Failed,
+		NodeAgentID: &agentID, SubscriptionID: strPtr(sub)}
+}
+
+// failedStartInstance：启动/调度阶段失败 → Failed 且无绑定（无容器残留）
+func failedStartInstance(id, sub string) *entity.GameInstance {
+	return &entity.GameInstance{ID: id, GameID: "343050", Status: entity.Failed, SubscriptionID: strPtr(sub)}
+}
+
+// TestStartGameInstance_StopFailureRejected 停止失败（容器可能残留）→ 拒绝 start，
+// 引导先停止清理；否则 start 会以同名 create_container 失败。
+func TestStartGameInstance_StopFailureRejected(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return failedStopInstance("inst-a", "sub-1"), nil
+		},
+		listActive: func(ctx context.Context, sub string) ([]*entity.GameInstance, error) { return nil, nil },
+	}
+	uc := newSlotUseCase(repo)
+	err := uc.StartGameInstance(context.Background(), "inst-a")
+	if !errors.Is(err, ErrStopFailure) {
+		t.Fatalf("expected ErrStopFailure, got %v", err)
+	}
+	if repo.saveCount != 0 {
+		t.Fatalf("stop-failure start must not persist, saveCount=%d", repo.saveCount)
+	}
+}
+
+// TestStartGameInstance_StartFailureAllowed 启动失败（无残留容器）→ 允许重新 start
+func TestStartGameInstance_StartFailureAllowed(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return failedStartInstance("inst-a", "sub-1"), nil
+		},
+		listActive: func(ctx context.Context, sub string) ([]*entity.GameInstance, error) { return nil, nil },
+	}
+	uc := newSlotUseCase(repo)
+	if err := uc.StartGameInstance(context.Background(), "inst-a"); err != nil {
+		t.Fatalf("start-failure instance should be re-startable, got %v", err)
+	}
+}
+
+// TestStopGameInstance_StopFailureRetriesStop 停止失败 → 允许重试停止（Failed→Stopping）
+func TestStopGameInstance_StopFailureRetriesStop(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return failedStopInstance("inst-a", "sub-1"), nil
+		},
+	}
+	uc := newSlotUseCase(repo)
+	if err := uc.StopGameInstance(context.Background(), "inst-a"); err != nil {
+		t.Fatalf("stop-failure should allow retry stop, got %v", err)
+	}
+	select {
+	case inst := <-uc.ReconcileDispatcher.queue:
+		if inst.Status != entity.StatusStopping {
+			t.Fatalf("dispatched instance should be stopping, got %s", inst.Status)
+		}
+	default:
+		t.Fatal("stop-failure retry should be dispatched")
+	}
+}
+
+// TestStopGameInstance_StartFailureRejected 启动失败（无绑定）→ 无容器可停，拒绝 stop
+func TestStopGameInstance_StartFailureRejected(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return failedStartInstance("inst-a", "sub-1"), nil
+		},
+	}
+	uc := newSlotUseCase(repo)
+	if err := uc.StopGameInstance(context.Background(), "inst-a"); err == nil {
+		t.Fatal("start-failure instance should not be stoppable")
+	}
+}
+
+// TestStopGameInstance_RunningAllowed Running 正常停止
+func TestStopGameInstance_RunningAllowed(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return &entity.GameInstance{ID: "inst-a", GameID: "343050", Status: entity.StatusRunning}, nil
+		},
+	}
+	uc := newSlotUseCase(repo)
+	if err := uc.StopGameInstance(context.Background(), "inst-a"); err != nil {
+		t.Fatalf("running instance should be stoppable, got %v", err)
+	}
+}
+
+// TestRetryGameInstance_StopFailureRejected 停止失败不应走 retry（= 重新 start 撞容器）
+func TestRetryGameInstance_StopFailureRejected(t *testing.T) {
+	repo := &slotMockInstanceRepo{
+		getByIDFunc: func(ctx context.Context, id string) (*entity.GameInstance, error) {
+			return failedStopInstance("inst-a", "sub-1"), nil
+		},
+		listActive: func(ctx context.Context, sub string) ([]*entity.GameInstance, error) { return nil, nil },
+	}
+	uc := newSlotUseCase(repo)
+	err := uc.RetryGameInstance(context.Background(), "inst-a")
+	if !errors.Is(err, ErrStopFailure) {
+		t.Fatalf("expected ErrStopFailure, got %v", err)
+	}
+}

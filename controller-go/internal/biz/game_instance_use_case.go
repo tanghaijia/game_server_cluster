@@ -73,6 +73,10 @@ type CreateInstanceOptions struct {
 // ErrSubscriptionConflict 订阅内已有其他活跃实例（M10 单活跃约束）
 var ErrSubscriptionConflict = errors.New("subscription already has an active instance")
 
+// ErrStopFailure 实例处于"停止失败"状态（Failed 且保留 node_agent 绑定，容器可能残留）。
+// start/retry 应拒绝并引导用户先停止清理；stop 允许（重试停止）。
+var ErrStopFailure = errors.New("instance is in stop-failure state")
+
 /**
 * 创建一个GameInstance，状态会被初始化为StatusStopped。
 * buildID 为空时，以 "public" 作为 channel 调 asset_service 解析该 channel 的可用构建。
@@ -205,6 +209,12 @@ func (uc *GameInstanceUseCase) StartGameInstance(ctx context.Context, instanceID
 		return fmt.Errorf("invalid instance status：%s",
 			instance.Status)
 	}
+	// 停止失败残留（Failed 且保留 node_agent 绑定）→ 拒绝直接 start：
+	// 上次停止未完成，node_agent 上可能残留容器，直接 start 会以同名 create_container 失败。
+	// 引导用户先走 stop（重试停止/清理）释放残留容器。
+	if instance.IsStopFailure() {
+		return fmt.Errorf("%w：上次停止未完成（容器可能残留），请先停止清理后再启动", ErrStopFailure)
+	}
 	// M10：订阅单活跃约束（应用层前置；DB 部分唯一索引兜底并发）
 	if err := uc.checkSubscriptionSlot(ctx, instance); err != nil {
 		return err
@@ -234,15 +244,24 @@ func mapSaveConflict(err error) error {
 
 /**
 * 停止一个GameInstance，状态被设置为StatusStopping
+*
+* 停止入口区分状态（可靠性增强）：
+* - Running → 正常停止；
+* - Failed 且保留 node_agent 绑定（停止失败，容器可能残留）→ 允许重试停止/清理；
+* - 其他状态（含启动失败 Failed + 无绑定）→ 拒绝（无容器可停）。
 **/
 func (uc *GameInstanceUseCase) StopGameInstance(ctx context.Context, instanceID string) error {
 	instance, err := uc.instanceRepo.GetByID(ctx, instanceID)
 	if err != nil {
 		return err
 	}
-	if instance.Status != entity.StatusRunning &&
-		instance.Status != entity.Failed {
-		return fmt.Errorf("invalid instance status：%s",
+	switch {
+	case instance.Status == entity.StatusRunning:
+		// 正常停止
+	case instance.IsStopFailure():
+		// 停止失败重试：继续停止/清理残留容器（NodeAgentID 保留，可定位节点）
+	default:
+		return fmt.Errorf("invalid instance status：%s（仅 running 或停止失败可停止）",
 			instance.Status)
 	}
 
@@ -322,6 +341,10 @@ func (uc *GameInstanceUseCase) RetryGameInstance(ctx context.Context, instanceID
 	}
 	if instance.Status != entity.Failed {
 		return fmt.Errorf("invalid instance status：%s（仅 failed 状态可重试）", instance.Status)
+	}
+	// 停止失败（容器可能残留）不应走 retry（= 重新 start 会撞同名容器），引导先停止清理
+	if instance.IsStopFailure() {
+		return fmt.Errorf("%w：上次停止未完成（容器可能残留），请先停止清理后再重试", ErrStopFailure)
 	}
 	// M10：订阅单活跃约束（retry = failed → pending，同样占用槽位）
 	if err := uc.checkSubscriptionSlot(ctx, instance); err != nil {
