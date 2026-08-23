@@ -9,6 +9,9 @@ import (
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 
+	assetservicev1 "controller-go/internal/third/assetservice/v1"
+	"controller-go/internal/client/assetservice"
+
 	"github.com/google/uuid"
 )
 
@@ -19,15 +22,63 @@ var ErrCredentialPoolEmpty = errors.New("credential pool is empty, please ask ad
 // 平台侧全通用：按 game_id + resource_type 池化，生命周期挂钩由 ReconcileDispatcher 调用
 // （StatusStarting 分配 / onCleanInstanceSucceeded 释放 / Failed 释放）。
 type CredentialUseCase struct {
-	repo repository.CredentialPoolRepository
+	repo        repository.CredentialPoolRepository
+	assetClient *assetservice.AssetServiceFaceClient
 }
 
-func NewCredentialUseCase(repo repository.CredentialPoolRepository) *CredentialUseCase {
-	return &CredentialUseCase{repo: repo}
+func NewCredentialUseCase(repo repository.CredentialPoolRepository, assetClient *assetservice.AssetServiceFaceClient) *CredentialUseCase {
+	return &CredentialUseCase{repo: repo, assetClient: assetClient}
 }
 
-// Create 批量录入凭证（admin 从官网创建后粘贴）
+// DeclaredTypes 该游戏已注册 build 声明过的凭证类型（adapter.toml [[credentials]].pool 去重）。
+// resource_type 是枚举而非自由输入：只允许这里返回的类型。
+func (uc *CredentialUseCase) DeclaredTypes(ctx context.Context, gameID string) ([]string, error) {
+	if uc.assetClient == nil {
+		return nil, nil
+	}
+	resp, err := uc.assetClient.ListGameBuilds(ctx, &assetservicev1.ListGameBuildsRequest{GameId: gameID})
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, b := range resp.GetBuilds() {
+		for _, spec := range b.GetAdapterMetadata().GetCredentials() {
+			pool := spec.GetPool()
+			if pool == "" {
+				continue
+			}
+			if _, ok := seen[pool]; ok {
+				continue
+			}
+			seen[pool] = struct{}{}
+			out = append(out, pool)
+		}
+	}
+	return out, nil
+}
+
+// Create 批量录入凭证（admin 从官网创建后粘贴）。
+// resource_type 必须是该游戏已声明（adapter.toml [[credentials]].pool）的类型，
+// 防止拼写错误导致录了用不上。
 func (uc *CredentialUseCase) Create(ctx context.Context, gameID, resourceType string, secrets []string, remark string) (int, error) {
+	declared, err := uc.DeclaredTypes(ctx, gameID)
+	if err != nil {
+		return 0, err
+	}
+	ok := false
+	for _, t := range declared {
+		if t == resourceType {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		if len(declared) == 0 {
+			return 0, fmt.Errorf("该游戏尚未注册任何带凭证声明的构建（adapter.toml [[credentials]]），无法录入凭证")
+		}
+		return 0, fmt.Errorf("无效的凭证类型 %q，可选类型: %v（须与该游戏构建的 adapter.toml [[credentials]].pool 一致）", resourceType, declared)
+	}
 	now := time.Now()
 	creds := make([]entity.CredentialPool, 0, len(secrets))
 	for _, s := range secrets {

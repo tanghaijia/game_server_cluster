@@ -22,8 +22,20 @@ func (h *CredentialPoolHandler) RegisterRoutes(router *gin.Engine) {
 	group := router.Group("/api/games/:id/credentials")
 	group.GET("", h.List)
 	group.POST("", h.Create)
+	group.GET("/types", h.ListTypes)
 	group.DELETE("/:credentialId", h.Delete)
 	group.POST("/:credentialId/force-release", h.ForceRelease)
+}
+
+// ListTypes 该游戏已声明的凭证类型（adapter.toml [[credentials]].pool 去重）——
+// resource_type 是枚举，前端下拉选项来源
+func (h *CredentialPoolHandler) ListTypes(c *gin.Context) {
+	types, err := h.useCase.DeclaredTypes(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"game_id": c.Param("id"), "resource_types": types})
 }
 
 // List 列出凭证（?resource_type= 过滤）

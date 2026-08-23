@@ -597,6 +597,17 @@ func (c *Client) ListCredentials(ctx context.Context, gameID, resourceType strin
 	return out.Credentials, nil
 }
 
+// ListCredentialTypes 该游戏已声明的凭证类型（adapter.toml [[credentials]].pool 去重）
+func (c *Client) ListCredentialTypes(ctx context.Context, gameID string) ([]string, error) {
+	var out struct {
+		ResourceTypes []string `json:"resource_types"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/games/"+gameID+"/credentials/types", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.ResourceTypes, nil
+}
+
 // CreateCredentials 批量录入凭证（admin 从官网创建后粘贴）
 func (c *Client) CreateCredentials(ctx context.Context, gameID, resourceType string, secrets []string, remark string) (int, error) {
 	var out struct {

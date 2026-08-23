@@ -464,9 +464,11 @@ controller 生成 env 的知识来源：端口注入变量名来自 `port_inject
   `mergedInstanceConfig`，走独立注入通道；**真实 token 永不进镜像、永不进 Git**（模板只留
   占位符）。
 
-- **admin UI**：按 `resource_type` 通用渲染——类型下拉 + 粘贴录入（支持批量）+ 状态列表
-  （available/in_use/orphan，含占用实例与分配时间）+ force-release。新凭证类型 = 录一条，
-  无代码。
+- **admin UI**：按 `resource_type` 通用渲染——**类型为声明枚举**（下拉选项来自
+  `GET /api/games/:id/credentials/types`，即该游戏已注册 build 的
+  `adapter.toml [[credentials]].pool` 去重；无声明时禁止录入并提示先注册带凭证声明的构建）
+  + 粘贴录入（支持批量）+ 状态列表（available/in_use/orphan，含占用实例与分配时间）+
+  force-release。新凭证类型 = 在 adapter.toml 声明 + 重新注册 build，平台无代码。
 
 - **边界**：DST 一个 token 支持一个集群（Master+Caves 共享），分配粒度 = 实例；重启时
   token 短暂释放再优先拿回原 token（`last_instance_id` 命中），避免身份频繁漂移；token 与

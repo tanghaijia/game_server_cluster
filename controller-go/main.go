@@ -142,7 +142,7 @@ func main() {
 	platformConfigRepo := repogorm.NewGamePlatformConfigRepo(db)
 	// M8：外部受限凭证池（如 DST cluster_token）
 	credentialPoolRepo := repogorm.NewCredentialPoolRepo(db)
-	credentialUC := biz.NewCredentialUseCase(credentialPoolRepo)
+	credentialUC := biz.NewCredentialUseCase(credentialPoolRepo, assetClient)
 	dispatcher := biz.NewReconcileDispatcher(
 		gameInstanceRepo,
 		nodeAgentRepo,

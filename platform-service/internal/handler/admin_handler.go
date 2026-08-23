@@ -73,6 +73,7 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	// M8：外部受限凭证池（如 DST cluster_token）
 	group.GET("/games/:id/credentials", h.ListCredentials)
 	group.POST("/games/:id/credentials", h.CreateCredentials)
+	group.GET("/games/:id/credentials/types", h.ListCredentialTypes)
 	group.DELETE("/games/:id/credentials/:credentialId", h.DeleteCredential)
 	group.POST("/games/:id/credentials/:credentialId/force-release", h.ForceReleaseCredential)
 
@@ -538,6 +539,15 @@ func (h *AdminHandler) ListCredentials(c *gin.Context) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, gin.H{"game_id": c.Param("id"), "credentials": rows})
+}
+
+// ListCredentialTypes 该游戏已声明的凭证类型（下拉选项来源）
+func (h *AdminHandler) ListCredentialTypes(c *gin.Context) {
+	types, err := h.controller.ListCredentialTypes(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"game_id": c.Param("id"), "resource_types": types})
 }
 
 type createCredentialsRequest struct {

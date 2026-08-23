@@ -275,6 +275,12 @@ export async function listCredentials(gameId: string, resourceType?: string): Pr
   return resp.data.credentials
 }
 
+// 该游戏已声明的凭证类型（adapter.toml [[credentials]].pool 去重）——录入下拉选项来源
+export async function listCredentialTypes(gameId: string): Promise<string[]> {
+  const resp = await http.get('/admin/games/' + gameId + '/credentials/types')
+  return resp.data.resource_types
+}
+
 export async function createCredentials(gameId: string, resourceType: string, secrets: string[], remark: string): Promise<number> {
   const resp = await http.post('/admin/games/' + gameId + '/credentials', { resource_type: resourceType, secrets, remark })
   return resp.data.created

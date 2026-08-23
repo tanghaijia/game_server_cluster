@@ -14,7 +14,15 @@
     <form class="grid max-w-3xl gap-3 rounded-lg border p-4" @submit.prevent="onCreate">
       <div>
         <label class="mb-1 block text-sm font-medium">资源类型（resource_type）</label>
-        <input v-model="form.resource_type" type="text" placeholder="如 dst_cluster_token（与 adapter.toml [[credentials]].pool 一致）" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
+        <select v-model="form.resource_type" :disabled="!credentialTypes.length" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2">
+          <option v-for="t in credentialTypes" :key="t" :value="t">{{ t }}</option>
+        </select>
+        <p v-if="!credentialTypes.length" class="mt-1 text-[11px] text-amber-600">
+          该游戏尚无带凭证声明的构建（adapter.toml [[credentials]]）——请先到「构建版本」页注册/迭代一个携带 metadata.json 的构建，此处才能选择类型。
+        </p>
+        <p v-else class="mt-1 text-[11px] text-muted-foreground">
+          类型来自该游戏构建的声明（不可手填，防止拼写错误录了用不上）。
+        </p>
       </div>
       <div>
         <label class="mb-1 block text-sm font-medium">凭证内容（每行一个，可批量粘贴）</label>
@@ -26,7 +34,7 @@
         <input v-model="form.remark" type="text" placeholder="如：生产集群 token" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" />
       </div>
       <div class="flex justify-end">
-        <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+        <button type="submit" :disabled="!credentialTypes.length" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
           录入凭证
         </button>
       </div>
@@ -80,7 +88,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import {
-  createCredentials, deleteCredential, forceReleaseCredential, listCredentials,
+  createCredentials, deleteCredential, forceReleaseCredential, listCredentialTypes,
+  listCredentials,
   type Credential,
 } from '@/api/admin'
 
@@ -88,8 +97,9 @@ const route = useRoute()
 const gameId = route.params.gameId as string
 
 const credentials = ref<Credential[]>([])
+const credentialTypes = ref<string[]>([])
 const error = ref('')
-const form = reactive({ resource_type: 'dst_cluster_token', secrets_text: '', remark: '' })
+const form = reactive({ resource_type: '', secrets_text: '', remark: '' })
 
 function statusText(s: string) {
   return { available: 'available', in_use: 'in_use', orphan: 'orphan' }[s] ?? s
@@ -105,7 +115,10 @@ function statusClass(s: string) {
 async function load() {
   error.value = ''
   try {
-    credentials.value = await listCredentials(gameId)
+    const [rows, types] = await Promise.all([listCredentials(gameId), listCredentialTypes(gameId)])
+    credentials.value = rows
+    credentialTypes.value = types
+    if (!form.resource_type && types.length) form.resource_type = types[0]
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载凭证失败'
   }
@@ -114,8 +127,8 @@ async function load() {
 async function onCreate() {
   error.value = ''
   const secrets = form.secrets_text.split('\n').map((s) => s.trim()).filter(Boolean)
-  if (!form.resource_type.trim()) {
-    error.value = '请填写资源类型'
+  if (!form.resource_type) {
+    error.value = '请选择资源类型（需先注册带凭证声明的构建）'
     return
   }
   if (!secrets.length) {
@@ -123,7 +136,7 @@ async function onCreate() {
     return
   }
   try {
-    const n = await createCredentials(gameId, form.resource_type.trim(), secrets, form.remark)
+    const n = await createCredentials(gameId, form.resource_type, secrets, form.remark)
     form.secrets_text = ''
     form.remark = ''
     error.value = `已录入 ${n} 个凭证`
