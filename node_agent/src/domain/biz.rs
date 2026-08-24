@@ -33,6 +33,12 @@ pub struct GameInstance {
     /// #[serde(default)]：兼容库里已存在的旧记录（无该字段）
     #[serde(default)]
     pub fail_reason: String,
+    /// B-04/P1-3：运行时探针模式（"script" | "a2s" | "none"；旧记录缺省 script）
+    #[serde(default)]
+    pub probe_mode: String,
+    /// B-04/P1-3：A2S 查询宿主端口（a2s 模式；旧记录缺省 None）
+    #[serde(default)]
+    pub query_host_port: Option<u16>,
 }
 
 impl GameInstance {
@@ -51,6 +57,8 @@ impl GameInstance {
             create_time: Utc::now(),
             update_time: Utc::now(),
             fail_reason: String::new(),
+            probe_mode: String::new(), // B-04/P1-3：start_instance 时按声明填充
+            query_host_port: None,
         }
     }
 }

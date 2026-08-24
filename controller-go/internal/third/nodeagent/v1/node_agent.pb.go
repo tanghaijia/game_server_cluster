@@ -1780,7 +1780,13 @@ type InstanceRuntimeSpec struct {
 	Config map[string]string `protobuf:"bytes,8,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// 外部受限凭证（M8：credential pool 分配，如 DST cluster_token），
 	// node_agent 逐个写入 /data/.platform/{key} 供容器内 hook 复制到游戏配置目录
-	Credentials   map[string]string `protobuf:"bytes,9,rep,name=credentials,proto3" json:"credentials,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Credentials map[string]string `protobuf:"bytes,9,rep,name=credentials,proto3" json:"credentials,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// B-04/P1-3：运行时探针声明（controller 按游戏容器配置下发）
+	//
+	//	probe_mode: "a2s" | "script" | "none"（缺省 script）
+	//	query_host_port: a2s 模式的 A2S 查询宿主端口（0 = 未解析，回退 script）
+	ProbeMode     *string `protobuf:"bytes,10,opt,name=probe_mode,json=probeMode,proto3,oneof" json:"probe_mode,omitempty"`
+	QueryHostPort *uint32 `protobuf:"varint,11,opt,name=query_host_port,json=queryHostPort,proto3,oneof" json:"query_host_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1876,6 +1882,20 @@ func (x *InstanceRuntimeSpec) GetCredentials() map[string]string {
 		return x.Credentials
 	}
 	return nil
+}
+
+func (x *InstanceRuntimeSpec) GetProbeMode() string {
+	if x != nil && x.ProbeMode != nil {
+		return *x.ProbeMode
+	}
+	return ""
+}
+
+func (x *InstanceRuntimeSpec) GetQueryHostPort() uint32 {
+	if x != nil && x.QueryHostPort != nil {
+		return *x.QueryHostPort
+	}
+	return 0
 }
 
 type BuildPreparationResult struct {
@@ -2328,8 +2348,11 @@ type NodeHeartbeat struct {
 	RunningInstances uint32                 `protobuf:"varint,5,opt,name=running_instances,json=runningInstances,proto3" json:"running_instances,omitempty"`
 	NetRxBps         uint64                 `protobuf:"varint,6,opt,name=net_rx_bps,json=netRxBps,proto3" json:"net_rx_bps,omitempty"` // 网络接收速率（字节/秒），P3 带宽评分数据源
 	NetTxBps         uint64                 `protobuf:"varint,7,opt,name=net_tx_bps,json=netTxBps,proto3" json:"net_tx_bps,omitempty"` // 网络发送速率（字节/秒）
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// B-04/P1-1：各运行实例的运行时统计（健康 + 在线人数），node_agent 后台探针缓存，
+	// 心跳只读缓存（不阻塞）。实例不在 running 或尚无探测结果时不出现在本列表。
+	InstanceRuntime []*InstanceRuntimeStat `protobuf:"bytes,8,rep,name=instance_runtime,json=instanceRuntime,proto3" json:"instance_runtime,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *NodeHeartbeat) Reset() {
@@ -2411,6 +2434,109 @@ func (x *NodeHeartbeat) GetNetTxBps() uint64 {
 	return 0
 }
 
+func (x *NodeHeartbeat) GetInstanceRuntime() []*InstanceRuntimeStat {
+	if x != nil {
+		return x.InstanceRuntime
+	}
+	return nil
+}
+
+// B-04/P1-1：单实例运行时统计（由 RuntimeProbeService 周期探测产生）。
+// probe_mode： "a2s" | "script" | "none"；healthy 三态：
+//
+//	true=探测到游戏可服务；false=探测失败/超时；absent（不出现）=无数据（unknown）。
+type InstanceRuntimeStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	PlayerCount   uint32                 `protobuf:"varint,2,opt,name=player_count,json=playerCount,proto3" json:"player_count,omitempty"`
+	MaxPlayers    uint32                 `protobuf:"varint,3,opt,name=max_players,json=maxPlayers,proto3" json:"max_players,omitempty"`
+	Healthy       bool                   `protobuf:"varint,4,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	ProbeMode     string                 `protobuf:"bytes,5,opt,name=probe_mode,json=probeMode,proto3" json:"probe_mode,omitempty"`
+	ProbeError    string                 `protobuf:"bytes,6,opt,name=probe_error,json=probeError,proto3" json:"probe_error,omitempty"` // 探测失败原因（空=正常）
+	SampledAt     string                 `protobuf:"bytes,7,opt,name=sampled_at,json=sampledAt,proto3" json:"sampled_at,omitempty"`    // RFC3339 最近一次探测时间
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstanceRuntimeStat) Reset() {
+	*x = InstanceRuntimeStat{}
+	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstanceRuntimeStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstanceRuntimeStat) ProtoMessage() {}
+
+func (x *InstanceRuntimeStat) ProtoReflect() protoreflect.Message {
+	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstanceRuntimeStat.ProtoReflect.Descriptor instead.
+func (*InstanceRuntimeStat) Descriptor() ([]byte, []int) {
+	return file_nodeagent_v1_node_agent_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *InstanceRuntimeStat) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *InstanceRuntimeStat) GetPlayerCount() uint32 {
+	if x != nil {
+		return x.PlayerCount
+	}
+	return 0
+}
+
+func (x *InstanceRuntimeStat) GetMaxPlayers() uint32 {
+	if x != nil {
+		return x.MaxPlayers
+	}
+	return 0
+}
+
+func (x *InstanceRuntimeStat) GetHealthy() bool {
+	if x != nil {
+		return x.Healthy
+	}
+	return false
+}
+
+func (x *InstanceRuntimeStat) GetProbeMode() string {
+	if x != nil {
+		return x.ProbeMode
+	}
+	return ""
+}
+
+func (x *InstanceRuntimeStat) GetProbeError() string {
+	if x != nil {
+		return x.ProbeError
+	}
+	return ""
+}
+
+func (x *InstanceRuntimeStat) GetSampledAt() string {
+	if x != nil {
+		return x.SampledAt
+	}
+	return ""
+}
+
 type Game struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2422,7 +2548,7 @@ type Game struct {
 
 func (x *Game) Reset() {
 	*x = Game{}
-	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[37]
+	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2434,7 +2560,7 @@ func (x *Game) String() string {
 func (*Game) ProtoMessage() {}
 
 func (x *Game) ProtoReflect() protoreflect.Message {
-	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[37]
+	mi := &file_nodeagent_v1_node_agent_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2447,7 +2573,7 @@ func (x *Game) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Game.ProtoReflect.Descriptor instead.
 func (*Game) Descriptor() ([]byte, []int) {
-	return file_nodeagent_v1_node_agent_proto_rawDescGZIP(), []int{37}
+	return file_nodeagent_v1_node_agent_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Game) GetId() string {
@@ -2590,7 +2716,7 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\tgame_port\x18\x02 \x01(\rR\bgamePort\x12\"\n" +
 	"\n" +
 	"query_port\x18\x03 \x01(\rH\x00R\tqueryPort\x88\x01\x01B\r\n" +
-	"\v_query_port\"\xe1\x05\n" +
+	"\v_query_port\"\xd5\x06\n" +
 	"\x13InstanceRuntimeSpec\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12-\n" +
@@ -2602,7 +2728,11 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\fport_mapping\x18\x06 \x01(\v2\x19.nodeagent.v1.PortMappingH\x01R\vportMapping\x88\x01\x01\x12<\n" +
 	"\x03env\x18\a \x03(\v2*.nodeagent.v1.InstanceRuntimeSpec.EnvEntryR\x03env\x12E\n" +
 	"\x06config\x18\b \x03(\v2-.nodeagent.v1.InstanceRuntimeSpec.ConfigEntryR\x06config\x12T\n" +
-	"\vcredentials\x18\t \x03(\v22.nodeagent.v1.InstanceRuntimeSpec.CredentialsEntryR\vcredentials\x1a6\n" +
+	"\vcredentials\x18\t \x03(\v22.nodeagent.v1.InstanceRuntimeSpec.CredentialsEntryR\vcredentials\x12\"\n" +
+	"\n" +
+	"probe_mode\x18\n" +
+	" \x01(\tH\x02R\tprobeMode\x88\x01\x01\x12+\n" +
+	"\x0fquery_host_port\x18\v \x01(\rH\x03R\rqueryHostPort\x88\x01\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
@@ -2613,7 +2743,9 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
 	"\f_branch_nameB\x0f\n" +
-	"\r_port_mapping\"X\n" +
+	"\r_port_mappingB\r\n" +
+	"\v_probe_modeB\x12\n" +
+	"\x10_query_host_port\"X\n" +
 	"\x16BuildPreparationResult\x12\x1d\n" +
 	"\n" +
 	"build_root\x18\x01 \x01(\tR\tbuildRoot\x12\x1f\n" +
@@ -2670,7 +2802,7 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\n" +
 	"\b_messageB\x0e\n" +
 	"\f_finished_atB\b\n" +
-	"\x06_error\"\x85\x02\n" +
+	"\x06_error\"\xd3\x02\n" +
 	"\rNodeHeartbeat\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\"\n" +
 	"\rcpu_usage_pct\x18\x02 \x01(\x02R\vcpuUsagePct\x12(\n" +
@@ -2680,7 +2812,21 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\n" +
 	"net_rx_bps\x18\x06 \x01(\x04R\bnetRxBps\x12\x1c\n" +
 	"\n" +
-	"net_tx_bps\x18\a \x01(\x04R\bnetTxBps\"A\n" +
+	"net_tx_bps\x18\a \x01(\x04R\bnetTxBps\x12L\n" +
+	"\x10instance_runtime\x18\b \x03(\v2!.nodeagent.v1.InstanceRuntimeStatR\x0finstanceRuntime\"\xf3\x01\n" +
+	"\x13InstanceRuntimeStat\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\x12!\n" +
+	"\fplayer_count\x18\x02 \x01(\rR\vplayerCount\x12\x1f\n" +
+	"\vmax_players\x18\x03 \x01(\rR\n" +
+	"maxPlayers\x12\x18\n" +
+	"\ahealthy\x18\x04 \x01(\bR\ahealthy\x12\x1d\n" +
+	"\n" +
+	"probe_mode\x18\x05 \x01(\tR\tprobeMode\x12\x1f\n" +
+	"\vprobe_error\x18\x06 \x01(\tR\n" +
+	"probeError\x12\x1d\n" +
+	"\n" +
+	"sampled_at\x18\a \x01(\tR\tsampledAt\"A\n" +
 	"\x04Game\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +
@@ -2732,7 +2878,7 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\rCleanInstance\x12\".nodeagent.v1.CleanInstanceRequest\x1a#.nodeagent.v1.CleanInstanceResponse\x12f\n" +
 	"\x15InspectInstanceStream\x12$.nodeagent.v1.InspectInstanceRequest\x1a%.nodeagent.v1.InspectInstanceResponse0\x01\x12L\n" +
 	"\tCacheGame\x12\x1e.nodeagent.v1.CacheGameRequest\x1a\x1f.nodeagent.v1.CacheGameResponse\x12R\n" +
-	"\fGetCacheGame\x12!.nodeagent.v1.GetCacheGameRequest\x1a\x1f.nodeagent.v1.CacheGameResponseb\x06proto3"
+	"\fGetCacheGame\x12!.nodeagent.v1.GetCacheGameRequest\x1a\x1f.nodeagent.v1.CacheGameResponseB7Z5controller-go/internal/third/nodeagent/v1;nodeagentv1b\x06proto3"
 
 var (
 	file_nodeagent_v1_node_agent_proto_rawDescOnce sync.Once
@@ -2747,7 +2893,7 @@ func file_nodeagent_v1_node_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_nodeagent_v1_node_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_nodeagent_v1_node_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
+var file_nodeagent_v1_node_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_nodeagent_v1_node_agent_proto_goTypes = []any{
 	(BuildStatus)(0),                 // 0: nodeagent.v1.BuildStatus
 	(RuntimeState)(0),                // 1: nodeagent.v1.RuntimeState
@@ -2790,19 +2936,20 @@ var file_nodeagent_v1_node_agent_proto_goTypes = []any{
 	(*InstanceRuntimeRecord)(nil),    // 38: nodeagent.v1.InstanceRuntimeRecord
 	(*NodeOperation)(nil),            // 39: nodeagent.v1.NodeOperation
 	(*NodeHeartbeat)(nil),            // 40: nodeagent.v1.NodeHeartbeat
-	(*Game)(nil),                     // 41: nodeagent.v1.Game
-	nil,                              // 42: nodeagent.v1.InstanceRuntimeSpec.EnvEntry
-	nil,                              // 43: nodeagent.v1.InstanceRuntimeSpec.ConfigEntry
-	nil,                              // 44: nodeagent.v1.InstanceRuntimeSpec.CredentialsEntry
-	(*NodeAgentGameInstance)(nil),    // 45: nodeagent.v1.NodeAgentGameInstance
-	(*GameCache)(nil),                // 46: nodeagent.v1.GameCache
-	(*PortMapping)(nil),              // 47: nodeagent.v1.PortMapping
-	(*ErrorDetail)(nil),              // 48: nodeagent.v1.ErrorDetail
+	(*InstanceRuntimeStat)(nil),      // 41: nodeagent.v1.InstanceRuntimeStat
+	(*Game)(nil),                     // 42: nodeagent.v1.Game
+	nil,                              // 43: nodeagent.v1.InstanceRuntimeSpec.EnvEntry
+	nil,                              // 44: nodeagent.v1.InstanceRuntimeSpec.ConfigEntry
+	nil,                              // 45: nodeagent.v1.InstanceRuntimeSpec.CredentialsEntry
+	(*NodeAgentGameInstance)(nil),    // 46: nodeagent.v1.NodeAgentGameInstance
+	(*GameCache)(nil),                // 47: nodeagent.v1.GameCache
+	(*PortMapping)(nil),              // 48: nodeagent.v1.PortMapping
+	(*ErrorDetail)(nil),              // 49: nodeagent.v1.ErrorDetail
 }
 var file_nodeagent_v1_node_agent_proto_depIdxs = []int32{
-	45, // 0: nodeagent.v1.GetInstancesResponse.instances:type_name -> nodeagent.v1.NodeAgentGameInstance
+	46, // 0: nodeagent.v1.GetInstancesResponse.instances:type_name -> nodeagent.v1.NodeAgentGameInstance
 	39, // 1: nodeagent.v1.CleanInstanceResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	46, // 2: nodeagent.v1.CacheGameResponse.game_cache:type_name -> nodeagent.v1.GameCache
+	47, // 2: nodeagent.v1.CacheGameResponse.game_cache:type_name -> nodeagent.v1.GameCache
 	39, // 3: nodeagent.v1.PrepareGameBuildResponse.operation:type_name -> nodeagent.v1.NodeOperation
 	34, // 4: nodeagent.v1.PrepareGameBuildResponse.result:type_name -> nodeagent.v1.BuildPreparationResult
 	33, // 5: nodeagent.v1.StartInstanceRequest.instance:type_name -> nodeagent.v1.InstanceRuntimeSpec
@@ -2815,56 +2962,57 @@ var file_nodeagent_v1_node_agent_proto_depIdxs = []int32{
 	39, // 12: nodeagent.v1.RestoreSnapshotResponse.operation:type_name -> nodeagent.v1.NodeOperation
 	36, // 13: nodeagent.v1.RestoreSnapshotResponse.result:type_name -> nodeagent.v1.SnapshotRestoreResult
 	39, // 14: nodeagent.v1.GetOperationResponse.operation:type_name -> nodeagent.v1.NodeOperation
-	45, // 15: nodeagent.v1.InspectInstanceResponse.instance:type_name -> nodeagent.v1.NodeAgentGameInstance
+	46, // 15: nodeagent.v1.InspectInstanceResponse.instance:type_name -> nodeagent.v1.NodeAgentGameInstance
 	40, // 16: nodeagent.v1.GetHeartbeatResponse.heartbeat:type_name -> nodeagent.v1.NodeHeartbeat
-	41, // 17: nodeagent.v1.GameBuild.game:type_name -> nodeagent.v1.Game
+	42, // 17: nodeagent.v1.GameBuild.game:type_name -> nodeagent.v1.Game
 	0,  // 18: nodeagent.v1.GameBuild.status:type_name -> nodeagent.v1.BuildStatus
 	30, // 19: nodeagent.v1.InstanceSpec.resources:type_name -> nodeagent.v1.ResourceRequirements
 	29, // 20: nodeagent.v1.InstanceRuntimeSpec.build:type_name -> nodeagent.v1.GameBuild
 	31, // 21: nodeagent.v1.InstanceRuntimeSpec.spec:type_name -> nodeagent.v1.InstanceSpec
-	47, // 22: nodeagent.v1.InstanceRuntimeSpec.port_mapping:type_name -> nodeagent.v1.PortMapping
-	42, // 23: nodeagent.v1.InstanceRuntimeSpec.env:type_name -> nodeagent.v1.InstanceRuntimeSpec.EnvEntry
-	43, // 24: nodeagent.v1.InstanceRuntimeSpec.config:type_name -> nodeagent.v1.InstanceRuntimeSpec.ConfigEntry
-	44, // 25: nodeagent.v1.InstanceRuntimeSpec.credentials:type_name -> nodeagent.v1.InstanceRuntimeSpec.CredentialsEntry
+	48, // 22: nodeagent.v1.InstanceRuntimeSpec.port_mapping:type_name -> nodeagent.v1.PortMapping
+	43, // 23: nodeagent.v1.InstanceRuntimeSpec.env:type_name -> nodeagent.v1.InstanceRuntimeSpec.EnvEntry
+	44, // 24: nodeagent.v1.InstanceRuntimeSpec.config:type_name -> nodeagent.v1.InstanceRuntimeSpec.ConfigEntry
+	45, // 25: nodeagent.v1.InstanceRuntimeSpec.credentials:type_name -> nodeagent.v1.InstanceRuntimeSpec.CredentialsEntry
 	1,  // 26: nodeagent.v1.InstanceRuntimeRecord.state:type_name -> nodeagent.v1.RuntimeState
 	32, // 27: nodeagent.v1.InstanceRuntimeRecord.endpoint:type_name -> nodeagent.v1.Endpoint
 	37, // 28: nodeagent.v1.InstanceRuntimeRecord.failure:type_name -> nodeagent.v1.FailureInfo
 	2,  // 29: nodeagent.v1.NodeOperation.kind:type_name -> nodeagent.v1.OperationKind
 	3,  // 30: nodeagent.v1.NodeOperation.status:type_name -> nodeagent.v1.OperationStatus
-	48, // 31: nodeagent.v1.NodeOperation.error:type_name -> nodeagent.v1.ErrorDetail
-	11, // 32: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
-	13, // 33: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
-	15, // 34: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
-	17, // 35: nodeagent.v1.NodeAgentService.RestartInstance:input_type -> nodeagent.v1.RestartInstanceRequest
-	19, // 36: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
-	21, // 37: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
-	23, // 38: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
-	27, // 39: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
-	4,  // 40: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
-	25, // 41: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
-	6,  // 42: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
-	25, // 43: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
-	8,  // 44: nodeagent.v1.NodeAgentService.CacheGame:input_type -> nodeagent.v1.CacheGameRequest
-	9,  // 45: nodeagent.v1.NodeAgentService.GetCacheGame:input_type -> nodeagent.v1.GetCacheGameRequest
-	12, // 46: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
-	14, // 47: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
-	16, // 48: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
-	18, // 49: nodeagent.v1.NodeAgentService.RestartInstance:output_type -> nodeagent.v1.RestartInstanceResponse
-	20, // 50: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
-	22, // 51: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
-	24, // 52: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
-	28, // 53: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
-	5,  // 54: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
-	26, // 55: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
-	7,  // 56: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
-	26, // 57: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
-	10, // 58: nodeagent.v1.NodeAgentService.CacheGame:output_type -> nodeagent.v1.CacheGameResponse
-	10, // 59: nodeagent.v1.NodeAgentService.GetCacheGame:output_type -> nodeagent.v1.CacheGameResponse
-	46, // [46:60] is the sub-list for method output_type
-	32, // [32:46] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	49, // 31: nodeagent.v1.NodeOperation.error:type_name -> nodeagent.v1.ErrorDetail
+	41, // 32: nodeagent.v1.NodeHeartbeat.instance_runtime:type_name -> nodeagent.v1.InstanceRuntimeStat
+	11, // 33: nodeagent.v1.NodeAgentService.PrepareGameBuild:input_type -> nodeagent.v1.PrepareGameBuildRequest
+	13, // 34: nodeagent.v1.NodeAgentService.StartInstance:input_type -> nodeagent.v1.StartInstanceRequest
+	15, // 35: nodeagent.v1.NodeAgentService.StopInstance:input_type -> nodeagent.v1.StopInstanceRequest
+	17, // 36: nodeagent.v1.NodeAgentService.RestartInstance:input_type -> nodeagent.v1.RestartInstanceRequest
+	19, // 37: nodeagent.v1.NodeAgentService.CreateSnapshot:input_type -> nodeagent.v1.CreateSnapshotRequest
+	21, // 38: nodeagent.v1.NodeAgentService.RestoreSnapshot:input_type -> nodeagent.v1.RestoreSnapshotRequest
+	23, // 39: nodeagent.v1.NodeAgentService.GetOperation:input_type -> nodeagent.v1.GetOperationRequest
+	27, // 40: nodeagent.v1.NodeAgentService.GetHeartbeat:input_type -> nodeagent.v1.GetHeartbeatRequest
+	4,  // 41: nodeagent.v1.NodeAgentService.GetInstances:input_type -> nodeagent.v1.GetInstancesRequest
+	25, // 42: nodeagent.v1.NodeAgentService.InspectInstance:input_type -> nodeagent.v1.InspectInstanceRequest
+	6,  // 43: nodeagent.v1.NodeAgentService.CleanInstance:input_type -> nodeagent.v1.CleanInstanceRequest
+	25, // 44: nodeagent.v1.NodeAgentService.InspectInstanceStream:input_type -> nodeagent.v1.InspectInstanceRequest
+	8,  // 45: nodeagent.v1.NodeAgentService.CacheGame:input_type -> nodeagent.v1.CacheGameRequest
+	9,  // 46: nodeagent.v1.NodeAgentService.GetCacheGame:input_type -> nodeagent.v1.GetCacheGameRequest
+	12, // 47: nodeagent.v1.NodeAgentService.PrepareGameBuild:output_type -> nodeagent.v1.PrepareGameBuildResponse
+	14, // 48: nodeagent.v1.NodeAgentService.StartInstance:output_type -> nodeagent.v1.StartInstanceResponse
+	16, // 49: nodeagent.v1.NodeAgentService.StopInstance:output_type -> nodeagent.v1.StopInstanceResponse
+	18, // 50: nodeagent.v1.NodeAgentService.RestartInstance:output_type -> nodeagent.v1.RestartInstanceResponse
+	20, // 51: nodeagent.v1.NodeAgentService.CreateSnapshot:output_type -> nodeagent.v1.CreateSnapshotResponse
+	22, // 52: nodeagent.v1.NodeAgentService.RestoreSnapshot:output_type -> nodeagent.v1.RestoreSnapshotResponse
+	24, // 53: nodeagent.v1.NodeAgentService.GetOperation:output_type -> nodeagent.v1.GetOperationResponse
+	28, // 54: nodeagent.v1.NodeAgentService.GetHeartbeat:output_type -> nodeagent.v1.GetHeartbeatResponse
+	5,  // 55: nodeagent.v1.NodeAgentService.GetInstances:output_type -> nodeagent.v1.GetInstancesResponse
+	26, // 56: nodeagent.v1.NodeAgentService.InspectInstance:output_type -> nodeagent.v1.InspectInstanceResponse
+	7,  // 57: nodeagent.v1.NodeAgentService.CleanInstance:output_type -> nodeagent.v1.CleanInstanceResponse
+	26, // 58: nodeagent.v1.NodeAgentService.InspectInstanceStream:output_type -> nodeagent.v1.InspectInstanceResponse
+	10, // 59: nodeagent.v1.NodeAgentService.CacheGame:output_type -> nodeagent.v1.CacheGameResponse
+	10, // 60: nodeagent.v1.NodeAgentService.GetCacheGame:output_type -> nodeagent.v1.CacheGameResponse
+	47, // [47:61] is the sub-list for method output_type
+	33, // [33:47] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_nodeagent_v1_node_agent_proto_init() }
@@ -2889,7 +3037,7 @@ func file_nodeagent_v1_node_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nodeagent_v1_node_agent_proto_rawDesc), len(file_nodeagent_v1_node_agent_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   41,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

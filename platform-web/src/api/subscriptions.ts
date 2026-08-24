@@ -27,6 +27,18 @@ export interface SubscriptionInstance {
   SubscriptionID?: string
 }
 
+// B-04/P1-1：实例运行时统计（健康 + 在线人数，controller 探针心跳数据）
+export interface InstanceRuntime {
+  instance_id: string
+  running: boolean
+  player_count: number
+  max_players: number
+  healthy: boolean
+  probe_mode: string // "a2s" | "script" | "unknown"
+  probe_error?: string
+  sampled_at?: string
+}
+
 export async function listMySubscriptions(): Promise<Subscription[]> {
   const resp = await http.get('/me/subscriptions')
   return resp.data.subscriptions
@@ -73,4 +85,10 @@ export async function startSubscriptionInstance(id: string, instanceId: string):
 
 export async function stopSubscriptionInstance(id: string, instanceId: string): Promise<void> {
   await http.post('/me/subscriptions/' + id + '/instances/' + instanceId + '/stop')
+}
+
+// B-04/P1-1：实例运行时统计（健康 + 在线人数）
+export async function getSubscriptionInstanceRuntime(id: string, instanceId: string): Promise<InstanceRuntime> {
+  const resp = await http.get('/me/subscriptions/' + id + '/instances/' + instanceId + '/runtime')
+  return resp.data
 }

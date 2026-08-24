@@ -51,6 +51,9 @@ type ContainerConfigUpdate struct {
 	BandwidthTxMbps     *int64                  `json:"bandwidth_tx_mbps"`
 	SingleThreaded      *bool                   `json:"single_threaded"`
 	PortExcerpts        []PortExcerptInput      `json:"port_excerpts"`
+	// B-04/P1-3：运行时探针（probe_mode: "script"|"a2s"|"none"；query_port_offset: a2s 查询端口偏移）
+	ProbeMode       *string `json:"probe_mode"`
+	QueryPortOffset *int    `json:"query_port_offset"`
 }
 
 // UpdateConfig 更新容器配置并整体替换端口片段
@@ -89,6 +92,12 @@ func (uc *GameContainerConfigUseCase) UpdateConfig(ctx context.Context, gameID s
 	}
 	if u.SingleThreaded != nil {
 		config.SingleThreaded = *u.SingleThreaded
+	}
+	if u.ProbeMode != nil {
+		config.ProbeMode = *u.ProbeMode
+	}
+	if u.QueryPortOffset != nil {
+		config.QueryPortOffset = *u.QueryPortOffset
 	}
 	if err := uc.configRepo.Save(ctx, config); err != nil {
 		return nil, err

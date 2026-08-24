@@ -30,6 +30,8 @@ func (h *SubscriptionHandler) RegisterRoutes(router *gin.Engine, auth gin.Handle
 	group.POST("/:id/instances", h.CreateInstance)
 	group.POST("/:id/instances/:instanceId/start", h.StartInstance)
 	group.POST("/:id/instances/:instanceId/stop", h.StopInstance)
+	// B-04/P1-1：实例运行时统计（健康 + 在线人数）
+	group.GET("/:id/instances/:instanceId/runtime", h.GetInstanceRuntime)
 
 	// M12：在售套餐（购买入口，非 admin 也可见）
 	router.GET("/api/me/plans", auth, h.ListPlans)
@@ -151,4 +153,13 @@ func (h *SubscriptionHandler) StopInstance(c *gin.Context) {
 		subError(c, err); return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "stopping"})
+}
+
+// GetInstanceRuntime 订阅内实例运行时统计（B-04/P1-1：在线人数 + 健康）
+func (h *SubscriptionHandler) GetInstanceRuntime(c *gin.Context) {
+	rt, err := h.subUC.GetInstanceRuntime(c.Request.Context(), CurrentUserID(c), c.Param("id"), c.Param("instanceId"))
+	if err != nil {
+		subError(c, err); return
+	}
+	c.JSON(http.StatusOK, rt)
 }

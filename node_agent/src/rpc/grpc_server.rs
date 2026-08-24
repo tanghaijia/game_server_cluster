@@ -53,8 +53,9 @@ use crate::{
         },
     },
     service::{
-        NodeAgentService, enqueue_clean_instance, enqueue_prepare_build, enqueue_restart_instance,
-        enqueue_restore_snapshot, enqueue_start_instance, enqueue_stop_instance,
+        NodeAgentService, RuntimeProbeService, enqueue_clean_instance, enqueue_prepare_build,
+        enqueue_restart_instance, enqueue_restore_snapshot, enqueue_start_instance,
+        enqueue_stop_instance,
     },
 };
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
@@ -68,6 +69,8 @@ where
     pool: SqlitePool,
     operations: Arc<dyn OperationRepository>,
     game_instance_repository: Arc<dyn GameInstanceRepository>,
+    // B-04/P1-1：运行时探针缓存（健康 + 在线人数），心跳读取
+    runtime_probe: Option<Arc<RuntimeProbeService>>,
 }
 
 impl<I, S, A, IMC> GrpcNodeAgentServer<I, S, A, IMC>
@@ -88,7 +91,14 @@ where
             pool,
             operations,
             game_instance_repository,
+            runtime_probe: None,
         }
+    }
+
+    /// 附加运行时探针（B-04/P1-1）：GetHeartbeat 响应携带实例健康/在线人数。
+    pub fn with_runtime_probe(mut self, probe: Arc<RuntimeProbeService>) -> Self {
+        self.runtime_probe = Some(probe);
+        self
     }
 }
 
@@ -280,16 +290,23 @@ where
         _request: Request<GetHeartbeatRequest>,
     ) -> Result<Response<GetHeartbeatResponse>, Status> {
         let heartbeat = self.service.heartbeat().await.map_err(map_error)?;
+        let mut proto = ProtoNodeHeartbeat {
+            node_id: heartbeat.node_id.0,
+            cpu_usage_pct: heartbeat.cpu_usage_pct,
+            memory_usage_pct: heartbeat.memory_usage_pct,
+            disk_usage_pct: heartbeat.disk_usage_pct,
+            running_instances: heartbeat.running_instances,
+            net_rx_bps: heartbeat.net_rx_bps,
+            net_tx_bps: heartbeat.net_tx_bps,
+            instance_runtime: Vec::new(),
+        };
+        // B-04/P1-1：附加运行时探针缓存（读缓存，不阻塞心跳）
+        if let Some(probe) = &self.runtime_probe {
+            let stats = probe.snapshot().await;
+            proto.instance_runtime = stats.into_iter().map(map_runtime_stat).collect();
+        }
         Ok(Response::new(GetHeartbeatResponse {
-            heartbeat: Some(ProtoNodeHeartbeat {
-                node_id: heartbeat.node_id.0,
-                cpu_usage_pct: heartbeat.cpu_usage_pct,
-                memory_usage_pct: heartbeat.memory_usage_pct,
-                disk_usage_pct: heartbeat.disk_usage_pct,
-                running_instances: heartbeat.running_instances,
-                net_rx_bps: heartbeat.net_rx_bps,
-                net_tx_bps: heartbeat.net_tx_bps,
-            }),
+            heartbeat: Some(proto),
         }))
     }
 
@@ -496,6 +513,9 @@ fn map_instance_runtime_spec(
         env: value.env,
         config: value.config,
         credentials: value.credentials,
+        // B-04/P1-3：运行时探针声明（缺省 script；query_host_port=0 视为未解析）
+        probe_mode: value.probe_mode.unwrap_or_else(|| "script".to_string()),
+        query_host_port: value.query_host_port.filter(|&p| p != 0).map(|p| p as u16),
     })
 }
 
@@ -653,6 +673,19 @@ fn map_game_instance_to_proto(instance: GameInstance) -> NodeAgentGameInstance {
             nanos: instance.update_time.timestamp_subsec_nanos() as i32,
         }),
         fail_reason: instance.fail_reason,
+    }
+}
+
+/// B-04/P1-1：domain InstanceRuntimeStat → proto（随心跳上报）
+fn map_runtime_stat(value: crate::service::InstanceRuntimeStat) -> node_agent::InstanceRuntimeStat {
+    node_agent::InstanceRuntimeStat {
+        instance_id: value.instance_id,
+        player_count: value.player_count,
+        max_players: value.max_players,
+        healthy: value.healthy,
+        probe_mode: value.probe_mode,
+        probe_error: value.probe_error,
+        sampled_at: value.sampled_at,
     }
 }
 

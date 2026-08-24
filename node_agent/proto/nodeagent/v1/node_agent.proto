@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package nodeagent.v1;
+option go_package = "controller-go/internal/third/nodeagent/v1;nodeagentv1";
 import "nodeagent/v1/game_cache.proto";
 import "nodeagent/v1/instance.proto";
 import "nodeagent/v1/port_mapping.proto";
@@ -198,6 +199,11 @@ message InstanceRuntimeSpec {
   // 外部受限凭证（M8：credential pool 分配，如 DST cluster_token），
   // node_agent 逐个写入 /data/.platform/{key} 供容器内 hook 复制到游戏配置目录
   map<string, string> credentials = 9;
+  // B-04/P1-3：运行时探针声明（controller 按游戏容器配置下发）
+  //   probe_mode: "a2s" | "script" | "none"（缺省 script）
+  //   query_host_port: a2s 模式的 A2S 查询宿主端口（0 = 未解析，回退 script）
+  optional string probe_mode = 10;
+  optional uint32 query_host_port = 11;
 }
 
 message BuildPreparationResult {
@@ -255,6 +261,22 @@ message NodeHeartbeat {
   uint32 running_instances = 5;
   uint64 net_rx_bps = 6; // 网络接收速率（字节/秒），P3 带宽评分数据源
   uint64 net_tx_bps = 7; // 网络发送速率（字节/秒）
+  // B-04/P1-1：各运行实例的运行时统计（健康 + 在线人数），node_agent 后台探针缓存，
+  // 心跳只读缓存（不阻塞）。实例不在 running 或尚无探测结果时不出现在本列表。
+  repeated InstanceRuntimeStat instance_runtime = 8;
+}
+
+// B-04/P1-1：单实例运行时统计（由 RuntimeProbeService 周期探测产生）。
+// probe_mode： "a2s" | "script" | "none"；healthy 三态：
+//   true=探测到游戏可服务；false=探测失败/超时；absent（不出现）=无数据（unknown）。
+message InstanceRuntimeStat {
+  string instance_id = 1;
+  uint32 player_count = 2;
+  uint32 max_players = 3;
+  bool healthy = 4;
+  string probe_mode = 5;
+  string probe_error = 6; // 探测失败原因（空=正常）
+  string sampled_at = 7;  // RFC3339 最近一次探测时间
 }
 
 message Game {

@@ -1,4 +1,4 @@
-﻿mod common;
+mod common;
 
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
@@ -18,7 +18,7 @@ use node_agent::{
     rpc::GrpcNodeAgentServer,
     service::{
         BackendContainerChecker, BackgroundWorker, DirectoryUploadDownloadService,
-        NodeAgentService, TaskContext, init_backend, start_all_workers,
+        NodeAgentService, RuntimeProbeService, TaskContext, init_backend, start_all_workers,
     },
 };
 use tonic::transport::Server;
@@ -61,6 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             steam_service.clone(),
         ));
 
+        // 4.5. 运行时探针（B-04/P1-1）：在 concrete_image/concrete_instance 被 move 前 clone
+        let mut runtime_probe =
+            RuntimeProbeService::new(concrete_image.clone(), concrete_instance.clone());
+
         // 5. 构造 TaskContext（cast 到 Arc<dyn Trait>）
         let task_ctx = Arc::new(TaskContext::new(
             node_agent_service.clone() as Arc<dyn BackgroundWorker>,
@@ -95,9 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             axum::serve(listener, app).await.expect("serve file server");
         });
 
-        // 8. gRPC server
-        let grpc =
-            GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance);
+        // 8. gRPC server（附加运行时探针：B-04/P1-1，debug 走 fake 实现，无实际探测）
+        runtime_probe.start(std::time::Duration::from_secs(20)).await;
+        let grpc = GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance)
+            .with_runtime_probe(Arc::new(runtime_probe));
 
         println!("node-agent listening on {}", addr);
         Server::builder()
@@ -231,12 +236,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 10. 后台 worker + gRPC server
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
+
+        // B-04/P1-1：运行时探针（脚本后端）——后台 exec health.sh/players.sh，心跳携带结果
+        let probe_interval = std::env::var("RUNTIME_PROBE_INTERVAL_SEC")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(20);
+        let mut runtime_probe = RuntimeProbeService::new(
+            docker_client.clone(),
+            sqlite_game_instances.clone(),
+        );
+        runtime_probe.start(std::time::Duration::from_secs(probe_interval)).await;
+
         let grpc = GrpcNodeAgentServer::new(
             node_agent_service,
             pool,
             sqlite_ops,
             sqlite_game_instances.clone(),
-        );
+        )
+        .with_runtime_probe(Arc::new(runtime_probe));
 
         // 9. container checker
         let mut conatiner_checker =

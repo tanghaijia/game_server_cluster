@@ -224,6 +224,10 @@ func main() {
 	pressureMonitor.Start(ctx, time.Duration(cfg.HeartbeatCheckIntervalSec)*time.Second)
 	slog.Info("PressureMonitor 已启动")
 
+	// B-04/P1-1：实例运行时统计缓存（node_agent 探针 → 心跳 → 本缓存 → /runtime 端点）
+	runtimeStats := biz.NewRuntimeStatsRegistry()
+	healthMonitor.SetRuntimeStatsRegistry(runtimeStats)
+
 	// 中间态卡死哨兵（7.4）
 	reaper := biz.NewStaleReservationReaper(
 		gameInstanceRepo, nodeAgentRepo, reservationRepo, eventBus,
@@ -265,7 +269,9 @@ func main() {
 	// 9. HTTP API (gin)
 	// ---------------------------------------------------------------
 	router := gin.Default()
-	handler.NewGameInstanceHandler(gameInstanceUseCase).RegisterRoutes(router)
+	gameInstanceHandler := handler.NewGameInstanceHandler(gameInstanceUseCase)
+	gameInstanceHandler.SetRuntimeStatsRegistry(runtimeStats) // B-04/P1-1：/runtime 端点读缓存
+	gameInstanceHandler.RegisterRoutes(router)
 	handler.NewGameHandler(gameUseCase, assetClient).RegisterRoutes(router)
 	handler.NewGameContainerConfigHandler(biz.NewGameContainerConfigUseCase(gameRepo, gameContainerConfigRepo)).RegisterRoutes(router)
 	// 平台运营方配置（M5）：/api/games/:id/platform-config

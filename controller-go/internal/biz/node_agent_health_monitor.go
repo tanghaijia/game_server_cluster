@@ -31,6 +31,8 @@ type NodeAgentHealthMonitor struct {
 	failThreshold    int
 	degradedPct      float64 // 自检指标达此值 → degraded（9.2）
 	failCounts       sync.Map // agentID -> 连续失败次数（防启动/重连瞬态误报）
+	// B-04/P1-1：实例运行时统计（健康 + 在线人数）缓存，随心跳刷新
+	runtimeStats *RuntimeStatsRegistry
 }
 
 func NewNodeAgentHealthMonitor(
@@ -61,6 +63,11 @@ func NewNodeAgentHealthMonitor(
 		failThreshold:    failThreshold,
 		degradedPct:      degradedPct,
 	}
+}
+
+// SetRuntimeStatsRegistry 附加实例运行时统计缓存（B-04/P1-1；nil = 不采集）
+func (m *NodeAgentHealthMonitor) SetRuntimeStatsRegistry(reg *RuntimeStatsRegistry) {
+	m.runtimeStats = reg
 }
 
 // Start 启动周期探测（interval 每轮间隔；启动后立即执行一轮）
@@ -186,6 +193,23 @@ func (m *NodeAgentHealthMonitor) applyHeartbeat(ctx context.Context, agent *enti
 	}
 	if hb == nil {
 		return
+	}
+
+	// B-04/P1-1：实例运行时统计（健康 + 在线人数）→ 缓存（按节点作用域替换）
+	if m.runtimeStats != nil {
+		stats := make([]InstanceRuntimeStat, 0, len(hb.GetInstanceRuntime()))
+		for _, s := range hb.GetInstanceRuntime() {
+			stats = append(stats, InstanceRuntimeStat{
+				InstanceID:  s.GetInstanceId(),
+				PlayerCount: s.GetPlayerCount(),
+				MaxPlayers:  s.GetMaxPlayers(),
+				Healthy:     s.GetHealthy(),
+				ProbeMode:   s.GetProbeMode(),
+				ProbeError:  s.GetProbeError(),
+				SampledAt:   s.GetSampledAt(),
+			})
+		}
+		m.runtimeStats.UpdateForNode(agent.ID, stats)
 	}
 
 	usage := entity.NodeDynamicUsage{

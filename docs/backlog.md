@@ -49,13 +49,15 @@
 
 ## B-04 health.sh / players.sh 运行时接入（P2）
 
-- **状态**：⬜
+- **状态**：✅（P1-1 脚本后端 / P1-2 前端展示 / P1-3 A2S 后端 全部落地；P1-4 深度不健康自动重启为可选增强，另行跟踪）
 - **背景**：health.sh/players.sh 已存在但**无运行时调用方**（仅 ci-test.sh）；start.sh/stop.sh/save.sh
   已接入。接上后可回答「服务器真的健康吗（不只是容器活着）」「几个人在线」。
-- **方案**：适配器声明式接入（保持平台游戏无关）：node_agent 周期性 exec 上报玩家数/健康 →
-  controller 聚合 → 前端「在线人数」展示；可选：深度不健康自动重启（配合现有失败可见性机制）。
-- **涉及**：node_agent（exec 周期）、controller（聚合/状态）、适配器脚本、platform-web
-- **参考**：适配器框架文档（脚本运行时契约）
+- **实现**：见 docs/a2s-probe-design.md §11 —— node_agent `RuntimeProbeService`（script + a2s 双后端）
+  → 心跳携带 `instance_runtime` → controller `RuntimeStatsRegistry` → `GET /api/game-instances/:id/runtime`
+  → platform 透传 → 前端「在线 N/M + 健康徽标」。
+- **涉及**：node_agent（service/runtime_probe.rs）、controller-go（runtime_stats_registry.go、
+  health monitor、handler、迁移 000028）、platform-service（GetInstanceRuntime）、platform-web
+- **参考**：适配器框架文档（脚本运行时契约）、docs/a2s-probe-design.md
 
 ## B-05 config 热更新（P3）
 

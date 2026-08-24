@@ -73,6 +73,7 @@
                 <th class="px-3 py-2">游戏</th>
                 <th class="px-3 py-2">实例</th>
                 <th class="px-3 py-2">状态</th>
+                <th class="px-3 py-2">在线</th>
                 <th class="px-3 py-2">失败原因</th>
                 <th class="px-3 py-2">操作</th>
               </tr>
@@ -83,6 +84,17 @@
                 <td class="px-3 py-2 font-mono text-xs">{{ inst.ID }}</td>
                 <td class="px-3 py-2">
                   <span class="rounded px-2 py-0.5 text-xs" :class="instStatusClass(inst.Status)">{{ inst.Status }}</span>
+                </td>
+                <td class="px-3 py-2">
+                  <!-- B-04/P1-1：在线人数 + 健康（探针数据，15s 轮询） -->
+                  <template v-if="inst.Status === 'running'">
+                    <span v-if="rt(inst.ID)" class="flex items-center gap-1.5 text-xs" :title="rt(inst.ID)!.probe_error || ''">
+                      <span class="h-2 w-2 shrink-0 rounded-full" :class="healthDotClass(inst.ID)"></span>
+                      <span>{{ rtText(inst.ID) }}</span>
+                    </span>
+                    <span v-else class="text-xs text-muted-foreground">探测中…</span>
+                  </template>
+                  <span v-else class="text-muted-foreground">-</span>
                 </td>
                 <td class="max-w-[220px] px-3 py-2 text-xs text-red-500">
                   <span v-if="inst.FailReason" :title="inst.FailReason" class="line-clamp-1">{{ inst.FailReason }}</span>
@@ -220,13 +232,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import { listGames, type GameView } from '@/api/games'
 import { getConfigSchema, i18nText, type ConfigSchema, type ConfigSetting } from '@/api/orders'
 import {
   cancelSubscription,
   createSubscriptionInstance,
+  getSubscriptionInstanceRuntime,
   listEnabledPlans,
   listMySubscriptions,
   listSubscriptionInstances,
@@ -234,6 +247,7 @@ import {
   renewSubscription,
   startSubscriptionInstance,
   stopSubscriptionInstance,
+  type InstanceRuntime,
   type Subscription,
   type SubscriptionInstance,
 } from '@/api/subscriptions'
@@ -258,6 +272,44 @@ function planName(id: string) {
 
 function subInstances(id: string) {
   return instances.value[id] ?? []
+}
+
+// ---------- B-04/P1-1：实例运行时统计（健康 + 在线人数）轮询 ----------
+
+const runtimeMap = ref<Record<string, InstanceRuntime>>({})
+function rt(id: string) {
+  return runtimeMap.value[id]
+}
+function healthDotClass(id: string) {
+  const r = runtimeMap.value[id]
+  if (!r || r.probe_mode === 'unknown') return 'bg-gray-300'
+  return r.healthy ? 'bg-green-500' : 'bg-red-500'
+}
+function rtText(id: string) {
+  const r = runtimeMap.value[id]
+  if (!r || r.probe_mode === 'unknown') return '探测中'
+  return `${r.player_count}/${r.max_players}`
+}
+
+// 抓取所有运行中实例的运行时统计（单实例失败忽略，下一轮重试）
+async function refreshRuntimes() {
+  const targets: { subId: string; instId: string }[] = []
+  for (const sub of subs.value) {
+    for (const inst of subInstances(sub.ID)) {
+      if (inst.Status === 'running') targets.push({ subId: sub.ID, instId: inst.ID })
+    }
+  }
+  const next: Record<string, InstanceRuntime> = {}
+  await Promise.allSettled(
+    targets.map(async (t) => {
+      try {
+        next[t.instId] = await getSubscriptionInstanceRuntime(t.subId, t.instId)
+      } catch {
+        /* 忽略 */
+      }
+    }),
+  )
+  runtimeMap.value = next
 }
 
 function hasActive(sub: Subscription) {
@@ -326,6 +378,7 @@ async function load() {
     games.value = g
     gameNameMap.value = Object.fromEntries(g.map((game) => [game.ID, game.profile?.display_name || game.Name]))
     await Promise.all(s.map((sub) => loadInstances(sub)))
+    await refreshRuntimes()
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载失败'
   } finally {
@@ -380,6 +433,7 @@ async function onStart(sub: Subscription, inst: SubscriptionInstance) {
   try {
     await startSubscriptionInstance(sub.ID, inst.ID)
     await loadInstances(sub)
+    await refreshRuntimes()
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '启动失败'
   }
@@ -390,6 +444,7 @@ async function onStop(sub: Subscription, inst: SubscriptionInstance) {
   try {
     await stopSubscriptionInstance(sub.ID, inst.ID)
     await loadInstances(sub)
+    await refreshRuntimes()
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '停止失败'
   }
@@ -475,5 +530,14 @@ async function onCreateInstance() {
   }
 }
 
-onMounted(load)
+let runtimeTimer: number | undefined
+
+onMounted(() => {
+  load()
+  // B-04/P1-1：运行时统计 15s 轮询（controller 心跳 10s / 探针 20s）
+  runtimeTimer = window.setInterval(refreshRuntimes, 15000)
+})
+onUnmounted(() => {
+  if (runtimeTimer !== undefined) window.clearInterval(runtimeTimer)
+})
 </script>

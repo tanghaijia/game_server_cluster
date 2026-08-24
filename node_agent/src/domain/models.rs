@@ -54,6 +54,10 @@ pub struct StartInstanceArgument {
     /// 外部受限凭证（M8：credential pool 分配，如 DST cluster_token），
     /// 逐个写入 /data/.platform/{key} 供容器内 hook 使用
     pub credentials: HashMap<String, String>,
+    /// B-04/P1-3：运行时探针声明（controller 下发）
+    pub probe_mode: String,
+    /// B-04/P1-3：A2S 查询宿主端口（a2s 模式；None = 未解析，回退 script）
+    pub query_host_port: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

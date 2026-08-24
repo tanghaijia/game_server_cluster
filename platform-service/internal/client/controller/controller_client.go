@@ -208,6 +208,28 @@ func (c *Client) StopGameInstance(ctx context.Context, instanceID string) error 
 	return c.do(ctx, http.MethodPost, "/api/game-instances/"+instanceID+"/stop", nil, nil)
 }
 
+// InstanceRuntime controller 返回的实例运行时统计（B-04/P1-1：健康 + 在线人数）。
+// running=false = 实例未在运行（不采集）；probe_mode="unknown" = 尚无探针数据。
+type InstanceRuntime struct {
+	InstanceID  string `json:"instance_id"`
+	Running     bool   `json:"running"`
+	PlayerCount uint32 `json:"player_count"`
+	MaxPlayers  uint32 `json:"max_players"`
+	Healthy     bool   `json:"healthy"`
+	ProbeMode   string `json:"probe_mode"`
+	ProbeError  string `json:"probe_error"`
+	SampledAt   string `json:"sampled_at"`
+}
+
+// GetInstanceRuntime 查询实例运行时统计（controller /api/game-instances/:id/runtime）
+func (c *Client) GetInstanceRuntime(ctx context.Context, instanceID string) (*InstanceRuntime, error) {
+	var rt InstanceRuntime
+	if err := c.do(ctx, http.MethodGet, "/api/game-instances/"+instanceID+"/runtime", nil, &rt); err != nil {
+		return nil, err
+	}
+	return &rt, nil
+}
+
 // InstanceConnect controller 返回的实例连接信息（connect_address = node_ip:game_host_port）
 type InstanceConnect struct {
 	NodeIP        string `json:"node_ip"`

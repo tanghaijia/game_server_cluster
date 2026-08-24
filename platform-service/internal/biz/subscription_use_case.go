@@ -23,6 +23,8 @@ type SubscriptionController interface {
 	StartGameInstance(ctx context.Context, instanceID string) error
 	StopGameInstance(ctx context.Context, instanceID string) error
 	ListGameInstancesBySubscription(ctx context.Context, subscriptionID string) ([]controller.GameInstance, error)
+	// B-04/P1-1：实例运行时统计（健康 + 在线人数）
+	GetInstanceRuntime(ctx context.Context, instanceID string) (*controller.InstanceRuntime, error)
 }
 
 // SubscriptionUseCase 订阅业务逻辑：用户购买套餐获得订阅，订阅内可创建多个游戏实例
@@ -360,4 +362,20 @@ func (uc *SubscriptionUseCase) ListInstances(ctx context.Context, userID, subscr
 		return nil, err
 	}
 	return uc.controller.ListGameInstancesBySubscription(ctx, subscriptionID)
+}
+
+// GetInstanceRuntime 订阅内实例运行时统计（B-04/P1-1：在线人数 + 健康）。
+// 只做归属校验（订阅归属 + 实例归属订阅），不做 checkActive —— 只读遥测，过期订阅也允许查看。
+func (uc *SubscriptionUseCase) GetInstanceRuntime(ctx context.Context, userID, subscriptionID, instanceID string) (*controller.InstanceRuntime, error) {
+	if _, err := uc.ownSubscription(ctx, userID, subscriptionID); err != nil {
+		return nil, err
+	}
+	inst, err := uc.controller.GetGameInstance(ctx, instanceID)
+	if err != nil {
+		return nil, fmt.Errorf("load instance: %w", err)
+	}
+	if inst.SubscriptionID == nil || *inst.SubscriptionID != subscriptionID {
+		return nil, errors.New("instance does not belong to this subscription")
+	}
+	return uc.controller.GetInstanceRuntime(ctx, instanceID)
 }

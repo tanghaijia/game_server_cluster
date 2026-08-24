@@ -113,7 +113,9 @@ type fakeSubController struct {
 	stopErr      error
 	getInst      *controller.GameInstance
 	insts        []controller.GameInstance // ListGameInstancesBySubscription 返回值
-	stopped      []string                 // 被调 stop 的实例 ID
+	stopped      []string                  // 被调 stop 的实例 ID
+	runtime      *controller.InstanceRuntime // B-04/P1-1：GetInstanceRuntime 返回值（nil = 默认）
+	runtimeErr   error                       // B-04/P1-1：GetInstanceRuntime 错误
 }
 
 func (f *fakeSubController) CreateGameInstance(_ context.Context, gameID, _ string, subscriptionID string, config map[string]string) (*controller.GameInstance, error) {
@@ -136,6 +138,17 @@ func (f *fakeSubController) StopGameInstance(_ context.Context, instanceID strin
 }
 func (f *fakeSubController) ListGameInstancesBySubscription(_ context.Context, subscriptionID string) ([]controller.GameInstance, error) {
 	return f.insts, nil
+}
+
+// B-04/P1-1：运行时统计（fake 返回固定值或预设）
+func (f *fakeSubController) GetInstanceRuntime(_ context.Context, instanceID string) (*controller.InstanceRuntime, error) {
+	if f.runtimeErr != nil {
+		return nil, f.runtimeErr
+	}
+	if f.runtime != nil {
+		return f.runtime, nil
+	}
+	return &controller.InstanceRuntime{InstanceID: instanceID, Running: true, PlayerCount: 0, MaxPlayers: 8, Healthy: true, ProbeMode: "script"}, nil
 }
 
 func newTestUseCases() (*PlanUseCase, *SubscriptionUseCase, *fakePlanRepo, *fakeSubRepo, *fakeSubController) {
@@ -677,5 +690,38 @@ func TestUnsuspend(t *testing.T) {
 	}
 	if back.Status != entity.SubscriptionActive {
 		t.Fatalf("status should be active after unsuspend, got %s", back.Status)
+	}
+}
+
+// B-04/P1-1：GetInstanceRuntime 归属校验 + 透传运行时统计
+func TestGetInstanceRuntime_OwnershipAndPassthrough(t *testing.T) {
+	planUC, subUC, _, _, cc := newTestUseCases()
+	sub := buyActiveSub(t, planUC, subUC)
+	subID := sub.ID
+
+	// 实例属于订阅 → 透传 controller 运行时统计
+	cc.getInst = &controller.GameInstance{ID: "inst-1", GameID: "343050", SubscriptionID: &subID}
+	cc.runtime = &controller.InstanceRuntime{
+		InstanceID: "inst-1", Running: true, PlayerCount: 3, MaxPlayers: 8,
+		Healthy: true, ProbeMode: "script", SampledAt: "now",
+	}
+	rt, err := subUC.GetInstanceRuntime(context.Background(), "user-1", subID, "inst-1")
+	if err != nil {
+		t.Fatalf("get runtime: %v", err)
+	}
+	if rt == nil || rt.PlayerCount != 3 || rt.MaxPlayers != 8 || !rt.Healthy {
+		t.Fatalf("runtime should pass through, got %+v", rt)
+	}
+
+	// 实例不属于该订阅 → 拒绝
+	other := "sub-other"
+	cc.getInst = &controller.GameInstance{ID: "inst-2", GameID: "343050", SubscriptionID: &other}
+	if _, err := subUC.GetInstanceRuntime(context.Background(), "user-1", subID, "inst-2"); err == nil {
+		t.Fatal("instance of another subscription should be rejected")
+	}
+
+	// 他人订阅 → 拒绝
+	if _, err := subUC.GetInstanceRuntime(context.Background(), "user-2", subID, "inst-1"); err == nil {
+		t.Fatal("other user's subscription should be rejected")
 	}
 }

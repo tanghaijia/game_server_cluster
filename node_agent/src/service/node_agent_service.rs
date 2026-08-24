@@ -396,6 +396,9 @@ where
         let instance_id = argument.instance_id.clone();
 
         let mut game_instance = self.game_instance_repos.get(instance_id.0.clone()).await?;
+        // B-04/P1-3：记录探针声明（a2s 模式带查询宿主端口），供 RuntimeProbeService 使用
+        game_instance.probe_mode = argument.probe_mode.clone();
+        game_instance.query_host_port = argument.query_host_port;
         game_instance.status = crate::domain::GameInstanceStatus::Preparing;
         self.game_instance_repos.save(&game_instance).await?;
 

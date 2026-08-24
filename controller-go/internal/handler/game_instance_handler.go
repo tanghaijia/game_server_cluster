@@ -14,10 +14,17 @@ import (
 // GameInstanceHandler 提供 GameInstance 相关的 HTTP 接口
 type GameInstanceHandler struct {
 	gameInstanceUseCase *biz.GameInstanceUseCase
+	// B-04/P1-1：实例运行时统计缓存（node_agent 探针心跳数据），nil 时 runtime 端点返回 unknown
+	runtimeStats *biz.RuntimeStatsRegistry
 }
 
 func NewGameInstanceHandler(uc *biz.GameInstanceUseCase) *GameInstanceHandler {
 	return &GameInstanceHandler{gameInstanceUseCase: uc}
+}
+
+// SetRuntimeStatsRegistry 附加实例运行时统计缓存（B-04/P1-1）
+func (h *GameInstanceHandler) SetRuntimeStatsRegistry(reg *biz.RuntimeStatsRegistry) {
+	h.runtimeStats = reg
 }
 
 // RegisterRoutes 注册 GameInstance 相关的路由
@@ -29,6 +36,7 @@ func (h *GameInstanceHandler) RegisterRoutes(router *gin.Engine) {
 	group.PUT("/:id/config", h.UpdateInstanceConfig)
 	group.GET("/:id/ports", h.GetInstancePorts)
 	group.GET("/:id/connect", h.GetInstanceConnect)
+	group.GET("/:id/runtime", h.GetInstanceRuntime) // B-04/P1-1：健康 + 在线人数
 	group.POST("/:id/start", h.StartGameInstance)
 	group.POST("/:id/stop", h.StopGameInstance)
 	group.POST("/:id/cancel", h.CancelGameInstance)
@@ -191,6 +199,36 @@ func (h *GameInstanceHandler) GetInstanceConnect(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, info)
+}
+
+// GetInstanceRuntime 查询实例运行时统计（B-04/P1-1：在线人数 + 健康）。
+// 数据来自 node_agent 探针心跳缓存；三态：running 且有数据 / running 尚无数据（unknown）/
+// 非 running（不采集）。
+func (h *GameInstanceHandler) GetInstanceRuntime(c *gin.Context) {
+	id := c.Param("id")
+	inst, err := h.gameInstanceUseCase.GetGameInstance(c.Request.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "instance not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if inst.Status != entity.StatusRunning {
+		c.JSON(http.StatusOK, gin.H{"instance_id": id, "running": false})
+		return
+	}
+	if h.runtimeStats == nil {
+		c.JSON(http.StatusOK, gin.H{"instance_id": id, "running": true, "probe_mode": "unknown", "healthy": false})
+		return
+	}
+	stat, ok := h.runtimeStats.Get(id)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"instance_id": id, "running": true, "probe_mode": "unknown", "healthy": false})
+		return
+	}
+	c.JSON(http.StatusOK, stat)
 }
 
 // RetryGameInstance 重试失败实例：failed → pending 重新入队调度

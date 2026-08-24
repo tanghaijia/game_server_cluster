@@ -18,6 +18,11 @@ type GameContainerConfig struct {
 	// 端口注入 env 变量名（000024 迁移）：adapter.toml port_inject.env 的部署侧配置，
 	// 默认 GAME_HOST_PORT；controller 组装实例 env 时读取，消灭 SDTD_SERVER_PORT 类硬编码
 	PortInjectEnv string `gorm:"column:port_inject_env;default:GAME_HOST_PORT"`
+	// B-04/P1-3：运行时探针（health/players 采集）
+	//   probe_mode: "script" | "a2s" | "none"（缺省 script，向后兼容）
+	//   query_port_offset: a2s 模式查询端口相对游戏宿主端口的偏移（Valheim=1，多数=0）
+	ProbeMode       string `gorm:"column:probe_mode;default:script"`
+	QueryPortOffset int    `gorm:"column:query_port_offset;default:0"`
 }
 
 func (GameContainerConfig) TableName() string {

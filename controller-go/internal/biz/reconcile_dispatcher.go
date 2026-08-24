@@ -995,7 +995,33 @@ func buildInstanceRuntimeSpec(
 		Spec: &nodeagentv1.InstanceSpec{
 			Resources: &nodeagentv1.ResourceRequirements{},
 		},
+		// B-04/P1-3：运行时探针声明（a2s 模式解析查询宿主端口 = 游戏宿主端口 + offset）
+		ProbeMode:     probeModePtr(config.ProbeMode),
+		QueryHostPort: resolveQueryHostPort(config, portMappings),
 	}
+}
+
+// probeModePtr 探针模式缺省值（空 → "script"，向后兼容）
+func probeModePtr(m string) *string {
+	if m == "" {
+		m = "script"
+	}
+	return &m
+}
+
+// resolveQueryHostPort a2s 模式的查询宿主端口：游戏宿主端口 + query_port_offset。
+// 非 a2s 模式或无游戏端口映射时返回 nil（node_agent 回退 script 后端）。
+func resolveQueryHostPort(config *entity.GameContainerConfig, portMappings []entity.ContainerPortMapping) *uint32 {
+	if config == nil || config.ProbeMode != "a2s" {
+		return nil
+	}
+	for _, m := range portMappings {
+		if m.IsGamePort {
+			qp := uint32(m.HostPort) + uint32(config.QueryPortOffset)
+			return &qp
+		}
+	}
+	return nil
 }
 
 // defaultPortInjectEnv 端口注入 env 默认变量名（000024，M3）：
