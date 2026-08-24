@@ -1,0 +1,2 @@
+# Valheim 管理员 Steam ID 列表（每行一个 64 位 SteamID）
+# 由 hooks.sh 复制到存档目录（${SAVEDIR}/adminlist.txt），玩家可自行编辑。

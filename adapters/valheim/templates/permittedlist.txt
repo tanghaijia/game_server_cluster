@@ -1,0 +1,2 @@
+# Valheim crossplay 白名单（permittedlist，每行一个 64 位 SteamID / 平台账号 ID）
+# 仅启用 -crossplay 时生效；留空 = 不限制。

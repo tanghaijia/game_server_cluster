@@ -1,0 +1,633 @@
+# ============================================================
+# adapters/palworld/adapter.toml —— 幻兽帕鲁（Palworld）适配器声明式元数据
+#
+# 状态：草案（路线图 ①，待 ② hooks/模板、③ Dockerfile/镜像 后转正式）
+# 关联：docs/game-adapter-roadmap.md §3.1（第一梯队）/ docs/a2s-probe-design.md
+#
+# 平台消费链（adapter-framework-design.md §3.3）：
+#   asset_service：注册 adapter + 建 GameBuild（镜像名/版本 + metadata/schema）
+#   controller：port_inject / config schema（表单与校验）
+#   node_agent：lifecycle 命令路径（docker exec）
+#
+# ── 硬事实（已核实）────────────────────────────────────────────
+#   steamcmd appid: 2394010（官方 Linux 专用服务器，PalServer.sh）
+#   主进程:        PalServer-Linux-Test（UE5 二进制，PalServer.sh 拉起）
+#   默认端口:      8211/udp（游戏 + A2S 查询同端口）
+#   可选端口:      RCON 25575/tcp（默认关）、REST API 8212/tcp（默认关）
+#   配置路径:      <install>/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini
+#                  （/server 只读 → 由 hook 软链到 /data，见下）
+#   存档:          <install>/Pal/Saved/SaveGames（→ 软链 /data/SaveGames）
+#   A2S 查询:      支持，query_port_offset = 0（controller game_container_configs
+#                  probe_mode='a2s' 时生效，见 docs/a2s-probe-design.md §4）
+# ── 渲染模型（② 已定案）──────────────────────────────────────
+#   PalWorldSettings.ini 是单行 OptionSettings=(k=v,...)，与 per-key
+#   xml_property 渲染不匹配 → config_render.file 置空，渲染由 hooks.sh 自管：
+#     hooks.sh hook_pre_start：软链（/server 只读）+ config_env_export +
+#     config_env_defaults（config-defaults.env 补齐默认值）+ envsubst 全量渲染。
+#   默认值单一事实源：config-defaults.env（gen_manifest.py 从本文件生成）。
+# ── 开放问题（② 状态）────────────────────────────────────────
+#   [P-1] ✅ 已解决：hook 自管 envsubst 渲染（见 hooks.sh 头注释）
+#   [P-2] ✅ 已解决：ini/Logs/SaveGames 软链到 /data（hooks.sh hook_pre_start）
+#   [P-3] ✅ 已解决：steamclient.so 启动前校验（hooks.sh hook_pre_start）
+#   [P-4] ⬜ 平台 AdapterConfigSetting 尚无 float 类型 → 倍率类项暂用
+#         type="string"（值形如 "1.000000"），后续可在校验器加 float 类型
+# ============================================================
+
+schema_version = 1
+adapter_id = "palworld"
+game_id = "palworld"
+
+[image]
+name = "registry/game/palworld-adapter"
+tag = "0.1.0-draft"                  # 占位：③ 构建镜像后改为实际版本
+
+[build]
+type = "steamcmd"
+app_id = 2394010
+branch = "public"
+
+[lifecycle]
+start = "/scripts/start.sh"
+save = "/scripts/save.sh"
+stop = "/scripts/stop.sh"
+players = "/scripts/players.sh"
+health = "/scripts/health.sh"
+
+# 端口注入：宿主端口 → -port 启动参数 + PalWorldSettings.ini 的 PublicPort
+[port_inject]
+enabled = true
+env = "GAME_HOST_PORT"
+
+# 配置渲染目标文件：空（单行 OptionSettings 无法 per-key 渲染，
+# 由 hooks.sh 自管 envsubst 全量渲染，见文件头「渲染模型」）
+[config_render]
+file = ""
+
+# 无外部受限凭证（Palworld 不需要 token 类凭证）：
+# [[credentials]] 留空，后续若引入需在平台录入资源池再声明。
+
+# ───────────────────────── 配置项 schema ─────────────────────────
+# 说明：bool 在 PalWorldSettings.ini 中为 True/False（首字母大写），
+#       schema 值域为 true/false，由 hook 渲染时转换。
+
+# ---- 基础 General ----
+[config."ServerName"]
+label_key = "cfg.ServerName.label"
+type = "string"
+default = "Default Dedicated Server"
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerDescription"]
+type = "string"
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."ServerPassword"]
+label_key = "cfg.ServerPassword.label"
+type = "string"
+secret = true
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."PublicIP"]
+label_key = "cfg.PublicIP.label"
+type = "string"
+default = ""
+control = "platform"
+apply = "always"
+group_key = "grp.general"
+
+[config."Region"]
+type = "string"
+default = ""
+control = "platform"
+apply = "always"
+group_key = "grp.general"
+
+[config."AllowConnectPlatform"]
+label_key = "cfg.AllowConnectPlatform.label"
+type = "enum"
+enum = ["Steam", "PS5", "SteamAndPS5"]
+default = "Steam"
+control = "platform"
+apply = "always"
+group_key = "grp.general"
+[config."AllowConnectPlatform".enum_labels]
+Steam = "enum.platform.steam"
+PS5 = "enum.platform.ps5"
+SteamAndPS5 = "enum.platform.both"
+
+[config."bShowPlayerList"]
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+# ---- 难度与倍率 Difficulty & rates ----
+[config."Difficulty"]
+label_key = "cfg.Difficulty.label"
+type = "enum"
+enum = ["None", "Casual", "Normal", "Hard"]
+default = "None"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+[config."Difficulty".enum_labels]
+None = "enum.diff.none"
+Casual = "enum.diff.casual"
+Normal = "enum.diff.normal"
+Hard = "enum.diff.hard"
+
+[config."DayTimeSpeedRate"]
+type = "string"                      # [P-4] float 暂用 string
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."NightTimeSpeedRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."ExpRate"]
+label_key = "cfg.ExpRate.label"
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."PalCaptureRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."PalSpawnNumRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."WorkSpeedRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."CollectionDropRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."CollectionObjectRespawnSpeedRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."EnemyDropItemRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."PalEggDefaultHatchingTime"]
+label_key = "cfg.PalEggDefaultHatchingTime.label"
+type = "string"
+default = "72.000000"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+
+[config."DeathPenalty"]
+label_key = "cfg.DeathPenalty.label"
+type = "enum"
+enum = ["None", "Item", "ItemAndEquipment", "All"]
+default = "All"
+control = "player"
+apply = "always"
+group_key = "grp.difficulty"
+[config."DeathPenalty".enum_labels]
+None = "enum.death.none"
+Item = "enum.death.item"
+ItemAndEquipment = "enum.death.itemandequip"
+All = "enum.death.all"
+
+# ---- 战斗 Combat ----
+[config."PalDamageRateAttack"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."PalDamageRateDefense"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."PlayerDamageRateAttack"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."PlayerDamageRateDefense"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."bIsPvP"]
+label_key = "cfg.bIsPvP.label"
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."bEnablePlayerToPlayerDamage"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+[config."bEnableFriendlyFire"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.combat"
+
+# ---- 生存 Survival ----
+[config."PlayerStomachDecreaceRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."PlayerStaminaDecreaceRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."PlayerAutoHPRegeneRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."PalStomachDecreaceRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."PalStaminaDecreaceRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."PalAutoHPRegeneRate"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bEnableInvaderEnemy"]
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bEnableFastTravel"]
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bIsStartLocationSelectByMap"]
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bEnableNonLoginPenalty"]
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bAutoResetGuildNoOnlinePlayers"]
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."AutoResetGuildTimeNoOnlinePlayers"]
+type = "string"
+default = "72.000000"
+control = "player"
+apply = "always"
+group_key = "grp.survival"
+
+[config."bExistPlayerAfterLogout"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.survival"
+
+# ---- 基地与公会 Base camp & guild ----
+[config."BaseCampMaxNum"]
+type = "int"
+default = 128
+control = "player"
+apply = "always"
+group_key = "grp.base"
+
+[config."BaseCampWorkerMaxNum"]
+type = "int"
+default = 15
+control = "player"
+apply = "always"
+group_key = "grp.base"
+
+[config."GuildPlayerMaxNum"]
+type = "int"
+default = 20
+control = "player"
+apply = "always"
+group_key = "grp.base"
+
+[config."DropItemAliveMaxHours"]
+type = "string"
+default = "1.000000"
+control = "player"
+apply = "always"
+group_key = "grp.base"
+
+[config."bCanPickupOtherGuildDeathPenaltyDrop"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.base"
+
+# ---- 人数 Players ----
+[config."ServerPlayerMaxNum"]
+label_key = "cfg.ServerPlayerMaxNum.label"
+type = "int"
+min = 1
+max = 32
+default = 32
+control = "player"
+apply = "always"
+group_key = "grp.players"
+
+[config."CoopPlayerMaxNum"]
+type = "int"
+min = 1
+max = 4
+default = 4
+control = "platform"
+apply = "always"
+group_key = "grp.players"
+
+# ---- 网络与接口 Network ----
+[config."PublicPort"]
+control = "locked"                  # 由端口注入（GAME_HOST_PORT）管理
+
+[config."bIsMultiplay"]
+control = "locked"                  # 专用服务器强制 true（PalServer.sh 固定）
+
+[config."RCONEnabled"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."RCONPort"]
+type = "int"
+default = 25575
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."RESTAPIEnabled"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."RESTAPIPort"]
+type = "int"
+default = 8212
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."bUseAuth"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+[config."BanListURL"]
+type = "string"
+default = "https://api.palworldgame.com/api/banlist.txt"
+control = "platform"
+apply = "always"
+group_key = "grp.network"
+
+# ---- 管理 Admin ----
+[config."AdminPassword"]
+label_key = "cfg.AdminPassword.label"
+type = "string"
+secret = true
+default = ""
+control = "platform"
+apply = "always"
+group_key = "grp.admin"
+
+# ---- 技术 Technical ----
+[config."bIsUseBackupSaveData"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."LogFormatType"]
+type = "enum"
+enum = ["Text", "Json"]
+default = "Text"
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."LogFileName"]
+type = "string"
+default = "PalServer.log"
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."bAllowGlobalPalBox"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."bIsSkipEntranceSequence"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."DropItemMaxNum"]
+type = "int"
+default = 3000
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."DropItemMaxNum_UNKO"]
+type = "int"
+default = 100
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."BuildObjectDamageRate"]
+type = "string"
+default = "1.000000"
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."BuildObjectDeteriorationDamageRate"]
+type = "string"
+default = "1.000000"
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."bEnableAimAssistPad"]
+type = "bool"
+default = true
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+[config."bEnableAimAssistKeyboard"]
+type = "bool"
+default = false
+control = "platform"
+apply = "always"
+group_key = "grp.technical"
+
+# ───────────────────────── 国际化 ─────────────────────────
+
+[i18n]
+fallback = "en"
+
+[i18n.en]
+"grp.general" = "General"
+"grp.difficulty" = "Difficulty & Rates"
+"grp.combat" = "Combat"
+"grp.survival" = "Survival"
+"grp.base" = "Base & Guild"
+"grp.players" = "Players"
+"grp.network" = "Network"
+"grp.admin" = "Admin"
+"grp.technical" = "Technical"
+"enum.platform.steam" = "Steam only"
+"enum.platform.ps5" = "PS5 only"
+"enum.platform.both" = "Steam + PS5"
+"enum.diff.none" = "None"
+"enum.diff.casual" = "Casual"
+"enum.diff.normal" = "Normal"
+"enum.diff.hard" = "Hard"
+"enum.death.none" = "Nothing"
+"enum.death.item" = "Items"
+"enum.death.itemandequip" = "Items & Equipment"
+"enum.death.all" = "All"
+"control.player" = "Player"
+"control.platform" = "Platform"
+
+[i18n.zh]
+"cfg.ServerName.label" = "服务器名称"
+"cfg.ServerPassword.label" = "服务器密码"
+"cfg.PublicIP.label" = "公告 IP"
+"cfg.AllowConnectPlatform.label" = "允许连接平台"
+"cfg.Difficulty.label" = "难度"
+"cfg.ExpRate.label" = "经验倍率"
+"cfg.PalEggDefaultHatchingTime.label" = "帕鲁蛋孵化时间（小时）"
+"cfg.DeathPenalty.label" = "死亡掉落"
+"cfg.bIsPvP.label" = "启用 PVP"
+"cfg.ServerPlayerMaxNum.label" = "最大玩家数"
+"cfg.AdminPassword.label" = "管理员密码"
+"grp.general" = "基础"
+"grp.difficulty" = "难度与倍率"
+"grp.combat" = "战斗"
+"grp.survival" = "生存"
+"grp.base" = "基地与公会"
+"grp.players" = "人数"
+"grp.network" = "网络与接口"
+"grp.admin" = "管理"
+"grp.technical" = "技术"
+"enum.platform.steam" = "仅 Steam"
+"enum.platform.ps5" = "仅 PS5"
+"enum.platform.both" = "Steam + PS5"
+"enum.diff.none" = "无"
+"enum.diff.casual" = "休闲"
+"enum.diff.normal" = "普通"
+"enum.diff.hard" = "困难"
+"enum.death.none" = "无掉落"
+"enum.death.item" = "掉落物品"
+"enum.death.itemandequip" = "掉落物品与装备"
+"enum.death.all" = "全部掉落"
+"control.player" = "玩家"
+"control.platform" = "平台"

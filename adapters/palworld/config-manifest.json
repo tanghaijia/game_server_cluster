@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "file": "",
+  "settings": [
+    {
+      "key": "AdminPassword",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "AllowConnectPlatform",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "AutoResetGuildTimeNoOnlinePlayers",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BanListURL",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BaseCampMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BaseCampWorkerMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BuildObjectDamageRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "BuildObjectDeteriorationDamageRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "CollectionDropRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "CollectionObjectRespawnSpeedRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "CoopPlayerMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DayTimeSpeedRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DeathPenalty",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Difficulty",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DropItemAliveMaxHours",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DropItemMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "DropItemMaxNum_UNKO",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "EnemyDropItemRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ExpRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "GuildPlayerMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LogFileName",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "LogFormatType",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "NightTimeSpeedRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalAutoHPRegeneRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalCaptureRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalDamageRateAttack",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalDamageRateDefense",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalEggDefaultHatchingTime",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalSpawnNumRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalStaminaDecreaceRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PalStomachDecreaceRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerAutoHPRegeneRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerDamageRateAttack",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerDamageRateDefense",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerStaminaDecreaceRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PlayerStomachDecreaceRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "PublicIP",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "RCONEnabled",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "RCONPort",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "RESTAPIEnabled",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "RESTAPIPort",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Region",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerDescription",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerName",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerPassword",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerPlayerMaxNum",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WorkSpeedRate",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bAllowGlobalPalBox",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bAutoResetGuildNoOnlinePlayers",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bCanPickupOtherGuildDeathPenaltyDrop",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableAimAssistKeyboard",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableAimAssistPad",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableFastTravel",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableFriendlyFire",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableInvaderEnemy",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnableNonLoginPenalty",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bEnablePlayerToPlayerDamage",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bExistPlayerAfterLogout",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bIsPvP",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bIsSkipEntranceSequence",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bIsStartLocationSelectByMap",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bIsUseBackupSaveData",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bShowPlayerList",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "bUseAuth",
+      "render": "xml_property",
+      "apply": "always"
+    }
+  ]
+}

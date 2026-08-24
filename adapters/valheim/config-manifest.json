@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "file": "",
+  "settings": [
+    {
+      "key": "Crossplay",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "MemoryMb",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Password",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "Public",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "ServerName",
+      "render": "xml_property",
+      "apply": "always"
+    },
+    {
+      "key": "WorldName",
+      "render": "xml_property",
+      "apply": "on_first_start"
+    }
+  ]
+}

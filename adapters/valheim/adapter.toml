@@ -1,0 +1,162 @@
+# ============================================================
+# adapters/valheim/adapter.toml —— 英灵神殿（Valheim）适配器声明式元数据
+#
+# 状态：草案（路线图 ①，待 ② hooks/模板、③ Dockerfile/镜像 后转正式）
+# 关联：docs/game-adapter-roadmap.md §3.1（第一梯队）/ docs/a2s-probe-design.md
+#
+# 平台消费链（adapter-framework-design.md §3.3）：
+#   asset_service：注册 adapter + 建 GameBuild（镜像名/版本 + metadata/schema）
+#   controller：port_inject / config schema（表单与校验）
+#   node_agent：lifecycle 命令路径（docker exec）
+#
+# ── 硬事实（已核实）────────────────────────────────────────────
+#   steamcmd appid: 896660（官方 Linux 专用服务器；客户端为 892970，勿混）
+#   主进程:        valheim_server.x86_64（wrapper，拉起真正的 valheim_server 子进程）
+#   默认端口:      2456/udp（游戏）、2457/udp（A2S 查询）、2458/udp（中继备用）
+#   配置方式:      无配置文件，全部命令行参数（-name/-port/-world/-password/
+#                  -public/-crossplay/-savedir）；平台配置项经 hook 拼装启动命令
+#   存档:          -savedir 指向 /data（.fwl + .db 世界文件，天然入 S3 快照）
+#   管理列表:      adminlist.txt / bannedlist.txt 放 savedir（模板进 /data）
+#   A2S 查询:      支持，query_port_offset = 1（controller game_container_configs
+#                  probe_mode='a2s' 时生效，见 docs/a2s-probe-design.md §4）
+# ── 开放问题（② 状态）────────────────────────────────────────
+#   [V-1] ✅ 已解决：hook_process_pattern 用 "valheim_server"（wrapper 与
+#         子进程均命中），停止/健康探测按子进程匹配（hooks.sh）
+#   [V-2] ⬜ 部署注意：Valheim 在 Docker overlayfs 上偶发 "No space left on
+#         device" 假崩溃（ENOSPC）。本平台 /server 由宿主机目录 bind 挂载可规避；
+#         若仍出现，需 node 侧对游戏缓存目录禁用 overlay 相关存储选项
+#   [V-3] ⬜ 联动 B-07：-crossplay（PlayFab）开启时内存占用显著上升（2GB+），
+#         资源预留模型评估时计入
+#   [V-4] ✅ 已解决：世界名 = 存档文件名，WorldName on_first_start（变更即新档）；
+#         adminlist/bannedlist/permittedlist 模板已落位（hooks.sh 复制到 savedir）；
+#         可选 starter 世界模板不做（游戏首次启动自建世界）
+# ============================================================
+
+schema_version = 1
+adapter_id = "valheim"
+game_id = "valheim"
+
+[image]
+name = "registry/game/valheim-adapter"
+tag = "0.1.0-draft"                 # 占位：③ 构建镜像后改为实际版本
+
+[build]
+type = "steamcmd"
+app_id = 896660
+branch = "public"
+
+[lifecycle]
+start = "/scripts/start.sh"
+save = "/scripts/save.sh"
+stop = "/scripts/stop.sh"
+players = "/scripts/players.sh"
+health = "/scripts/health.sh"
+
+# 端口注入：宿主端口 → hook 拼装 -port 启动参数（游戏不读配置文件）
+[port_inject]
+enabled = true
+env = "GAME_HOST_PORT"
+
+# Valheim 无配置文件：配置全部经 CLI 参数下发，不走 config-render
+[config_render]
+file = ""
+
+# 无外部受限凭证（Valheim 无需 token 类凭证）：
+# [[credentials]] 留空，后续若引入需在平台录入资源池再声明。
+
+# ───────────────────────── 配置项 schema ─────────────────────────
+# 说明：所有配置项由 hook_start_command 读取 PLATFORM_CONFIG_FILE
+#       （/data/.platform/game-config.json）拼装 CLI 参数，config_render 不参与。
+
+[config."ServerName"]
+label_key = "cfg.ServerName.label"
+type = "string"
+default = "My Valheim Server"
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."WorldName"]
+label_key = "cfg.WorldName.label"
+description_key = "cfg.WorldName.desc"
+type = "string"
+default = "Dedicated"
+control = "player"
+apply = "on_first_start"            # 世界名即存档文件名：变更 = 开新档
+group_key = "grp.general"
+
+[config."Password"]
+label_key = "cfg.Password.label"
+description_key = "cfg.Password.desc"
+type = "string"
+secret = true
+default = ""
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."Public"]
+label_key = "cfg.Public.label"
+description_key = "cfg.Public.desc"
+type = "bool"
+default = true
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."Crossplay"]
+label_key = "cfg.Crossplay.label"
+description_key = "cfg.Crossplay.desc"
+type = "bool"
+default = false
+control = "player"
+apply = "always"
+group_key = "grp.general"
+
+[config."Port"]
+control = "locked"                  # 由端口注入（GAME_HOST_PORT）管理
+
+[config."SaveDir"]
+control = "locked"                  # 固定 /data/valheim（世界文件入 S3 快照）
+
+[config."MemoryMb"]
+label_key = "cfg.MemoryMb.label"
+description_key = "cfg.MemoryMb.desc"
+type = "int"
+min = 512
+max = 16384
+default = 2048
+control = "platform"
+apply = "always"
+group_key = "grp.performance"
+
+[i18n]
+fallback = "en"
+
+[i18n.en]
+"cfg.WorldName.desc" = "World file base name (changing it creates a new world)"
+"cfg.Password.desc" = "Join password, at least 5 characters"
+"cfg.Public.desc" = "List server in the community server browser"
+"cfg.Crossplay.desc" = "Enable PlayFab crossplay (Xbox / Game Pass joiners)"
+"cfg.MemoryMb.desc" = "Dedicated server memory limit in MB"
+"grp.general" = "General"
+"grp.performance" = "Performance"
+"control.player" = "Player"
+"control.platform" = "Platform"
+
+[i18n.zh]
+"cfg.ServerName.label" = "服务器名称"
+"cfg.WorldName.label" = "世界名"
+"cfg.WorldName.desc" = "世界存档文件名（变更即开新档）"
+"cfg.Password.label" = "加入密码"
+"cfg.Password.desc" = "加入密码，至少 5 个字符"
+"cfg.Public.label" = "公开列表"
+"cfg.Public.desc" = "是否出现在社区服务器浏览器"
+"cfg.Crossplay.label" = "跨平台（PlayFab）"
+"cfg.Crossplay.desc" = "启用跨平台联机（Xbox / Game Pass 玩家可加入）"
+"cfg.MemoryMb.label" = "内存上限（MB）"
+"cfg.MemoryMb.desc" = "专用服务器内存上限（MB）"
+"grp.general" = "基础"
+"grp.performance" = "性能"
+"control.player" = "玩家"
+"control.platform" = "平台"

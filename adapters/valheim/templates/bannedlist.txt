@@ -1,0 +1,1 @@
+# Valheim 封禁 Steam ID 列表（每行一个 64 位 SteamID）
