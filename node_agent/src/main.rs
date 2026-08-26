@@ -203,6 +203,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             steam_service.clone(),
         ));
 
+        // P2-D：启动时回收孤儿缓存版本（上次崩溃残留的 Removed/半成品，释放磁盘）
+        node_agent_service.gc_all_orphans().await;
+
         // 8. TaskContext
         let task_ctx = Arc::new(TaskContext::new(
             node_agent_service.clone() as Arc<dyn BackgroundWorker>,

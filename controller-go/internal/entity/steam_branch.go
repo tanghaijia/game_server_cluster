@@ -9,8 +9,10 @@ type SteamBranch struct {
 	Description string            `gorm:"column:description"`
 	GameId      string            `gorm:"column:game_id"`
 	Status      SteamBranchStatus `gorm:"column:status"`
-	CreateTime  time.Time         `gorm:"column:create_time"`
-	UpdateTime  time.Time         `gorm:"column:update_time"`
+	// P2-D：保底副本数（§4.3）——0=按需（实例驱动），N=无实例也常驻 N 份（故障域保底）
+	MinReplicas int       `gorm:"column:min_replicas"`
+	CreateTime  time.Time `gorm:"column:create_time"`
+	UpdateTime  time.Time `gorm:"column:update_time"`
 }
 
 func (SteamBranch) TableName() string {

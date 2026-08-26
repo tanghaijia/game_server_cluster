@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"controller-go/internal/client/assetservice"
@@ -26,6 +27,12 @@ type GameCacheManager struct {
 	nodeAgentRepo    repository.NodeAgentRepository
 	nodeRepo         repository.NodeRepository
 	gameRepo         repository.GameRepository
+	// P2-D：demand（实例承载视图）统计用
+	instanceRepo repository.GameInstanceRepository
+
+	// P2-D：删除冷却（§4.6 防抖）——branch 最近一次删除缓存的时间，冷却期内不删
+	deleteMu       sync.Mutex
+	deleteCooldown map[string]time.Time
 }
 
 func NewGameCacheManager(
@@ -36,6 +43,7 @@ func NewGameCacheManager(
 	nodeAgentRepo repository.NodeAgentRepository,
 	nodeRepo repository.NodeRepository,
 	gameRepo repository.GameRepository,
+	instanceRepo repository.GameInstanceRepository,
 ) *GameCacheManager {
 	return &GameCacheManager{
 		nodeAgentClients: nodeAgentClients,
@@ -45,8 +53,13 @@ func NewGameCacheManager(
 		nodeAgentRepo:    nodeAgentRepo,
 		nodeRepo:         nodeRepo,
 		gameRepo:         gameRepo,
+		instanceRepo:     instanceRepo,
+		deleteCooldown:   make(map[string]time.Time),
 	}
 }
+
+// cacheDeleteCooldown 删除冷却时长（§4.6 防抖）：demand 波动时避免"下完删、删完再下"
+const cacheDeleteCooldown = 10 * time.Minute
 
 // steamPublicBranchName Steam 默认分支名
 const steamPublicBranchName = "public"
@@ -281,6 +294,26 @@ func (g *GameCacheManager) UpdateBranchCache(ctx context.Context, gameId, branch
 	return g.CheckAndUpdate(ctx, gameId, branchName, branch.LastBuildId, nodeAgentId)
 }
 
+// SetBranchMinReplicas 设置分支保底副本数（§4.3，管理员运维）：
+// 0 = 按需（实例驱动，需求归零即回收）；N = 无实例也常驻 N 份。
+func (g *GameCacheManager) SetBranchMinReplicas(ctx context.Context, gameId, branchName string, minReplicas int) error {
+	if minReplicas < 0 {
+		return errors.New("min_replicas must be >= 0")
+	}
+	branch, err := g.steamBranchRepo.GetByGameAndBranch(ctx, gameId, branchName)
+	if err != nil {
+		return err
+	}
+	branch.MinReplicas = minReplicas
+	branch.UpdateTime = time.Now()
+	if err := g.steamBranchRepo.Save(ctx, branch); err != nil {
+		return fmt.Errorf("update branch min_replicas: %w", err)
+	}
+	slog.Info("[GameCacheManager] 设置分支保底副本数", "gameId", gameId,
+		"branchName", branchName, "minReplicas", minReplicas)
+	return nil
+}
+
 // RemoveBranchCache 删除指定 node_agent 上某 (game, branch) 的游戏缓存（释放磁盘）。
 // 幂等：节点已无该缓存（GetNodeCache 返回 nil）时直接返回成功；
 // 节点上有该 game 的活动实例引用时 node_agent 拒绝删除并返回错误（调用方记日志即可）。
@@ -403,11 +436,11 @@ func (g *GameCacheManager) loop(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// reconcileOnce 执行一轮完整对账：
+// reconcileOnce 执行一轮完整对账（P2-D：从"全扇出"收敛为"diff 增删"，§4.4）：
 // 1) 同步分支（SyncAndRecordBranch）
-// 2) 对每个 Enable 分支，把最新版本下载/更新到所有已启用节点（CheckAndUpdate）
-// 3) 对 Disable/Abandoned 分支，在所有已启用节点上删除其缓存（RemoveBranchCache）
-//    —— 释放磁盘（P1：删除不必要分支；有运行实例引用时节点拒绝并记日志）
+// 2) Disable/Abandoned 分支：全节点删除缓存（P1，释放磁盘）
+// 3) Enable 分支：reconcileBranch ——
+//    更新已有缓存版本（跟分支最新）→ 删除富余副本（需求归零/min_replicas 外）→ 保底预热
 // 单个 game 或单个（分支, 节点）失败只记日志，不中断整轮。
 func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
 	nodeAgentIDs, err := g.nodeAgentRepo.ListEnabledIDs(ctx)
@@ -436,6 +469,8 @@ func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
 			slog.Error("[GameCacheManager] 查询分支失败", "gameId", game.ID, "err", err)
 			continue
 		}
+		// demand：该 game 各分支的实例承载节点（引用保护，§4.1）
+		serving := g.servingNodesByBranch(ctx, game.ID)
 		for _, branch := range branches {
 			if branch.Status != entity.Enable {
 				// 分支 Disable/Abandoned：从所有已启用节点删除该分支缓存（释放磁盘）。
@@ -450,14 +485,190 @@ func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
 				}
 				continue
 			}
-			for _, nodeAgentId := range nodeAgentIDs {
-				if err := g.CheckAndUpdate(ctx, game.ID, branch.BranchName, branch.LastBuildId, nodeAgentId); err != nil {
-					slog.Warn("[GameCacheManager] 缓存检查/更新失败",
-						"gameId", game.ID, "branchName", branch.BranchName,
-						"nodeAgentId", nodeAgentId, "err", err)
-					continue
-				}
+			g.reconcileBranch(ctx, game.ID, branch, nodeAgentIDs, serving[branch.BranchName])
+		}
+	}
+}
+
+// servingNodesByBranch 该 game 各 Enable 分支的"实例承载节点"（demand，§4.1）。
+// demand 是派生量：COUNT 实例（含 cache_warming，P2-C 后实例落库 branch_name）。
+func (g *GameCacheManager) servingNodesByBranch(ctx context.Context, gameID string) map[string]map[string]bool {
+	out := make(map[string]map[string]bool)
+	if g.instanceRepo == nil {
+		return out
+	}
+	instances, err := g.instanceRepo.ListByGame(ctx, gameID)
+	if err != nil {
+		slog.Error("[GameCacheManager] 查询实例失败", "gameId", gameID, "err", err)
+		return out
+	}
+	for _, inst := range instances {
+		if inst.NodeAgentID == nil || inst.BranchName == "" || !instanceActiveStatus(inst.Status) {
+			continue
+		}
+		if out[inst.BranchName] == nil {
+			out[inst.BranchName] = make(map[string]bool)
+		}
+		out[inst.BranchName][*inst.NodeAgentID] = true
+	}
+	return out
+}
+
+// instanceActiveStatus 实例是否"占用缓存引用"（demand 口径）
+func instanceActiveStatus(s entity.InstanceStatus) bool {
+	switch s {
+	case entity.StatusCacheWarming, entity.StatusPreparingBuild, entity.StatusRestoringSnapshot,
+		entity.StatusStarting, entity.StatusRunning, entity.StatusStopping, entity.StatusCleaning:
+		return true
+	}
+	return false
+}
+
+// reconcileBranch 单分支对账（§4.4）：
+//  1. 收集各节点实际缓存状态（available/downloading/missing，实时 gRPC）；
+//  2. 删除富余：非实例承载的 AVAILABLE 缓存，超出 min_replicas 保底后删除（带冷却防抖）；
+//  3. 更新：对实例承载节点 + 保底保留节点的缓存 CheckAndUpdate（跟分支最新）；
+//  4. 保底预热：min_replicas > 0 且不足时，挑非缓存节点 CacheGame 补足。
+func (g *GameCacheManager) reconcileBranch(ctx context.Context, gameID string, branch *entity.SteamBranch,
+	nodeAgentIDs []string, serving map[string]bool) {
+
+	type nodeState struct {
+		avail       bool
+		downloading bool
+	}
+	states := make(map[string]nodeState, len(nodeAgentIDs))
+	for _, id := range nodeAgentIDs {
+		gc, err := g.GetNodeCache(ctx, id, gameID, branch.BranchName)
+		if err != nil {
+			// 查询失败视为无缓存（保守，下轮重试）
+			slog.Warn("[GameCacheManager] 缓存状态查询失败", "gameId", gameID,
+				"branchName", branch.BranchName, "nodeAgentId", id, "err", err)
+			states[id] = nodeState{}
+			continue
+		}
+		if gc == nil {
+			states[id] = nodeState{}
+			continue
+		}
+		switch gc.GetStatus() {
+		case nodeagentv1.GameCacheStatus_AVAILABLE:
+			states[id] = nodeState{avail: true}
+		case nodeagentv1.GameCacheStatus_DOWNLOADING:
+			states[id] = nodeState{downloading: true}
+		}
+	}
+
+	// ---- 2) 删除富余（先删，腾出磁盘再更新/预热）----
+	// 保留目标 = max(实例承载节点数, min_replicas 保底)；下载中的不算可用，不删。
+	keepTarget := len(serving)
+	if branch.MinReplicas > keepTarget {
+		keepTarget = branch.MinReplicas
+	}
+	availCount := 0
+	for _, st := range states {
+		if st.avail || st.downloading {
+			availCount++
+		}
+	}
+	deleted := make(map[string]bool)
+	if !g.deleteCooledDown(gameID, branch.BranchName) && availCount > keepTarget {
+		for id, st := range states {
+			if availCount <= keepTarget {
+				break
+			}
+			if !st.avail || serving[id] {
+				continue // 只删"非承载 + 可用"的富余副本
+			}
+			if err := g.RemoveBranchCache(ctx, gameID, branch.BranchName, id); err != nil {
+				slog.Warn("[GameCacheManager] 删除富余缓存失败",
+					"gameId", gameID, "branchName", branch.BranchName,
+					"nodeAgentId", id, "err", err)
+				continue
+			}
+			deleted[id] = true
+			availCount--
+			g.markDeleted(gameID, branch.BranchName)
+		}
+	}
+
+	// ---- 3) 更新：实例承载节点 + 保留的可用缓存节点（CheckAndUpdate 幂等，跟分支最新）----
+	for id, st := range states {
+		if deleted[id] {
+			continue
+		}
+		if serving[id] || st.avail {
+			if err := g.CheckAndUpdate(ctx, gameID, branch.BranchName, branch.LastBuildId, id); err != nil {
+				slog.Warn("[GameCacheManager] 缓存检查/更新失败",
+					"gameId", gameID, "branchName", branch.BranchName,
+					"nodeAgentId", id, "err", err)
+				continue
 			}
 		}
 	}
+
+	// ---- 4) 保底预热（§4.3）：min_replicas > 0 且不足时补足 ----
+	if branch.MinReplicas > 0 {
+		keptAvail := 0
+		for id, st := range states {
+			if !deleted[id] && (st.avail || st.downloading) {
+				keptAvail++
+			}
+		}
+		if keptAvail < branch.MinReplicas {
+			for id, st := range states {
+				if keptAvail >= branch.MinReplicas {
+					break
+				}
+				if deleted[id] || st.avail || st.downloading {
+					continue
+				}
+				client := g.mustClient(ctx, id)
+				if client == nil {
+					continue
+				}
+				if err := g.triggerDownload(ctx, client, id, gameID, branch.BranchName, branch.LastBuildId); err != nil {
+					slog.Warn("[GameCacheManager] 保底预热失败",
+						"gameId", gameID, "branchName", branch.BranchName,
+						"nodeAgentId", id, "err", err)
+					continue
+				}
+				keptAvail++
+			}
+		}
+	}
+}
+
+// deleteCooledDown 是否处于删除冷却期（§4.6 防抖）
+func (g *GameCacheManager) deleteCooledDown(gameID, branchName string) bool {
+	g.deleteMu.Lock()
+	defer g.deleteMu.Unlock()
+	last, ok := g.deleteCooldown[gameID+":"+branchName]
+	return ok && time.Since(last) < cacheDeleteCooldown
+}
+
+// markDeleted 记录该分支刚删除过缓存（进入冷却期）
+func (g *GameCacheManager) markDeleted(gameID, branchName string) {
+	g.deleteMu.Lock()
+	defer g.deleteMu.Unlock()
+	g.deleteCooldown[gameID+":"+branchName] = time.Now()
+}
+
+// mustClient 解析节点客户端（保底预热用；失败返回 nil，调用方跳过）
+func (g *GameCacheManager) mustClient(ctx context.Context, nodeAgentID string) *nodeagent.NodeAgentFaceClient {
+	nodeAgent, err := g.nodeAgentRepo.GetByID(ctx, nodeAgentID)
+	if err != nil {
+		slog.Warn("[GameCacheManager] 查询 node_agent 失败", "nodeAgentId", nodeAgentID, "err", err)
+		return nil
+	}
+	node, err := g.nodeRepo.GetByID(nodeAgent.NodeId)
+	if err != nil {
+		slog.Warn("[GameCacheManager] 查询 node 失败", "nodeId", nodeAgent.NodeId, "err", err)
+		return nil
+	}
+	client, err := g.nodeAgentClients.Get(ctx, nodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+	if err != nil {
+		slog.Warn("[GameCacheManager] 获取 node_agent client 失败", "nodeAgentId", nodeAgentID, "err", err)
+		return nil
+	}
+	return client
 }

@@ -400,6 +400,28 @@ where
         Ok(removed.join(","))
     }
 
+    /// 启动时全量孤儿 GC（P2-D）：遍历所有缓存版本，按 (game,branch) 分组，
+    /// 回收非 current 且 refcount==0 的孤儿版本（含上次崩溃残留的 Removed/半成品目录）。
+    /// 失败只记日志，不影响启动。
+    pub async fn gc_all_orphans(&self) {
+        let versions = match self.game_cache_repos.get_all().await {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("gc_all_orphans get_all failed: {e}");
+                return;
+            }
+        };
+        let mut seen = std::collections::HashSet::new();
+        for v in &versions {
+            let key = format!("{}:{}", v.game_id, v.branch_name);
+            if seen.insert(key) {
+                if let Err(e) = self.gc_orphan_versions(&v.game_id, &v.branch_name).await {
+                    log::warn!("gc_all_orphans 分支 {}:{} 失败: {}", v.game_id, v.branch_name, e);
+                }
+            }
+        }
+    }
+
     /// 该 game+branch 是否还有活动实例（Preparing/Running/Stopping）引用。
     /// 优先用实例落库的 game_id/branch_name（P2-A）；旧实例回退本地构建缓存解析。
     async fn active_instance_of_game_branch(

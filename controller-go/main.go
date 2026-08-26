@@ -92,7 +92,7 @@ func main() {
 	//    依赖 GameCacheManager（H5 缓存判定）与 GameContainerPortMapper（H4 端口预检）
 	// ---------------------------------------------------------------
 	gameContainerPortMapper := biz.NewGameContainerPortMapper(containerPortMappingRepo, gameContainerConfigRepo)
-	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo)
+	gameCacheManager := biz.NewGameCacheManager(nodeAgentClients, assetClient, businessClient, steamBranchRepo, nodeAgentRepo, nodeRepo, gameRepo, gameInstanceRepo)
 	// 调度事件总线（S30 观测）：调度器/队列/压力/健康/缓存发布事件；双写内存 + DB 持久化（重启可回溯）
 	eventRepo := repogorm.NewSchedulerEventRepo(db)
 	eventBus := biz.NewSchedulerEventBus(cfg.EventBufferSize, eventRepo)

@@ -24,6 +24,7 @@ func (h *GameCacheHandler) RegisterRoutes(router *gin.Engine) {
 	group := router.Group("/api/games")
 	group.GET("/:id/branches", h.ListBranches)
 	group.POST("/:id/branches/sync", h.SyncBranches)
+	group.PUT("/:id/branches/:branch", h.SetBranchMinReplicas)
 	group.POST("/:id/branches/:branch/cache", h.UpdateBranchCache)
 	group.POST("/:id/branches/:branch/cache/remove", h.RemoveBranchCache)
 
@@ -50,6 +51,29 @@ func (h *GameCacheHandler) SyncBranches(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "synced"})
+}
+
+type setBranchMinReplicasRequest struct {
+	MinReplicas int `json:"min_replicas"`
+}
+
+// SetBranchMinReplicas 设置分支保底副本数（P2-D，§4.3）：0=按需，N=无实例也常驻 N 份
+func (h *GameCacheHandler) SetBranchMinReplicas(c *gin.Context) {
+	var req setBranchMinReplicasRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	err := h.gameCacheManager.SetBranchMinReplicas(c.Request.Context(), c.Param("id"), c.Param("branch"), req.MinReplicas)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "branch not found for game, sync first"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "min_replicas updated"})
 }
 
 type updateBranchCacheRequest struct {

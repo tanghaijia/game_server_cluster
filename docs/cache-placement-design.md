@@ -347,7 +347,7 @@ reserved_cache(N)  = Σ已落地缓存 size + Σ下载中 staging size
 | P2-A | 路径带 buildid + staging 原子切换 + refcount 延迟删除 + 实例落库 game_id/branch_name/cache_build_id | ✅ 已实现 |
 | P2-B | size_bytes 上报 + cache_budget 记账 + 更新缓冲 | ✅ 已实现 |
 | P2-C | 调度亲和评分 + 水位溢出 + 冷节点磁盘硬约束 + `cache_warming` 状态 | ✅ 已实现 |
-| P2-D | placer diff + `min_replicas` + GC 触发点 2/3/4 | ⬜ |
+| P2-D | placer diff + `min_replicas` + GC 触发点 2/3/4 | ✅ 已实现 |
 | P3 | depot content-addressed 去重 | ⬜ 可选 |
 
 P2-A 落地口径：
@@ -371,3 +371,10 @@ P2-C 落地口径：
 - 保留两个硬项：① 分支不可解析（无 Enable 分支）→ 结构性失败；② **冷节点磁盘硬约束**（§5.3）：needs(集群已知分支大小) ≤ 可用缓存预算 = 磁盘可分配 − 已用缓存（`CacheDiskUsageBytes`）− 更新缓冲（`SCHEDULER_CACHE_UPDATE_BUFFER_RATIO`，默认 0.15）；大小全集群未知 → 放行（下载期 ENOSPC 由节点 Unavailable 兜底）；
 - **`cache_warming` 实例状态**（§6）：选中节点无缓存 → `CacheGame` 触发下载（幂等），后台轮询节点缓存转 AVAILABLE 后进入 `PreparingBuild`；超时 60 分钟失败；`game_instances` 落库 `branch_name`/`cache_build_id`（迁移 000029，demand 聚合依据）；
 - 实例 `StatusCacheWarming` 计入 demand（§4.1 状态集合）；`resolveBranch` 修复（P1）后分支解析稳定。
+
+P2-D 落地口径：
+
+- **对账从"全扇出"收敛为 diff（§4.4）**：Enable 分支不再推给所有节点——先按 demand（实例承载节点，`ListByGame` 过滤 `branch_name` + 活跃状态）与 `min_replicas` 算保留目标，再：① 删除富余副本（仅非承载 + AVAILABLE，带 10 分钟删除冷却防抖）；② 对承载节点 + 保留的可用缓存 `CheckAndUpdate`（跟分支最新）；③ `min_replicas > 0` 时保底预热补足；
+- **`steam_branches.min_replicas`**（迁移 000030，§4.3）：管理员 `PUT /api/games/:id/branches/:branch` `{min_replicas}` 设置；0=按需，N=无实例也常驻 N 份；
+- **node 启动全量孤儿 GC**（`gc_all_orphans`）：启动时回收非 current 且 refcount=0 的版本（含崩溃残留），配合 clean 时 GC 覆盖稳态与异常；
+- 已知限制：保底预热选节点按 enabled 列表顺序（未做磁盘余量感知——`NodeCacheView` 与 manager 解耦，后续可注入容量视图）；删除冷却为内存态（重启重置，可接受）。
