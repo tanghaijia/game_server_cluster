@@ -69,6 +69,11 @@ type Config struct {
 	// game-cache 快照刷新周期（§10，P3）
 	CacheViewRefreshSec int
 
+	// P2-B：缓存更新缓冲比例（§8.4）——每节点保留的"下载双倍占用"安全垫，
+	// 占该节点缓存磁盘预算的比例；调度/更新共用"可用缓存预算"口径。
+	// 默认 0.15（max(最大单分支 size×1.5, cache_budget×15%) 中的 15% 部分）。
+	CacheUpdateBufferRatio float64
+
 	// 调度事件缓冲容量（S30 观测）
 	EventBufferSize int
 }
@@ -132,6 +137,9 @@ func Load() *Config {
 
 		// game-cache 快照刷新周期（§10）
 		CacheViewRefreshSec: getEnvInt("CACHE_VIEW_REFRESH_SEC", 30),
+
+		// P2-B：缓存更新缓冲比例（§8.4），默认 15%
+		CacheUpdateBufferRatio: getEnvFloat("CACHE_UPDATE_BUFFER_RATIO", 0.15),
 
 		// 调度事件缓冲容量（S30）
 		EventBufferSize: getEnvInt("EVENT_BUFFER_SIZE", 1000),

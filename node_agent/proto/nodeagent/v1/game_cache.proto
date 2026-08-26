@@ -21,4 +21,6 @@ message GameCache {
     optional float download_progress = 5;
     google.protobuf.Timestamp create_time = 6;
     google.protobuf.Timestamp update_time = 7;
+    // P2-B：缓存内容实测字节数（下载完成后 du 统计上报，供 controller 磁盘记账/调度）
+    uint64 size_bytes = 9;
 }

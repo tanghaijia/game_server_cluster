@@ -267,6 +267,8 @@ type NodeCacheOverview struct {
 	Status           string  `json:"status"` // available/downloading/removed/unavailable/missing
 	BuildID          string  `json:"build_id"`
 	DownloadProgress float32 `json:"download_progress"`
+	// P2-B：缓存内容实测字节数（0 = 未知）
+	SizeBytes uint64 `json:"size_bytes"`
 }
 
 // CacheOverview 全部 enabled 节点的 game-cache 状态（来自 NodeCacheView 快照，§10）
@@ -296,6 +298,7 @@ func (uc *ObserverUseCase) CacheOverview(ctx context.Context) ([]*NodeCacheOverv
 			row.Status = e.Status
 			row.BuildID = e.BuildID
 			row.DownloadProgress = e.DownloadProgress
+			row.SizeBytes = e.SizeBytes
 			out = append(out, &row)
 		}
 	}

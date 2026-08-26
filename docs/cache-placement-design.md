@@ -345,7 +345,7 @@ reserved_cache(N)  = Σ已落地缓存 size + Σ下载中 staging size
 |---|---|---|
 | P1 | RemoveCache RPC + 分支 Disable/Abandoned 删除 + 修 resolveBranch/panic | ✅ 已实现（commit aa7a3a0、1880c07） |
 | P2-A | 路径带 buildid + staging 原子切换 + refcount 延迟删除 + 实例落库 game_id/branch_name/cache_build_id | ✅ 已实现 |
-| P2-B | size_bytes 上报 + cache_budget 记账 + 更新缓冲 | ⬜ |
+| P2-B | size_bytes 上报 + cache_budget 记账 + 更新缓冲 | ✅ 已实现 |
 | P2-C | 调度亲和评分 + 水位溢出 + 冷节点磁盘硬约束 + `cache_warming` 状态 | ⬜ |
 | P2-D | placer diff + `min_replicas` + GC 触发点 2/3/4 | ⬜ |
 | P3 | depot content-addressed 去重 | ⬜ 可选 |
@@ -357,3 +357,10 @@ P2-A 落地口径：
 - refcount 仅用于旧目录延迟删除：start +1 / clean −1，孤儿（非 current 且 refcount=0）GC 删除目录+记录；
 - 旧数据库记录（key=`game:branch`）升级后不可见 → 该分支触发一次重新下载（可接受的迁移成本）；
 - 已知限制：start 失败路径的 refcount 可能残留（依赖后续 remove_cache / 周期 GC 收敛）；refcount 读写非事务（SQLite 单写者下并发窗口极小，观测优先，不阻塞 P2-B）。
+
+P2-B 落地口径：
+
+- `GameCache` proto/domain 加 `size_bytes`（uint64）：下载成功后 `dir_size`（迭代统计）实测回填，统计失败记 0 不阻塞下载；
+- `NodeCacheView.CacheEntry` 带 `SizeBytes`（观测接口一并透出）；新增 `CacheDiskUsageBytes(agentID)` 返回 Σ available / Σ downloading，作为调度"可用缓存预算 = cache_budget − reserved_cache − 更新缓冲"的输入（P2-C 消费）；
+- 配置 `CacheUpdateBufferRatio`（env `CACHE_UPDATE_BUFFER_RATIO`，默认 0.15）——§8.4 更新缓冲的 15% 部分；
+- 已知限制：快照只覆盖 Enable 分支，Disabled/Abandoned 分支缓存未计入记账（由 P1 删除循环收敛，暂态可接受）。

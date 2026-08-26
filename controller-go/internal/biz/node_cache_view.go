@@ -25,6 +25,8 @@ type CacheEntry struct {
 	Status           string  `json:"status"`    // available/downloading/removed/unavailable/missing
 	BuildID          string  `json:"build_id"`
 	DownloadProgress float32 `json:"download_progress"`
+	// P2-B：缓存内容实测字节数（node 下载完成后上报；0 = 未知）
+	SizeBytes uint64 `json:"size_bytes"`
 }
 
 // NodeCacheView game-cache 视图（§10）：进程内快照，周期刷新；
@@ -152,6 +154,8 @@ func (v *NodeCacheView) fetchEntry(ctx context.Context, agentID, gameID, branch 
 	}
 	entry.BuildID = gc.GetBuildId()
 	entry.DownloadProgress = gc.GetDownloadProgress()
+	// P2-B：缓存内容实测大小（磁盘记账输入）
+	entry.SizeBytes = gc.GetSizeBytes()
 	switch gc.GetStatus() {
 	case nodeagentv1.GameCacheStatus_AVAILABLE:
 		entry.Available = true
@@ -213,6 +217,27 @@ func (v *NodeCacheView) ListSnapshot() map[string][]*CacheEntry {
 		out[agentID] = entries
 	}
 	return out
+}
+
+// CacheDiskUsageBytes 返回某节点缓存的磁盘占用（P2-B 记账，§8.4）：
+// availableBytes = Σ AVAILABLE 版本 size；downloadingBytes = Σ DOWNLOADING 版本 size。
+// 调度/placer 用它做"可用缓存预算 = cache_budget − reserved_cache − 更新缓冲"的输入。
+// 注：快照只覆盖 Enable 分支（Disabled/Abandoned 分支的缓存由 P1 删除循环收敛，未计入）。
+func (v *NodeCacheView) CacheDiskUsageBytes(agentID string) (availableBytes, downloadingBytes uint64) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	m, ok := v.snapshot[agentID]
+	if !ok {
+		return 0, 0
+	}
+	for _, e := range m {
+		if e.Status == "downloading" {
+			downloadingBytes += e.SizeBytes
+		} else if e.Available {
+			availableBytes += e.SizeBytes
+		}
+	}
+	return availableBytes, downloadingBytes
 }
 
 var _ CacheStatusProvider = (*NodeCacheView)(nil)

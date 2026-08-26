@@ -26,6 +26,10 @@ pub struct GameCache {
     /// #[serde(default)] 兼容旧记录（无该字段时为 0）。
     #[serde(default)]
     pub refcount: i32,
+    /// 缓存内容实测字节数（P2-B：下载完成后统计上报，供 controller 磁盘记账/调度）。
+    /// 0 = 未知（未下载完成或统计失败）。
+    #[serde(default)]
+    pub size_bytes: u64,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
 }

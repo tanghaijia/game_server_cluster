@@ -721,6 +721,7 @@ fn map_domain_cache_to_proto(cache: DomainGameCache) -> node_agent::GameCache {
         status: map_domain_cache_status_to_proto(cache.status),
         path: cache.path,
         download_progress: cache.download_progress,
+        size_bytes: cache.size_bytes,
         create_time: Some(Timestamp {
             seconds: cache.create_time.timestamp(),
             nanos: cache.create_time.timestamp_subsec_nanos() as i32,

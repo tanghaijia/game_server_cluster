@@ -89,6 +89,8 @@ impl SteamServiceClient {
                     log::error!("{}", error_msg);
                     SteamServiceError::IoError(e)
                 })?;
+                // P2-B：实测缓存大小（供 controller 磁盘记账/调度；统计失败不阻塞下载）
+                game_cache.size_bytes = dir_size(&final_dir).await.unwrap_or(0);
                 game_cache.status = GameCacheStatus::Available;
                 self.game_cache_repos.save(&game_cache).await?;
                 Ok(())
@@ -267,4 +269,24 @@ pub fn progress_regex(line: &str) -> anyhow::Result<Option<f32>> {
     } else {
         Ok(None)
     }
+}
+
+/// 递归统计目录内容字节数（P2-B，供缓存磁盘记账）。
+/// 迭代实现（栈），避免 async 递归；统计失败返回 Ok(0) 由调用方决定是否忽略。
+async fn dir_size(root: &std::path::Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let mut entries = fs::read_dir(&dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let ft = entry.file_type().await?;
+            let path = entry.path();
+            if ft.is_dir() {
+                stack.push(path);
+            } else if ft.is_file() {
+                total += entry.metadata().await.map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+    Ok(total)
 }

@@ -274,6 +274,7 @@ where
             path: Some(path_str.to_string()),
             download_progress: None,
             refcount: 0,
+            size_bytes: 0,
             create_time: now,
             update_time: now,
         };
