@@ -45,6 +45,7 @@ use crate::{
             NodeHeartbeat as ProtoNodeHeartbeat, NodeOperation as ProtoNodeOperation,
             PortMapEntry, PortMapping, PortMappingMod,
             PrepareGameBuildRequest, PrepareGameBuildResponse,
+            RemoveCacheRequest, RemoveCacheResponse,
             RestoreSnapshotRequest as ProtoRestoreSnapshotRequest, RestoreSnapshotResponse,
             SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
             StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
@@ -437,6 +438,20 @@ where
         Ok(Response::new(CacheGameResponse {
             game_cache: Some(map_domain_cache_to_proto(cache)),
         }))
+    }
+
+    async fn remove_cache(
+        &self,
+        request: Request<RemoveCacheRequest>,
+    ) -> Result<Response<RemoveCacheResponse>, Status> {
+        let req = request.into_inner();
+        let removed_path = self
+            .service
+            .remove_cache(&req.game_id, &req.branch_name)
+            .await
+            .map_err(map_error)?;
+
+        Ok(Response::new(RemoveCacheResponse { removed_path }))
     }
 }
 

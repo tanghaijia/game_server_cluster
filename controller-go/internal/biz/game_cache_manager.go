@@ -281,6 +281,55 @@ func (g *GameCacheManager) UpdateBranchCache(ctx context.Context, gameId, branch
 	return g.CheckAndUpdate(ctx, gameId, branchName, branch.LastBuildId, nodeAgentId)
 }
 
+// RemoveBranchCache 删除指定 node_agent 上某 (game, branch) 的游戏缓存（释放磁盘）。
+// 幂等：节点已无该缓存（GetNodeCache 返回 nil）时直接返回成功；
+// 节点上有该 game 的活动实例引用时 node_agent 拒绝删除并返回错误（调用方记日志即可）。
+// 触发时机（docs/cache-placement-design.md §7）：分支 Disable/Abandoned、需求归零、
+// 磁盘压力、管理员显式删除。
+func (g *GameCacheManager) RemoveBranchCache(ctx context.Context, gameId, branchName, nodeAgentId string) error {
+	if nodeAgentId == "" {
+		return errors.New("node_agent_id is required")
+	}
+	if gameId == "" || branchName == "" {
+		return errors.New("game_id and branch_name are required")
+	}
+
+	// 幂等：节点已无缓存 → 无需删除
+	gc, err := g.GetNodeCache(ctx, nodeAgentId, gameId, branchName)
+	if err != nil {
+		return err
+	}
+	if gc == nil {
+		return nil
+	}
+
+	nodeAgent, err := g.nodeAgentRepo.GetByID(ctx, nodeAgentId)
+	if err != nil {
+		return fmt.Errorf("get node_agent %s: %w", nodeAgentId, err)
+	}
+	node, err := g.nodeRepo.GetByID(nodeAgent.NodeId)
+	if err != nil {
+		return fmt.Errorf("get node %s: %w", nodeAgent.NodeId, err)
+	}
+	client, err := g.nodeAgentClients.Get(ctx, nodeAgentId, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+	if err != nil {
+		return fmt.Errorf("get node_agent client %s: %w", nodeAgentId, err)
+	}
+
+	resp, err := client.RemoveCache(ctx, &nodeagentv1.RemoveCacheRequest{
+		GameId:     gameId,
+		BranchName: branchName,
+	})
+	if err != nil {
+		return fmt.Errorf("remove cache on node_agent %s: %w", nodeAgentId, err)
+	}
+
+	slog.Info("[GameCacheManager] 删除节点游戏缓存",
+		"gameId", gameId, "branchName", branchName, "nodeAgentId", nodeAgentId,
+		"removedPath", resp.GetRemovedPath())
+	return nil
+}
+
 // GetNodeCache 查询指定 node_agent 上某 (game, branch) 的缓存状态。
 // 缓存不存在（node_agent 返回 BUILD_CACHE_MISS / NOT_FOUND）时返回 (nil, nil)。
 func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId, branchName string) (*nodeagentv1.GameCache, error) {	if nodeAgentId == "" {
@@ -358,6 +407,8 @@ func (g *GameCacheManager) loop(ctx context.Context, interval time.Duration) {
 // reconcileOnce 执行一轮完整对账：
 // 1) 同步分支（SyncAndRecordBranch）
 // 2) 对每个 Enable 分支，把最新版本下载/更新到所有已启用节点（CheckAndUpdate）
+// 3) 对 Disable/Abandoned 分支，在所有已启用节点上删除其缓存（RemoveBranchCache）
+//    —— 释放磁盘（P1：删除不必要分支；有运行实例引用时节点拒绝并记日志）
 // 单个 game 或单个（分支, 节点）失败只记日志，不中断整轮。
 func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
 	nodeAgentIDs, err := g.nodeAgentRepo.ListEnabledIDs(ctx)
@@ -388,6 +439,16 @@ func (g *GameCacheManager) reconcileOnce(ctx context.Context) {
 		}
 		for _, branch := range branches {
 			if branch.Status != entity.Enable {
+				// 分支 Disable/Abandoned：从所有已启用节点删除该分支缓存（释放磁盘）。
+				// RemoveBranchCache 幂等（节点无缓存即返回），节点上有活动实例引用时拒绝。
+				for _, nodeAgentId := range nodeAgentIDs {
+					if err := g.RemoveBranchCache(ctx, game.ID, branch.BranchName, nodeAgentId); err != nil {
+						slog.Warn("[GameCacheManager] 删除废弃分支缓存失败",
+							"gameId", game.ID, "branchName", branch.BranchName,
+							"nodeAgentId", nodeAgentId, "err", err)
+						continue
+					}
+				}
 				continue
 			}
 			for _, nodeAgentId := range nodeAgentIDs {

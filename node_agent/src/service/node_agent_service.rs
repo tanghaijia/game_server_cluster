@@ -318,6 +318,92 @@ where
             })
     }
 
+    /// 删除节点上的 (game, branch) 游戏缓存（RemoveCache RPC）。
+    ///
+    /// 语义（与设计稿 docs/cache-placement-design.md §7 对齐）：
+    /// - 幂等：无缓存记录时直接返回成功（removed_path 为空）；
+    /// - 引用检查：该 game 仍有活动实例（Preparing/Running/Stopping）时拒绝删除，
+    ///   避免误删正在挂载该目录的实例（P1 按 game 粒度保守判断，分支粒度待 P2
+    ///   实例落库 branch_name 后细化）；
+    /// - 成功：删除磁盘目录 + 清理缓存记录，释放磁盘。
+    pub async fn remove_cache(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<String, NodeAgentError> {
+        let cache = self
+            .game_cache_repos
+            .get(&game_id.to_string(), &branch_name.to_string())
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: format!("get game_cache failed: {e}"),
+            })?;
+
+        // 幂等：无缓存记录视为已删除
+        let Some(cache) = cache else {
+            return Ok(String::new());
+        };
+
+        // 引用检查：该 game 仍有活动实例 → 拒绝删除
+        let instances = self
+            .game_instance_repos
+            .get_all()
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: format!("get instances failed: {e}"),
+            })?;
+        for inst in &instances {
+            let active = matches!(
+                inst.status,
+                crate::domain::GameInstanceStatus::Preparing
+                    | crate::domain::GameInstanceStatus::Running
+                    | crate::domain::GameInstanceStatus::Stopping
+            );
+            if !active {
+                continue;
+            }
+            // 解析实例所属 game（本地构建缓存）；解析不到 → 保守视为同 game，拒绝
+            let same_game = match self
+                .local_game_build_repos
+                .get(inst.game_build_id.clone())
+                .await
+            {
+                Ok(lb) => lb.game.id == game_id,
+                Err(_) => true,
+            };
+            if same_game {
+                return Err(NodeAgentError::InvalidRequest {
+                    message: format!(
+                        "cache in use by active instances, refuse remove: game_id={}, branch_name={}",
+                        game_id, branch_name
+                    ),
+                });
+            }
+        }
+
+        // 删除磁盘目录（存在才删）
+        if let Some(path) = &cache.path {
+            let dir = PathBuf::from(path);
+            if dir.exists() {
+                tokio::fs::remove_dir_all(&dir)
+                    .await
+                    .map_err(|e| NodeAgentError::PathError {
+                        message: format!("remove cache dir {} failed: {}", path, e),
+                    })?;
+            }
+        }
+
+        // 清理记录（幂等）
+        self.game_cache_repos
+            .delete(&game_id.to_string(), &branch_name.to_string())
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: format!("delete game_cache failed: {e}"),
+            })?;
+
+        Ok(cache.path.unwrap_or_default())
+    }
+
     pub fn failure(message: impl Into<String>, retryable: bool) -> FailureInfo {
         FailureInfo {
             message: message.into(),

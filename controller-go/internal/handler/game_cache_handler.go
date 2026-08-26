@@ -25,6 +25,7 @@ func (h *GameCacheHandler) RegisterRoutes(router *gin.Engine) {
 	group.GET("/:id/branches", h.ListBranches)
 	group.POST("/:id/branches/sync", h.SyncBranches)
 	group.POST("/:id/branches/:branch/cache", h.UpdateBranchCache)
+	group.POST("/:id/branches/:branch/cache/remove", h.RemoveBranchCache)
 
 	agentGroup := router.Group("/api/node-agents")
 	agentGroup.GET("/:id/cache", h.GetNodeCache)
@@ -77,6 +78,27 @@ func (h *GameCacheHandler) UpdateBranchCache(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "cache ok"})
+}
+
+// RemoveBranchCache 手动删除指定 node_agent 上某 (game, branch) 的游戏缓存（释放磁盘）。
+// 幂等：节点无缓存返回成功；节点有活动实例引用时返回错误。
+func (h *GameCacheHandler) RemoveBranchCache(c *gin.Context) {
+	var req updateBranchCacheRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	if req.NodeAgentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_agent_id is required"})
+		return
+	}
+
+	err := h.gameCacheManager.RemoveBranchCache(c.Request.Context(), c.Param("id"), c.Param("branch"), req.NodeAgentID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "cache removed"})
 }
 
 // GetNodeCache 查询指定 node_agent 上某 (game, branch) 的缓存状态

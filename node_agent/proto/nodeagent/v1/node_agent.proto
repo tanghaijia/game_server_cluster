@@ -30,6 +30,12 @@ service NodeAgentService {
   rpc CacheGame (CacheGameRequest) returns (CacheGameResponse);
 
   rpc GetCacheGame (GetCacheGameRequest) returns (CacheGameResponse);
+
+  // 删除节点上的 (game, branch) 游戏缓存（释放磁盘）。
+  // 语义：幂等——缓存不存在时返回成功（removed_path 为空）；
+  // 节点上有该 game 的活动实例引用时拒绝（错误）。
+  // 由 controller 在分支 Disable/Abandoned、需求归零、磁盘压力、管理员显式删除时下发。
+  rpc RemoveCache (RemoveCacheRequest) returns (RemoveCacheResponse);
 }
 
 message GetInstancesRequest {}
@@ -59,6 +65,16 @@ message GetCacheGameRequest {
 
 message CacheGameResponse {
     GameCache game_cache = 1;
+}
+
+message RemoveCacheRequest {
+    string game_id = 1;
+    string branch_name = 2;
+}
+
+message RemoveCacheResponse {
+    // 被删除的缓存目录路径（无缓存记录时为空串）
+    string removed_path = 1;
 }
 
 message PrepareGameBuildRequest {

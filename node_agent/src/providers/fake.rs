@@ -686,6 +686,16 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
             Ok(true)
         }
     }
+
+    async fn delete(&self, game_id: &String, branch_name: &String) -> anyhow::Result<()> {
+        let key = format!("{}:{}", game_id, branch_name);
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        store.remove(&key);
+        Ok(())
+    }
 }
 
 // ============================================================

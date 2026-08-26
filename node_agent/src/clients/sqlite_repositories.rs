@@ -376,6 +376,15 @@ impl GameCacheRepository for SqliteGameCacheRepository {
         // rows_affected == 1 表示本次真正插入(key 原本不存在);0 表示 key 已存在
         Ok(result.rows_affected() == 1)
     }
+
+    async fn delete(&self, game_id: &String, branch_name: &String) -> anyhow::Result<()> {
+        let key = format!("{}:{}", game_id, branch_name);
+        sqlx::query(&format!("DELETE FROM {TABLE_GAME_CACHE} WHERE key = ?1"))
+            .bind(&key)
+            .execute(&*self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 // ============================================================

@@ -148,27 +148,33 @@ func (s *ResourceAwareScheduler) resolveRequest(instance *entity.GameInstance, c
 	return req
 }
 
-// resolveBranch 解析实例 game_build 对应的 steam 分支名（H5 判定用）。
-// 1) 优先：分支 last_build_id 精确匹配实例 build；
-// 2) 回退：该 game 任一 Enable 分支（缓存按 (game, branch) 组织，build 版本差异由启动流程处理；
-//    避免"分支表有记录但 build 非最新"时误判无缓存导致调度失败）。
+// resolveBranch 解析实例 game_build 对应的 steam 分支名（H5/缓存亲和判定用）。
+// 语义（docs/cache-placement-design.md §5/§12）：实例不 pin 具体 Steam buildid，
+// 跟随分支最新 —— 因此这里只解析"该 game 的 Enable 分支"：
+// 1) 优先 public（Steam 默认分支）；
+// 2) 回退任一 Enable 分支。
+// 修复：此前用 fmt.Sprintf("%d", b.LastBuildId) == instance.GameBuildId 做字符串比较，
+// 混淆了 Steam buildid（u64）与 GameBuild.build_id（string，如 dst-public-0.2.2），
+// 恒不相等 → 精确匹配分支永远失败（死代码）。现删除该循环。
 // 分支表完全没有该 game 的 Enable 记录时返回空串（视为无缓存，需先同步分支）。
 func (s *ResourceAwareScheduler) resolveBranch(ctx context.Context, instance *entity.GameInstance) string {
 	branches, err := s.steamBranchRepo.ListByGame(ctx, instance.GameID)
 	if err != nil {
 		return ""
 	}
+	var fallback string
 	for _, b := range branches {
-		if fmt.Sprintf("%d", b.LastBuildId) == instance.GameBuildId {
+		if b.Status != entity.Enable {
+			continue
+		}
+		if b.BranchName == steamPublicBranchName {
 			return b.BranchName
 		}
-	}
-	for _, b := range branches {
-		if b.Status == entity.Enable {
-			return b.BranchName
+		if fallback == "" {
+			fallback = b.BranchName
 		}
 	}
-	return ""
+	return fallback
 }
 
 func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.GameInstance) (*ScheduleResult, error) {

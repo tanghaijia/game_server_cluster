@@ -223,3 +223,11 @@ func (c *NodeAgentFaceClient) GetCacheGame(ctx context.Context, in *nodeagentv1.
 	}
 	return out, nil
 }
+
+func (c *NodeAgentFaceClient) RemoveCache(ctx context.Context, in *nodeagentv1.RemoveCacheRequest, opts ...grpc.CallOption) (*nodeagentv1.RemoveCacheResponse, error) {
+	out, err := c.client.RemoveCache(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("remove cache: %w", err)
+	}
+	return out, nil
+}

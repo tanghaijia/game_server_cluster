@@ -34,12 +34,14 @@ impl SteamServiceClient {
     }
 
     async fn download(&self, mut game_cache: GameCache) -> Result<(), SteamServiceError> {
-        // path 为空是调用方错误，不需写 DB
+        // path 为空是调用方错误，不需写 DB。
+        // 注意：不要对 Option 直接 unwrap（path 为 None 时 panic），
+        // 这里只记录 game_id/branch_name 即可定位。
         if game_cache.path.is_none() {
             log::error!(
                 "{} {} 下载路径空",
-                game_cache.path.clone().unwrap().as_str(),
                 game_cache.game_id.as_str(),
+                game_cache.branch_name.as_str(),
             );
             game_cache.status = GameCacheStatus::Unavailable;
             let _ = self.game_cache_repos.save(&game_cache).await;
