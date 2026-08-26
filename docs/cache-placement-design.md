@@ -77,6 +77,9 @@
    失败：只删 .staging，旧 current 原封不动 → 置 Unavailable + 原因（#4 保留人工语义）
 ```
 
+> **磁盘口径（下载双倍占用）**：staging 期间该分支磁盘峰值是 2×（staging 新版本 + 旧 current；切换后旧目录因实例引用延迟删除仍占 1×，见 §8.4）。
+> 因此"更新"是需要**暂存空间**的操作：节点无足够剩余空间时 **推迟更新**（reason=insufficient_cache_disk，等 GC / 实例停止腾出空间后再试），**绝不回退到原地覆盖**（§3.4）。
+
 ### 3.3 引用计数（refcount）与延迟删除
 
 - refcount 来源：**运行中实例引用该 buildid**（`start` 时 +1，`stop/clean` 时 −1）。
@@ -189,7 +192,8 @@ cache_affinity(N) = 1   (AVAILABLE 或 DOWNLOADING)
 
 ```
 对冷节点候选（会触发 cache_warming）：
-    额外检查  size(g,branch) ≤ cache_budget(N) − current_cache_used(N)
+    额外检查  size(g,branch) ≤ 可用缓存预算(N)
+    其中 可用缓存预算(N) = cache_budget(N) − 已落地缓存 − 下载中 staging − 更新缓冲（§8.4）
     不满足 → 该节点对本实例排除（物理上装不下这份缓存）
 ```
 
@@ -261,6 +265,31 @@ cache_budget(N) = storage_size − 已预留实例/data − 快照临时 − hea
 
 实例落到冷节点时，把 `size(g,branch)` 计入该次调度的磁盘预留（扩展 S8 预留机制），防止并发调度同时认为"还放得下"；下载完成按实测 `size_bytes` 冲正。placer 的磁盘压力驱逐与调度器共用同一容量数据源，不再各算各的。
 
+### 8.4 下载双倍占用（staging 口径）
+
+下载（尤其更新）期间磁盘峰值不是 1× 而是 2×（暂存 + 现存）：
+
+| 场景 | 该分支磁盘峰值 |
+|---|---|
+| 冷启动下载 | 1×（staging 即最终内容，成功后 rename 落位） |
+| 更新下载中 | 2×（staging 新版本 + 旧 current） |
+| 切换后 | 2×（新 current + 旧目录孤儿，等 refcount=0 回收）→ 1× |
+
+容量记账必须包含"下载中 staging"项，并在每节点预算中保留**更新缓冲**：
+
+```
+reserved_cache(N)  = Σ已落地缓存 size + Σ下载中 staging size
+更新缓冲(N)        = max(最大已知单分支 size × 1.5, cache_budget(N) × 15%)   # 可配置
+可用缓存预算(N)     = cache_budget(N) − reserved_cache(N) − 更新缓冲(N)
+```
+
+后果与对策（**回答"下载占双倍，调度器考虑吗"**）：
+
+- 现状：调度器完全不跟踪缓存磁盘（H3 只算实例 `/data`，NodeCacheView 无 size），**没有考虑**——这是 P2 要补的核心缺口；
+- 调度器冷启动放置实例时按 §8.3 预留 `size(g,branch)`（1×），且冷节点检查用 §5.3 的"可用缓存预算"口径（含下载中 staging 与更新缓冲）；
+- 控制器触发**更新**时若节点 `可用缓存预算 < 新 size` → **推迟更新**（reason=insufficient_cache_disk），等 GC / 实例停止腾出空间后再试，**不回退原地覆盖**；
+- 下载完成按实测 `size_bytes` 冲正预留；失败删 staging 释放空间。
+
 ---
 
 ## 9. 数据模型与接口改动
@@ -295,6 +324,7 @@ cache_budget(N) = storage_size − 已预留实例/data − 快照临时 − hea
 | 溢出水位 | 剩余 < N 个实例 request（推荐）或利用率 > X% | 用调度器资源模型算，非常数 |
 | `min_replicas` | 默认 0，热游手动 1~2 | 受节点数夹取；0 = 不保留、接受冷启动 |
 | 删除冷却（防抖） | 10 分钟 | 降副本侧生效 |
+| 更新缓冲 | max(最大已知单分支 size × 1.5, cache_budget × 15%) | 下载双倍占用的安全垫；防止"更新永远没有空间 staging" |
 | 缓存磁盘 `headroom` | 随 S4 安全余量配置 | 与实例调度共用 |
 
 ---
