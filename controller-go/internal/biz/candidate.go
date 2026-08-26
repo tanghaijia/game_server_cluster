@@ -9,11 +9,30 @@ import (
 	"controller-go/internal/entity"
 )
 
-// CacheStatusProvider 提供节点 game-cache 状态（H5 判定，§6.1/§10）。
-// 由 GameCacheManager 实现（GetNodeCache 实时查询 node_agent）；P3 可替换为 NodeCacheView 快照。
+// CacheState 节点上 (game, branch) 的缓存状态（P2-C：调度缓存亲和 + 冷节点磁盘判定输入）
+type CacheState struct {
+	// status: available / downloading / removed / unavailable / missing
+	Status    string `json:"status"`
+	Available bool   `json:"available"` // status == AVAILABLE（H5 命中）
+	// P2-B：缓存内容实测字节数（0 = 未知）
+	SizeBytes uint64 `json:"size_bytes"`
+}
+
+// CacheStatusProvider 提供节点 game-cache 状态（§6.1/§10）。
+// 由 NodeCacheView 实现（快照）；调度 P2-C 用它做缓存亲和评分 + 冷节点磁盘硬约束。
 type CacheStatusProvider interface {
-	// CacheAvailable 判断节点是否有该 (game, branch) 的 AVAILABLE 缓存
+	// CacheAvailable 判断节点是否有该 (game, branch) 的 AVAILABLE 缓存（H5 判定）
 	CacheAvailable(ctx context.Context, nodeAgentID, gameID, branchName string) (bool, error)
+
+	// CacheState 返回节点上 (game, branch) 的缓存状态（含大小），P2-C 调度用
+	CacheState(ctx context.Context, nodeAgentID, gameID, branchName string) (CacheState, error)
+
+	// CacheDiskUsageBytes 返回某节点缓存磁盘占用（Σ available / Σ downloading），P2-C 预算判定用
+	CacheDiskUsageBytes(agentID string) (availableBytes, downloadingBytes uint64)
+
+	// BranchSizeBytes 返回某 (game, branch) 的已知缓存大小（集群内任意节点实测最大者）。
+	// ok=false 表示全集群未知（从未下载过），调度侧无法硬校验，放行交给下载期兜底。
+	BranchSizeBytes(ctx context.Context, gameID, branchName string) (size uint64, ok bool)
 }
 
 // NodeCandidate 调度候选节点（§2.2 步骤 1）
@@ -26,6 +45,9 @@ type NodeCandidate struct {
 	// filter 结果（constraint.go 填充）
 	Excluded bool
 	Reasons  []string
+
+	// P2-C：该 (game,branch) 在本节点的缓存状态（filter 阶段查询一次，评分/落点复用）
+	CacheState CacheState
 
 	// scoring 结果（scoring.go 填充）
 	Score float64

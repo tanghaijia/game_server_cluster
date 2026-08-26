@@ -65,6 +65,11 @@ type ScheduleResult struct {
 	Score       float64
 	Scores      map[string]float64 // 选中节点各维度得分
 	ResourceReq entity.ResourceRequest // 本次调度解析的资源需求（释放预留时用，7.2）
+	// P2-C：选中的节点无该 (game,branch) 缓存 → 需要 cache_warming（等下载完成再 PreparingBuild）
+	CacheNeeded bool
+	// P2-C：解析出的 Steam 分支名 + 目标缓存 buildid（cache_warming 下发 CacheGame 用，随实例落库）
+	BranchName string
+	BuildID    string
 }
 
 type Scheduler interface {

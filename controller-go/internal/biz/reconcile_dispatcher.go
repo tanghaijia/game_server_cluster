@@ -251,8 +251,15 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 				_ = d.queueManager.Cancel(ctx, instance.ID)
 			}
 			// 同步内存对象并保存 ResourceReq（供释放预留，7.2）。
+			// P2-C：落库解析出的分支 + 目标缓存 buildid；无缓存 → cache_warming，否则直接 preparing_build。
 			instance.NodeAgentID = &result.NodeAgentID
-			instance.Status = entity.StatusPreparingBuild
+			instance.BranchName = result.BranchName
+			instance.CacheBuildID = result.BuildID
+			if result.CacheNeeded {
+				instance.Status = entity.StatusCacheWarming
+			} else {
+				instance.Status = entity.StatusPreparingBuild
+			}
 			instance.ResourceReq = &result.ResourceReq
 			instance.QueuedReason = ""
 			instance.QueuedAt = nil
@@ -310,6 +317,54 @@ func (d *ReconcileDispatcher) Dispatch(ctx context.Context, instance *entity.Gam
 			instance.FailReason = result.Reason
 			d.FailedInstance(ctx, instance)
 		}
+	case entity.StatusCacheWarming:
+		// P2-C：选中节点无该 (game,branch) 缓存 → 下发 CacheGame 触发下载/预热，
+		// 后台轮询节点缓存转 AVAILABLE 后再进入 PreparingBuild。
+		// 不阻塞消费管线：CacheGame 只发一次（node 端幂等），等就绪由轮询 goroutine 完成。
+		if instance.NodeAgentID == nil {
+			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		if instance.BranchName == "" {
+			instance.FailReason = "cache_warming 但分支未解析"
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		nodeAgent, err := d.nodeAgnetRepo.GetByID(ctx, *instance.NodeAgentID)
+		if err != nil {
+			slog.Error("[DB] nodeAgnetRepo GetByID fail", "NodeAgentId", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		node, err := d.nodeRepo.GetByID(nodeAgent.NodeId)
+		if err != nil {
+			slog.Error("[DB] nodeRepo GetByID fail", "NodeId", nodeAgent.NodeId)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		client, err := d.nodeAgentClients.Get(ctx, *instance.NodeAgentID, fmt.Sprintf("%s:%d", node.Ip, nodeAgent.Port))
+		if err != nil {
+			slog.Error("[NodeAgentClients] Get Client fail", "NodeAgentID", instance.NodeAgentID)
+			d.FailedInstance(ctx, instance)
+			return nil
+		}
+		// 触发下载（幂等：node 端同一版本只下一次；Downloading/Available 直接返回）
+		ccallCtx, ccancel := d.withRPCTimeout(ctx)
+		_, cerr := client.CacheGame(ccallCtx, &nodeagentv1.CacheGameRequest{
+			GameId:     instance.GameID,
+			BranchName: instance.BranchName,
+			BuildId:    instance.CacheBuildID,
+		})
+		ccancel()
+		if cerr != nil {
+			d.handleDispatchError(ctx, instance, cerr, "CacheGame")
+			return nil
+		}
+		slog.Info("[ReconcileDispatcher] 缓存预热已触发，等待 AVAILABLE",
+			"instanceId", instance.ID, "gameId", instance.GameID,
+			"branch", instance.BranchName, "buildId", instance.CacheBuildID)
+		go d.pollCacheReady(ctx, instance, client, d.onCacheWarmReady)
 	case entity.StatusPreparingBuild:
 		if instance.NodeAgentID == nil {
 			slog.Error("[NodeAgent] NodeAgentID 为空", "instanceId", instance.ID, "status", instance.Status)
@@ -888,6 +943,56 @@ func (d *ReconcileDispatcher) PollingResult(ctx context.Context,
 func (d *ReconcileDispatcher) onPrepareBuildSucceeded(ctx context.Context, instance *entity.GameInstance) {
 	instance.Status = entity.StatusRestoringSnapshot
 	d.RequestDispatch(ctx, instance)
+}
+
+// P2-C 缓存预热（§6）：
+// - cacheWarmPollInterval：轮询节点缓存状态的间隔；
+// - cacheWarmTimeoutMin：预热超时（大游戏下载可能很久，默认 60 分钟）。
+const (
+	cacheWarmPollInterval = 10 * time.Second
+	cacheWarmTimeoutMin   = 60
+)
+
+/**
+* 缓存转 AVAILABLE 后的回调：进入 PreparingBuild（继续原有构建流程）。
+**/
+func (d *ReconcileDispatcher) onCacheWarmReady(ctx context.Context, instance *entity.GameInstance) {
+	if instance.Status != entity.StatusCacheWarming {
+		return
+	}
+	slog.Info("[ReconcileDispatcher] 缓存就绪，进入构建阶段",
+		"instanceId", instance.ID, "gameId", instance.GameID, "branch", instance.BranchName)
+	instance.Status = entity.StatusPreparingBuild
+	d.instanceRepo.Save(ctx, instance)
+	d.RequestDispatch(ctx, instance)
+}
+
+/**
+* 后台轮询节点 (game,branch) 缓存直到 AVAILABLE（或超时失败）。
+* 与 PollingResult 同模式：不阻塞消费管线；下载是异步的，轮询期间
+* GetCacheGame 返回 DOWNLOADING/Removed 均非致命，继续等到超时。
+**/
+func (d *ReconcileDispatcher) pollCacheReady(ctx context.Context, instance *entity.GameInstance,
+	client *nodeagent.NodeAgentFaceClient, onReady func(ctx context.Context, instance *entity.GameInstance)) {
+	deadline := time.Now().Add(cacheWarmTimeoutMin * time.Minute)
+	for time.Now().Before(deadline) {
+		time.Sleep(cacheWarmPollInterval)
+		callCtx, cancel := d.withRPCTimeout(ctx)
+		resp, err := client.GetCacheGame(callCtx, &nodeagentv1.GetCacheGameRequest{
+			GameId:     instance.GameID,
+			BranchName: instance.BranchName,
+		})
+		cancel()
+		if err == nil && resp != nil && resp.GameCache != nil &&
+			resp.GameCache.GetStatus() == nodeagentv1.GameCacheStatus_AVAILABLE {
+			onReady(ctx, instance)
+			return
+		}
+	}
+	slog.Error("[ReconcileDispatcher] 缓存预热超时",
+		"instanceId", instance.ID, "gameId", instance.GameID, "branch", instance.BranchName)
+	instance.FailReason = "缓存预热超时（" + strconv.Itoa(cacheWarmTimeoutMin) + " 分钟）"
+	d.FailedInstance(context.Background(), instance)
 }
 
 /**

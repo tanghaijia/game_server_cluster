@@ -368,9 +368,8 @@ func (g *GameCacheManager) GetNodeCache(ctx context.Context, nodeAgentId, gameId
 	return resp.GameCache, nil
 }
 
-// CacheAvailable 实现 CacheStatusProvider（H5 判定，§6.1）：
-// 查询节点 (game, branch) 缓存状态，仅 status == AVAILABLE 视为命中
-// （D2：DOWNLOADING 不算命中；缓存缺失返回 false）。
+// CacheAvailable 判断节点 (game, branch) 缓存是否 AVAILABLE（实时 gRPC 查询；
+// P2-C 后调度改走 NodeCacheView 快照的 CacheState，本方法保留供运维/兜底）。
 func (g *GameCacheManager) CacheAvailable(ctx context.Context, nodeAgentId, gameId, branchName string) (bool, error) {
 	gc, err := g.GetNodeCache(ctx, nodeAgentId, gameId, branchName)
 	if err != nil {

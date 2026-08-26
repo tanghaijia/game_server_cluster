@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -31,7 +32,19 @@ func (s *ResourceAwareScheduler) applyConstraints(
 	if !s.constraintPorts(ctx, c, instance, game) {
 		return false
 	}
-	if !s.constraintCache(ctx, c, instance, branch) {
+	// P2-C：缓存从硬约束（H5）降为软偏好评分（cache_affinity，scoring.go）。
+	// 此处仅保留两个硬项：
+	//   ① 分支可解析（branch=="" → 结构性失败：无 Enable 分支，无法缓存/预热）；
+	//   ② 冷节点磁盘硬约束（§5.3/§8.4：下载缓存放不下 → 排除）。
+	// 查询一次缓存状态，供评分复用。
+	st, _ := s.cacheProvider.CacheState(ctx, c.Agent.ID, instance.GameID, branch)
+	c.CacheState = st
+	if branch == "" {
+		c.Excluded = true
+		c.Reasons = append(c.Reasons, "无法解析实例 game_build 对应分支（视为无缓存）")
+		return false
+	}
+	if !s.constraintCacheDisk(ctx, c, instance.GameID, branch) {
 		return false
 	}
 	if !s.constraintPressure(c) {
@@ -93,22 +106,34 @@ func (s *ResourceAwareScheduler) constraintPorts(ctx context.Context, c *NodeCan
 	return true
 }
 
-// constraintCache H5：该 (game, branch) 在节点上为 AVAILABLE（D2：DOWNLOADING 不算命中）
-func (s *ResourceAwareScheduler) constraintCache(ctx context.Context, c *NodeCandidate, instance *entity.GameInstance, branch string) bool {
-	if branch == "" {
-		c.Excluded = true
-		c.Reasons = append(c.Reasons, "无法解析实例 game_build 对应分支（视为无缓存）")
-		return false
+// constraintCacheDisk 冷节点磁盘硬约束（§5.3/§8.4）：
+// 节点无该 (game,branch) 的 AVAILABLE/DOWNLOADING 缓存（冷节点，需要下载）时，
+// 必须能装下这份缓存：needs(已知分支大小) ≤ 可用缓存预算
+//   = 磁盘可分配 − 该节点已用缓存 − 更新缓冲（CACHE_UPDATE_BUFFER_RATIO）
+// 大小全集群未知（从未下载过）→ 放行（下载期 ENOSPC 由节点 Unavailable + 人工兜底）。
+func (s *ResourceAwareScheduler) constraintCacheDisk(ctx context.Context, c *NodeCandidate, gameID, branch string) bool {
+	st := c.CacheState
+	if st.Available || st.Status == "downloading" {
+		return true // 已有缓存/正在暖，无需再为下载腾空间
 	}
-	ok, err := s.cacheProvider.CacheAvailable(ctx, c.Agent.ID, instance.GameID, branch)
-	if err != nil {
-		c.Excluded = true
-		c.Reasons = append(c.Reasons, "game-cache 查询失败: "+err.Error())
-		return false
+	needs, known := s.cacheProvider.BranchSizeBytes(ctx, gameID, branch)
+	if !known || needs == 0 {
+		return true // 大小未知，无法硬校验
 	}
-	if !ok {
+	avail, downloading := s.cacheProvider.CacheDiskUsageBytes(c.Agent.ID)
+	used := avail + downloading
+	alloc := uint64(c.Capacity.DiskAllocatableBytes)
+	buffer := uint64(float64(alloc) * s.cacheUpdateBufferRatio)
+	var budget uint64
+	if alloc <= used+buffer {
+		budget = 0
+	} else {
+		budget = alloc - used - buffer
+	}
+	if needs > budget {
 		c.Excluded = true
-		c.Reasons = append(c.Reasons, "无该 game_build 的 AVAILABLE 缓存")
+		c.Reasons = append(c.Reasons,
+			fmt.Sprintf("磁盘不足:缓存预留需 %d bytes,可用缓存预算 %d bytes", needs, budget))
 		return false
 	}
 	return true
@@ -139,11 +164,12 @@ func pressureStatusName(s entity.NodePressureStatus) string {
 
 // isResourceOnlyReasons 判断排除原因是否全部属于"可恢复资源类"
 // （仅资源/端口/压力不足 → 可排队；含结构性原因 → 失败）。
+// P2-C：缓存已降为软偏好，唯一结构性缓存原因 = 分支不可解析（"无法解析"/"分支"）；
+// 冷节点磁盘不足（"磁盘不足"）属可恢复（等 GC/实例停腾出空间）→ 排队。
 func isResourceOnlyReasons(reasons []string) bool {
 	for _, r := range reasons {
 		if strings.Contains(r, "未启用") ||
 			strings.Contains(r, "健康") ||
-			strings.Contains(r, "缓存") ||
 			strings.Contains(r, "无法解析") ||
 			strings.Contains(r, "分支") {
 			return false

@@ -346,7 +346,7 @@ reserved_cache(N)  = Σ已落地缓存 size + Σ下载中 staging size
 | P1 | RemoveCache RPC + 分支 Disable/Abandoned 删除 + 修 resolveBranch/panic | ✅ 已实现（commit aa7a3a0、1880c07） |
 | P2-A | 路径带 buildid + staging 原子切换 + refcount 延迟删除 + 实例落库 game_id/branch_name/cache_build_id | ✅ 已实现 |
 | P2-B | size_bytes 上报 + cache_budget 记账 + 更新缓冲 | ✅ 已实现 |
-| P2-C | 调度亲和评分 + 水位溢出 + 冷节点磁盘硬约束 + `cache_warming` 状态 | ⬜ |
+| P2-C | 调度亲和评分 + 水位溢出 + 冷节点磁盘硬约束 + `cache_warming` 状态 | ✅ 已实现 |
 | P2-D | placer diff + `min_replicas` + GC 触发点 2/3/4 | ⬜ |
 | P3 | depot content-addressed 去重 | ⬜ 可选 |
 
@@ -364,3 +364,10 @@ P2-B 落地口径：
 - `NodeCacheView.CacheEntry` 带 `SizeBytes`（观测接口一并透出）；新增 `CacheDiskUsageBytes(agentID)` 返回 Σ available / Σ downloading，作为调度"可用缓存预算 = cache_budget − reserved_cache − 更新缓冲"的输入（P2-C 消费）；
 - 配置 `CacheUpdateBufferRatio`（env `CACHE_UPDATE_BUFFER_RATIO`，默认 0.15）——§8.4 更新缓冲的 15% 部分；
 - 已知限制：快照只覆盖 Enable 分支，Disabled/Abandoned 分支缓存未计入记账（由 P1 删除循环收敛，暂态可接受）。
+
+P2-C 落地口径：
+
+- 缓存从硬约束（H5）降为**软偏好**：`cache_affinity` 评分项（默认权重 2.0，强亲和），AVAILABLE/DOWNLOADING 且利用率 ≤ 水位（`SCHEDULER_CACHE_SPILL_WATERMARK`，默认 0.8）才加分——亲和节点饱和时去权，自动溢到冷节点（副本数随落点涌现，§4.2）；
+- 保留两个硬项：① 分支不可解析（无 Enable 分支）→ 结构性失败；② **冷节点磁盘硬约束**（§5.3）：needs(集群已知分支大小) ≤ 可用缓存预算 = 磁盘可分配 − 已用缓存（`CacheDiskUsageBytes`）− 更新缓冲（`SCHEDULER_CACHE_UPDATE_BUFFER_RATIO`，默认 0.15）；大小全集群未知 → 放行（下载期 ENOSPC 由节点 Unavailable 兜底）；
+- **`cache_warming` 实例状态**（§6）：选中节点无缓存 → `CacheGame` 触发下载（幂等），后台轮询节点缓存转 AVAILABLE 后进入 `PreparingBuild`；超时 60 分钟失败；`game_instances` 落库 `branch_name`/`cache_build_id`（迁移 000029，demand 聚合依据）；
+- 实例 `StatusCacheWarming` 计入 demand（§4.1 状态集合）；`resolveBranch` 修复（P1）后分支解析稳定。

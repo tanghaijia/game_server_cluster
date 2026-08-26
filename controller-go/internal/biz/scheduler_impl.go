@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,11 @@ type ResourceAwareScheduler struct {
 	historyWindow     time.Duration
 	healthStaleWindow time.Duration
 
+	// P2-C：缓存亲和水位（§5.2）——亲和节点利用率 ≤ 水位才给缓存加分，超过则溢到冷节点；
+	// 缓存更新缓冲比例（§8.4）——冷节点磁盘预算中为"下载双倍占用"保留的安全垫。
+	cacheSpillWatermark    float64
+	cacheUpdateBufferRatio float64
+
 	// 统计（debug/指标，S29）：内存仅作实时快速读与无 DB 时的兜底，权威在 statRepo
 	mu       sync.Mutex
 	attempts map[string]int64
@@ -65,6 +71,8 @@ func NewResourceAwareScheduler(
 	reservationRetry int,
 	historyWindow time.Duration,
 	healthStaleWindow time.Duration,
+	cacheSpillWatermark float64,
+	cacheUpdateBufferRatio float64,
 ) *ResourceAwareScheduler {
 	if weights == (ScoreWeights{}) {
 		weights = DefaultScoreWeights()
@@ -80,6 +88,12 @@ func NewResourceAwareScheduler(
 	}
 	if healthStaleWindow <= 0 {
 		healthStaleWindow = 30 * time.Second
+	}
+	if cacheSpillWatermark <= 0 || cacheSpillWatermark > 1 {
+		cacheSpillWatermark = 0.8
+	}
+	if cacheUpdateBufferRatio <= 0 {
+		cacheUpdateBufferRatio = 0.15
 	}
 	return &ResourceAwareScheduler{
 		nodeAgentRepo:       nodeAgentRepo,
@@ -101,6 +115,8 @@ func NewResourceAwareScheduler(
 		reservationRetry:    reservationRetry,
 		historyWindow:       historyWindow,
 		healthStaleWindow:   healthStaleWindow,
+		cacheSpillWatermark: cacheSpillWatermark,
+		cacheUpdateBufferRatio: cacheUpdateBufferRatio,
 		attempts:            make(map[string]int64),
 	}
 }
@@ -198,6 +214,14 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 
 	branch := s.resolveBranch(ctx, instance)
 
+	// P2-C：解析分支的 LastBuildId（cache_warming 下发 CacheGame 用）
+	var branchBuildID uint64
+	if branch != "" {
+		if b, err := s.steamBranchRepo.GetByGameAndBranch(ctx, instance.GameID, branch); err == nil {
+			branchBuildID = b.LastBuildId
+		}
+	}
+
 	// 重试预留冲突（§2.2 步骤 6）
 	for attempt := 0; attempt <= s.reservationRetry; attempt++ {
 		candidates, err := s.loadCandidates(ctx)
@@ -205,7 +229,7 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 			return nil, err
 		}
 
-		// filter H1-H6
+		// filter H1-H6（P2-C：缓存已降为软偏好，硬项为 enabled/健康/资源/端口/分支可解析/冷节点磁盘）
 		var eligible []*NodeCandidate
 		allResourceOnly := true
 		for _, c := range candidates {
@@ -238,13 +262,20 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 			continue
 		}
 
+		// P2-C：选中的节点无该分支缓存 → 实例先 cache_warming（等下载完成），否则直接 PreparingBuild
+		cacheNeeded := !(best.CacheState.Available || best.CacheState.Status == "downloading")
+		newStatus := entity.StatusPreparingBuild
+		if cacheNeeded {
+			newStatus = entity.StatusCacheWarming
+		}
+
 		err = s.reservationRepo.TryReserve(ctx, repository.ReserveTxRequest{
 			NodeID:            fmtID(best.Node.Id),
 			InstanceID:        instance.ID,
 			NodeAgentID:       best.Agent.ID,
 			Req:               req,
 			PortMappings:      mappings,
-			NewStatus:         entity.StatusPreparingBuild,
+			NewStatus:         newStatus,
 			UtilizationTarget: s.utilizationTarget,
 		})
 		if errors.Is(err, repository.ErrReservationConflict) {
@@ -258,12 +289,13 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 
 		s.record("scheduled")
 		s.publishEvent(EventInstanceScheduled, instance.ID, best.Agent.ID,
-			fmt.Sprintf("score=%.2f", best.Score))
+			fmt.Sprintf("score=%.2f cacheNeeded=%v", best.Score, cacheNeeded))
 		slog.Info("[Scheduler] 预留扣减",
 			"instanceId", instance.ID, "nodeAgentId", best.Agent.ID,
 			"nodeId", fmtID(best.Node.Id),
 			"cpuMilli", req.CPUMilli, "memBytes", req.MemoryBytes, "diskBytes", req.DiskBytes,
-			"bwRxMbps", req.BandwidthRxMbps, "bwTxMbps", req.BandwidthTxMbps)
+			"bwRxMbps", req.BandwidthRxMbps, "bwTxMbps", req.BandwidthTxMbps,
+			"cacheNeeded", cacheNeeded, "branch", branch, "buildId", branchBuildID)
 		res := &ScheduleResult{
 			Outcome:     OutcomeScheduled,
 			NodeAgentID: best.Agent.ID,
@@ -271,6 +303,9 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 			Scores:      map[string]float64{"score": best.Score},
 			Excluded:    buildExclusions(candidates),
 			ResourceReq: req,
+			CacheNeeded: cacheNeeded,
+			BranchName:  branch,
+			BuildID:     strconv.FormatUint(branchBuildID, 10),
 		}
 		s.audit(instance, res, time.Since(start))
 		return res, nil
@@ -362,6 +397,10 @@ func (s *ResourceAwareScheduler) pickBest(
 	minFreq, maxFreq := freqRange(eligible)
 
 	for _, c := range eligible {
+		// P2-C：缓存亲和（§5.1/§5.2）= 节点有该 (game,branch) 可用/下载中缓存，
+		// 且利用率未达水位——亲和节点饱和时去权，主动溢到冷节点（副本数自然 +1）。
+		hasCache := c.CacheState.Available || c.CacheState.Status == "downloading"
+		affinity := hasCache && utilizationOf(c) <= s.cacheSpillWatermark
 		in := ScoreInput{
 			RegionMatch:      instance.Region != "" && c.Node.Location == instance.Region,
 			LastNodeMatch:    instance.NodeAgentID != nil && *instance.NodeAgentID == c.Agent.ID,
@@ -373,6 +412,7 @@ func (s *ResourceAwareScheduler) pickBest(
 			CoreFrequencyGHz: c.Node.CoreFrequency,
 			MinFreqGHz:       minFreq,
 			MaxFreqGHz:       maxFreq,
+			CacheAffinity:    affinity,
 		}
 		score, _ := ComputeScore(in, s.weights)
 		c.Score = score

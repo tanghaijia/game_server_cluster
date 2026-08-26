@@ -11,6 +11,8 @@ type ScoreWeights struct {
 	Balance   float64 `json:"balance"`   // 负载均衡（P4）
 	Degraded  float64 `json:"degraded_penalty"` // 降级惩罚（负向）
 	Frequency float64 `json:"frequency"` // 单核主频偏好（默认 0 关闭）
+	// P2-C：缓存亲和（有可用/下载中缓存且未达水位 → 加分，避免冷启动下载）
+	Cache float64 `json:"cache"`
 }
 
 func DefaultScoreWeights() ScoreWeights {
@@ -22,6 +24,8 @@ func DefaultScoreWeights() ScoreWeights {
 		Balance:   0.7,
 		Degraded:  2.0,
 		Frequency: 0.0,
+		// 强亲和：命中缓存（免一次下载）收益 > 负载均衡微调
+		Cache: 2.0,
 	}
 }
 
@@ -39,11 +43,14 @@ type ScoreInput struct {
 	CoreFrequencyGHz  float64
 	MinFreqGHz        float64
 	MaxFreqGHz        float64
+
+	// P2-C：缓存亲和（节点有该 (game,branch) 可用/下载中缓存，且未达水位）
+	CacheAffinity bool
 }
 
 // ComputeScore 加权和；parts 返回各维度得分（审计/可解释性 F2）。
 func ComputeScore(in ScoreInput, w ScoreWeights) (float64, map[string]float64) {
-	parts := make(map[string]float64, 7)
+	parts := make(map[string]float64, 8)
 	if in.RegionMatch {
 		parts["region"] = 1.0
 	}
@@ -53,6 +60,9 @@ func ComputeScore(in ScoreInput, w ScoreWeights) (float64, map[string]float64) {
 	parts["balance"] = 1 - clamp01(in.Utilization)
 	parts["history"] = 1 - clamp01(in.HistoryUtil)
 	parts["bandwidth"] = clamp01(in.BandwidthRatio)
+	if in.CacheAffinity {
+		parts["cache"] = 1.0
+	}
 	if in.Degraded {
 		parts["degraded"] = -1.0
 	}
@@ -66,7 +76,8 @@ func ComputeScore(in ScoreInput, w ScoreWeights) (float64, map[string]float64) {
 		w.History*parts["history"] +
 		w.Balance*parts["balance"] +
 		w.Degraded*parts["degraded"] +
-		w.Frequency*parts["frequency"]
+		w.Frequency*parts["frequency"] +
+		w.Cache*parts["cache"]
 	return score, parts
 }
 

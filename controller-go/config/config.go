@@ -35,12 +35,15 @@ type Config struct {
 	HeartbeatFailThreshold    int
 
 	// 调度器（P1）
-	SchedulerScoreWeights      string  // json: {"region":1.0,"bandwidth":0.8,"locality":0.5,"history":0.6,"balance":0.7,"degraded_penalty":2.0,"frequency":0.0}
+	SchedulerScoreWeights      string  // json: {"region":1.0,"bandwidth":0.8,"locality":0.5,"history":0.6,"balance":0.7,"degraded_penalty":2.0,"frequency":0.0,"cache":2.0}
 	SchedulerUtilizationTarget float64 // 节点利用率目标（headroom = 1 - target）
 	SchedulerRegionForce       bool    // 区域强制（D3）
 	SchedulerReservationRetry  int     // 预留冲突重试上限
 	SchedulerHistoryWindowSec  int     // 历史评分窗口
 	SchedulerHealthStaleSec    int     // 心跳陈旧窗口（H2）
+	// P2-C：缓存亲和水位（§5.2，默认 0.8）+ 缓存更新缓冲比例（§8.4，默认 0.15）
+	SchedulerCacheSpillWatermark    float64
+	SchedulerCacheUpdateBufferRatio float64
 
 	// 压力状态机（3.3）
 	PressureWarningPct     float64
@@ -110,6 +113,8 @@ func Load() *Config {
 		SchedulerReservationRetry:  getEnvInt("SCHEDULER_RESERVATION_RETRY", 3),
 		SchedulerHistoryWindowSec:  getEnvInt("SCHEDULER_HISTORY_WINDOW_SEC", 900),
 		SchedulerHealthStaleSec:    getEnvInt("SCHEDULER_HEALTH_STALE_SEC", 30),
+		SchedulerCacheSpillWatermark:    getEnvFloat("SCHEDULER_CACHE_SPILL_WATERMARK", 0.8),
+		SchedulerCacheUpdateBufferRatio: getEnvFloat("SCHEDULER_CACHE_UPDATE_BUFFER_RATIO", 0.15),
 
 		// 压力状态机（3.3）
 		PressureWarningPct:     getEnvFloat("PRESSURE_WARNING_PCT", 85),

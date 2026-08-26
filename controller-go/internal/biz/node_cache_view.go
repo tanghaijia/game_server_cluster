@@ -240,4 +240,35 @@ func (v *NodeCacheView) CacheDiskUsageBytes(agentID string) (availableBytes, dow
 	return availableBytes, downloadingBytes
 }
 
+// CacheState 实现 CacheStatusProvider：从快照读取 (game, branch) 缓存状态（P2-C 调度用）。
+func (v *NodeCacheView) CacheState(ctx context.Context, agentID, gameID, branchName string) (CacheState, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	m, ok := v.snapshot[agentID]
+	if !ok {
+		return CacheState{Status: "missing"}, nil
+	}
+	e := m[gameID+":"+branchName]
+	if e == nil {
+		return CacheState{Status: "missing"}, nil
+	}
+	return CacheState{Status: e.Status, Available: e.Available, SizeBytes: e.SizeBytes}, nil
+}
+
+// BranchSizeBytes 实现 CacheStatusProvider：返回某 (game, branch) 的已知缓存大小
+// （集群内任意节点实测最大者；P2-C 冷节点磁盘硬约束的 needs 值）。
+// ok=false 表示全集群未知（从未下载过）→ 调度放行，下载期 ENOSPC 由 Unavailable 兜底。
+func (v *NodeCacheView) BranchSizeBytes(ctx context.Context, gameID, branchName string) (uint64, bool) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	key := gameID + ":" + branchName
+	var maxSize uint64
+	for _, m := range v.snapshot {
+		if e, ok := m[key]; ok && e.SizeBytes > maxSize {
+			maxSize = e.SizeBytes
+		}
+	}
+	return maxSize, maxSize > 0
+}
+
 var _ CacheStatusProvider = (*NodeCacheView)(nil)

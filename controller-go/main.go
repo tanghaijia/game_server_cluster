@@ -133,6 +133,8 @@ func main() {
 		cfg.SchedulerReservationRetry,
 		time.Duration(cfg.SchedulerHistoryWindowSec)*time.Second,
 		time.Duration(cfg.SchedulerHealthStaleSec)*time.Second,
+		cfg.SchedulerCacheSpillWatermark,
+		cfg.SchedulerCacheUpdateBufferRatio,
 	)
 	slog.Info("Scheduler 就绪", "weights", schedulerWeights, "utilization_target", cfg.SchedulerUtilizationTarget)
 

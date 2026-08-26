@@ -21,6 +21,8 @@ const (
 	StatusCleaning
 	StatusStopped
 	StatusQueued
+	// P2-C：选中节点无该 (game,branch) 缓存，等待缓存下载完成后再进入 PreparingBuild。
+	StatusCacheWarming
 	Failed
 )
 
@@ -46,6 +48,8 @@ func (s InstanceStatus) String() string {
 		return "stopped"
 	case StatusQueued:
 		return "queued"
+	case StatusCacheWarming:
+		return "cache_warming"
 	case Failed:
 		return "failed"
 	default:
@@ -82,6 +86,8 @@ func ParseInstanceStatus(s string) (InstanceStatus, bool) {
 		return StatusStopped, true
 	case "queued":
 		return StatusQueued, true
+	case "cache_warming":
+		return StatusCacheWarming, true
 	case "failed":
 		return Failed, true
 	default:
@@ -108,6 +114,9 @@ type GameInstance struct {
 	CreateTime      time.Time      `gorm:"column:create_time"`
 	UpdateTime      time.Time      `gorm:"column:update_time"`
 	GameBuildId     string         `gorm:"column:game_build_id"`
+	// P2-C：调度时解析并落库的 Steam 分支名 + 目标缓存 buildid（cache_warming / demand 统计用）
+	BranchName    string `gorm:"column:branch_name"`
+	CacheBuildID  string `gorm:"column:cache_build_id"`
 
 	// 调度字段（000014 迁移）
 	Region      string           `gorm:"column:region"` // R3：区域偏好；空 = 任意区域（S40）
