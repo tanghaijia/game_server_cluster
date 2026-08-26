@@ -42,6 +42,7 @@ export interface NodeCacheItem {
   status: string // available/downloading/removed/unavailable/missing
   build_id: string
   download_progress: number
+  size_bytes?: number // P2-B：缓存内容实测字节数（0/undefined = 未知）
 }
 
 export interface QueueItem {

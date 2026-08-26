@@ -152,7 +152,12 @@
 
     <!-- 节点 game-cache 状态 -->
     <div class="rounded-lg border">
-      <div class="border-b px-4 py-3 text-sm font-medium">节点 game-cache 状态（{{ cache.length }}）</div>
+      <div class="border-b px-4 py-3 text-sm font-medium">
+        节点 game-cache 状态（{{ cache.length }}）
+        <span class="ml-2 text-xs font-normal text-muted-foreground">
+          · 可用缓存共 {{ formatBytes(cacheTotalAvailable) }} · 下载中 {{ formatBytes(cacheTotalDownloading) }} · 保底分支可在「分支管理」设置 min_replicas
+        </span>
+      </div>
       <div class="overflow-auto">
         <table class="w-full text-xs">
           <thead>
@@ -164,6 +169,7 @@
               <th class="px-3 py-2">状态</th>
               <th class="px-3 py-2">build_id</th>
               <th class="px-3 py-2">进度</th>
+              <th class="px-3 py-2" title="缓存内容实测大小（node 下载完成后上报；0 = 未知）">大小</th>
             </tr>
           </thead>
           <tbody>
@@ -177,9 +183,10 @@
               </td>
               <td class="px-3 py-2 font-mono">{{ c.build_id || '-' }}</td>
               <td class="px-3 py-2 font-mono">{{ c.download_progress > 0 ? (c.download_progress * 100).toFixed(0) + '%' : '-' }}</td>
+              <td class="px-3 py-2 font-mono">{{ formatBytes(c.size_bytes ?? 0) }}</td>
             </tr>
             <tr v-if="!cache.length">
-              <td colspan="7" class="px-3 py-8 text-center text-muted-foreground">暂无缓存数据（NodeCacheView 快照周期刷新，需 node_agent 在线）</td>
+              <td colspan="8" class="px-3 py-8 text-center text-muted-foreground">暂无缓存数据（NodeCacheView 快照周期刷新，需 node_agent 在线）</td>
             </tr>
           </tbody>
         </table>
@@ -301,6 +308,14 @@ const events = ref<SchedulerEvent[]>([])
 const stats = ref<SchedulerStats>({ attempts: {}, queue_len: 0, event_count: 0 })
 const eventFilter = ref('')
 const error = ref('')
+
+// P2-B：集群缓存磁盘占用汇总（可用 / 下载中）
+const cacheTotalAvailable = computed(() =>
+  cache.value.filter((c) => c.status === 'available').reduce((s, c) => s + (c.size_bytes ?? 0), 0),
+)
+const cacheTotalDownloading = computed(() =>
+  cache.value.filter((c) => c.status === 'downloading').reduce((s, c) => s + (c.size_bytes ?? 0), 0),
+)
 
 // 试调度
 const pv = ref({ game_id: '', region: '', cpu: 0, memGb: 0 })
