@@ -221,6 +221,11 @@ func (s *ResourceAwareScheduler) Schedule(ctx context.Context, instance *entity.
 			branchBuildID = b.LastBuildId
 		}
 	}
+	// 分支已解析但 buildid 缺失（异常数据）→ 结构性失败，防止 CacheGame 下发 build "0"。
+	if branch != "" && branchBuildID == 0 {
+		s.record("failed")
+		return failed(FailCodeNoGameCache, "分支 buildid 解析失败（steam_branches 数据异常，请同步分支）"), nil
+	}
 
 	// 重试预留冲突（§2.2 步骤 6）
 	for attempt := 0; attempt <= s.reservationRetry; attempt++ {
