@@ -539,6 +539,8 @@ type SteamBranch struct {
 	Description string `json:"Description"`
 	GameId      string `json:"GameId"`
 	Status      int32  `json:"Status"` // 0=Disable 1=Enable 2=Abandoned
+	// P2-D：保底副本数（0=按需，N=无实例也常驻 N 份）
+	MinReplicas int32  `json:"MinReplicas"`
 	CreateTime  string `json:"CreateTime"`
 	UpdateTime  string `json:"UpdateTime"`
 }
@@ -562,6 +564,12 @@ func (c *Client) SyncBranches(ctx context.Context, gameID string) error {
 func (c *Client) UpdateBranchCache(ctx context.Context, gameID, branchName, nodeAgentID string) error {
 	return c.do(ctx, http.MethodPost, "/api/games/"+gameID+"/branches/"+branchName+"/cache",
 		map[string]string{"node_agent_id": nodeAgentID}, nil)
+}
+
+// SetBranchMinReplicas 设置分支保底副本数（P2-D，§4.3）：0=按需，N=常驻 N 份
+func (c *Client) SetBranchMinReplicas(ctx context.Context, gameID, branchName string, minReplicas int32) error {
+	return c.do(ctx, http.MethodPut, "/api/games/"+gameID+"/branches/"+branchName,
+		map[string]int32{"min_replicas": minReplicas}, nil)
 }
 
 // do 发送请求；out 非空时把 2xx 响应 JSON 解码到 out

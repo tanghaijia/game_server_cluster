@@ -75,6 +75,7 @@ export function statusText(status: string | undefined): string {
     pending: '等待调度',
     scheduling: '调度中',
     queued: '排队中',
+    cache_warming: '缓存预热',
     preparing_build: '准备构建',
     restoring_snapshot: '还原快照',
     starting: '启动中',
@@ -91,5 +92,5 @@ export function statusText(status: string | undefined): string {
 // 是否中间态（启动后轮询等待的目标：离开中间态即停）
 export function isTransitionalStatus(status: string | undefined): boolean {
   const s = (status ?? '').trim().toLowerCase()
-  return ['pending', 'scheduling', 'queued', 'preparing_build', 'restoring_snapshot', 'starting', 'stopping', 'cleaning'].includes(s)
+  return ['pending', 'scheduling', 'queued', 'cache_warming', 'preparing_build', 'restoring_snapshot', 'starting', 'stopping', 'cleaning'].includes(s)
 }

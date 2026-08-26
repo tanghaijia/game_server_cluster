@@ -50,6 +50,7 @@ export interface SteamBranch {
   Description: string
   GameId: string
   Status: number // 0=Disable 1=Enable 2=Abandoned
+  MinReplicas: number // P2-D：保底副本数（0=按需，N=常驻 N 份）
   CreateTime: string
   UpdateTime: string
 }
@@ -173,6 +174,11 @@ export async function listBranches(gameId: string): Promise<SteamBranch[]> {
 
 export async function syncBranches(gameId: string): Promise<void> {
   await http.post('/admin/games/' + gameId + '/branches/sync')
+}
+
+// 设置分支保底副本数（P2-D，§4.3）：0=按需（实例驱动），N=无实例也常驻 N 份
+export async function setBranchMinReplicas(gameId: string, branch: string, minReplicas: number): Promise<void> {
+  await http.put('/admin/games/' + gameId + '/branches/' + branch, { min_replicas: minReplicas })
 }
 
 // ---- 游戏资料（多游戏平台） ----

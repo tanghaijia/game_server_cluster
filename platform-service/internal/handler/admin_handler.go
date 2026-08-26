@@ -83,6 +83,7 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	// Steam 分支
 	group.GET("/games/:id/branches", h.ListBranches)
 	group.POST("/games/:id/branches/sync", h.SyncBranches)
+	group.PUT("/games/:id/branches/:branch", h.SetBranchMinReplicas)
 	group.POST("/games/:id/branches/:branch/cache", h.UpdateBranchCache)
 }
 
@@ -329,6 +330,22 @@ func (h *AdminHandler) SyncBranches(c *gin.Context) {
 
 type updateBranchCacheRequest struct {
 	NodeAgentID string `json:"node_agent_id"`
+}
+
+type setBranchMinReplicasRequest struct {
+	MinReplicas int32 `json:"min_replicas"`
+}
+
+// SetBranchMinReplicas 设置分支保底副本数（P2-D，§4.3）
+func (h *AdminHandler) SetBranchMinReplicas(c *gin.Context) {
+	var req setBranchMinReplicasRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	if err := h.controller.SetBranchMinReplicas(c.Request.Context(), c.Param("id"), c.Param("branch"), req.MinReplicas); err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "min_replicas updated"})
 }
 
 // InstanceFileSession 管理员为任意实例签发文件会话

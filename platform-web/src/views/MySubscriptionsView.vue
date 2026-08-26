@@ -337,7 +337,7 @@ function statusClass(s: string) {
   }[s] ?? 'bg-muted'
 }
 function instStatusClass(s: string) {
-  const active = ['running', 'starting', 'pending', 'scheduling', 'queued', 'stopping', 'cleaning', 'preparing_build', 'restoring_snapshot']
+  const active = ['running', 'starting', 'pending', 'scheduling', 'queued', 'cache_warming', 'stopping', 'cleaning', 'preparing_build', 'restoring_snapshot']
   if (s === 'failed') return 'bg-red-100 text-red-600'
   if (s === 'running') return 'bg-green-100 text-green-700'
   if (active.includes(s)) return 'bg-blue-100 text-blue-700'
