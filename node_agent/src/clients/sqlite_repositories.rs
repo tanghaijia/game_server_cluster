@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use sqlx::SqlitePool;
 
 use crate::domain::{
-    GameCache, GameContainer, GameInstance, LocalGameBuild, NodeOperation, OperationId,
-    OperationKind, OperationStatus,
+    GameCache, GameCacheStatus, GameContainer, GameInstance, LocalGameBuild, NodeOperation,
+    OperationId, OperationKind, OperationStatus,
 };
 use crate::error::NodeAgentError;
 use crate::ports::{
@@ -318,7 +318,10 @@ impl SqliteGameCacheRepository {
 impl GameCacheRepository for SqliteGameCacheRepository {
     async fn save(&self, game_cache: &GameCache) -> anyhow::Result<()> {
         let json = serde_json::to_string(game_cache)?;
-        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let key = format!(
+            "{}:{}:{}",
+            game_cache.game_id, game_cache.branch_name, game_cache.build_id
+        );
         sqlx::query(&format!(
             "INSERT OR REPLACE INTO {TABLE_GAME_CACHE} (key, value) VALUES (?1, ?2)"
         ))
@@ -334,21 +337,61 @@ impl GameCacheRepository for SqliteGameCacheRepository {
         game_id: &String,
         branch_name: &String,
     ) -> anyhow::Result<Option<GameCache>> {
-        let key = format!("{}:{}", game_id, branch_name);
+        let versions = self.get_versions(game_id, branch_name).await?;
+        // 派生 current：Available → Downloading → 任意最高版本（buildid 单调递增，数字比较）
+        Ok(versions
+            .iter()
+            .filter(|v| v.status == GameCacheStatus::Available)
+            .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            .or_else(|| {
+                versions
+                    .iter()
+                    .filter(|v| v.status == GameCacheStatus::Downloading)
+                    .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            })
+            .or_else(|| {
+                versions
+                    .iter()
+                    .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            })
+            .cloned())
+    }
+
+    async fn get_version(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+        build_id: &String,
+    ) -> anyhow::Result<Option<GameCache>> {
+        let key = format!("{}:{}:{}", game_id, branch_name, build_id);
         let row: Option<(String,)> = sqlx::query_as(&format!(
             "SELECT value FROM {TABLE_GAME_CACHE} WHERE key = ?1"
         ))
         .bind(&key)
         .fetch_optional(&*self.pool)
         .await?;
-
         match row {
-            Some((json,)) => {
-                let cache: GameCache = serde_json::from_str(&json)?;
-                Ok(Some(cache))
-            }
+            Some((json,)) => Ok(Some(serde_json::from_str(&json)?)),
             None => Ok(None),
         }
+    }
+
+    async fn get_versions(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+    ) -> anyhow::Result<Vec<GameCache>> {
+        // LIKE 前缀匹配 game:branch:%（game_id/branch 为数字与字母，不含 %/_ 通配符）
+        let prefix = format!("{}:{}:%", game_id, branch_name);
+        let rows: Vec<(String,)> = sqlx::query_as(&format!(
+            "SELECT value FROM {TABLE_GAME_CACHE} WHERE key LIKE ?1"
+        ))
+        .bind(&prefix)
+        .fetch_all(&*self.pool)
+        .await?;
+        rows.iter()
+            .map(|(json,)| serde_json::from_str::<GameCache>(json).map_err(Into::into))
+            .collect()
     }
 
     async fn get_all(&self) -> anyhow::Result<Vec<GameCache>> {
@@ -365,7 +408,10 @@ impl GameCacheRepository for SqliteGameCacheRepository {
 
     async fn insert_if_absent(&self, game_cache: &GameCache) -> anyhow::Result<bool> {
         let json = serde_json::to_string(game_cache)?;
-        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let key = format!(
+            "{}:{}:{}",
+            game_cache.game_id, game_cache.branch_name, game_cache.build_id
+        );
         let result = sqlx::query(&format!(
             "INSERT OR IGNORE INTO {TABLE_GAME_CACHE} (key, value) VALUES (?1, ?2)"
         ))
@@ -378,7 +424,21 @@ impl GameCacheRepository for SqliteGameCacheRepository {
     }
 
     async fn delete(&self, game_id: &String, branch_name: &String) -> anyhow::Result<()> {
-        let key = format!("{}:{}", game_id, branch_name);
+        let prefix = format!("{}:{}:%", game_id, branch_name);
+        sqlx::query(&format!("DELETE FROM {TABLE_GAME_CACHE} WHERE key LIKE ?1"))
+            .bind(&prefix)
+            .execute(&*self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_version(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+        build_id: &String,
+    ) -> anyhow::Result<()> {
+        let key = format!("{}:{}:{}", game_id, branch_name, build_id);
         sqlx::query(&format!("DELETE FROM {TABLE_GAME_CACHE} WHERE key = ?1"))
             .bind(&key)
             .execute(&*self.pool)

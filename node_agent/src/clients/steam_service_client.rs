@@ -33,11 +33,13 @@ impl SteamServiceClient {
         Ok(())
     }
 
+    /// 下载到 staging 目录，成功后原子 rename 到正式目录（P2-A：不触碰现存目录）。
+    /// 失败只清理 staging，旧版本（若有）原封不动 → 天然可回滚。
     async fn download(&self, mut game_cache: GameCache) -> Result<(), SteamServiceError> {
         // path 为空是调用方错误，不需写 DB。
         // 注意：不要对 Option 直接 unwrap（path 为 None 时 panic），
         // 这里只记录 game_id/branch_name 即可定位。
-        if game_cache.path.is_none() {
+        let Some(path_str) = game_cache.path.clone() else {
             log::error!(
                 "{} {} 下载路径空",
                 game_cache.game_id.as_str(),
@@ -46,19 +48,47 @@ impl SteamServiceClient {
             game_cache.status = GameCacheStatus::Unavailable;
             let _ = self.game_cache_repos.save(&game_cache).await;
             return Err(SteamServiceError::EmptyDownloadPathError {});
+        };
+
+        // 正式目录 /server/{game}/{branch}/{buildid}；staging 同级 .staging/{buildid}
+        let final_dir = PathBuf::from(&path_str);
+        let staging_dir = match final_dir.parent() {
+            Some(parent) => parent
+                .join(".staging")
+                .join(final_dir.file_name().unwrap_or_default()),
+            None => final_dir.clone(),
+        };
+
+        // 清理上次崩溃残留的 staging（半成品）
+        if staging_dir.exists() {
+            let _ = fs::remove_dir_all(&staging_dir).await;
         }
-        let path = PathBuf::from(game_cache.path.clone().unwrap());
-        if !path.exists() {
-            fs::create_dir_all(&path).await.map_err(|e| {
-                let error_msg = format!("Failed to create directory {:?}: {}", path, e);
+        if let Some(parent) = staging_dir.parent() {
+            fs::create_dir_all(parent).await.map_err(|e| {
+                let error_msg = format!("Failed to create directory {:?}: {}", parent, e);
                 log::error!("{}", error_msg);
                 SteamServiceError::IoError(e)
             })?;
         }
-        let result = self.run_download(&mut game_cache).await;
+
+        let result = self.run_download(&mut game_cache, &staging_dir).await;
 
         match result {
             Ok(()) => {
+                // 原子切换：staging → 正式目录（同文件系统 rename）。
+                // 正式目录残留（旧版本孤儿/失败残留）仅当该版本非 current 才存在，可安全替换。
+                if final_dir.exists() {
+                    fs::remove_dir_all(&final_dir).await.map_err(|e| {
+                        log::error!("Failed to remove stale final dir {:?}: {}", final_dir, e);
+                        SteamServiceError::IoError(e)
+                    })?;
+                }
+                fs::rename(&staging_dir, &final_dir).await.map_err(|e| {
+                    let error_msg =
+                        format!("Failed to promote staging {:?} -> {:?}: {}", staging_dir, final_dir, e);
+                    log::error!("{}", error_msg);
+                    SteamServiceError::IoError(e)
+                })?;
                 game_cache.status = GameCacheStatus::Available;
                 self.game_cache_repos.save(&game_cache).await?;
                 Ok(())
@@ -66,11 +96,14 @@ impl SteamServiceClient {
             Err(e) => {
                 log::error!(
                     "下载失败：{} {} 在路径 {}",
-                    game_cache.path.clone().unwrap().as_str(),
                     game_cache.game_id.as_str(),
-                    game_cache.branch_name.as_str()
+                    game_cache.branch_name.as_str(),
+                    path_str.as_str()
                 );
-
+                // 清理半成品 staging，释放暂存空间（§8.4）
+                if staging_dir.exists() {
+                    let _ = fs::remove_dir_all(&staging_dir).await;
+                }
                 game_cache.status = GameCacheStatus::Unavailable;
                 let _ = self.game_cache_repos.save(&game_cache).await;
                 Err(e)
@@ -78,12 +111,17 @@ impl SteamServiceClient {
         }
     }
 
-    /// 实际的 steamcmd 下载流程，所有错误原样上抛给 download 统一处理。
-    async fn run_download(&self, game_cache: &mut GameCache) -> Result<(), SteamServiceError> {
+    /// 实际的 steamcmd 下载流程（force_install_dir = staging 目录），
+    /// 所有错误原样上抛给 download 统一处理。
+    async fn run_download(
+        &self,
+        game_cache: &mut GameCache,
+        install_dir: &std::path::Path,
+    ) -> Result<(), SteamServiceError> {
         let mut child = Command::new("steamcmd")
             .args([
                 "+force_install_dir",
-                game_cache.path.clone().unwrap().as_str(),
+                install_dir.to_str().unwrap_or_default(),
                 "+login",
                 "anonymous",
                 "+app_update",
@@ -102,10 +140,10 @@ impl SteamServiceClient {
 
         game_cache.status = GameCacheStatus::Downloading;
         log::info!(
-            "开始下载：{} {} 在路径 {}",
-            game_cache.path.clone().unwrap().as_str(),
+            "开始下载：{} {} staging 路径 {}",
             game_cache.game_id.as_str(),
-            game_cache.branch_name.as_str()
+            game_cache.branch_name.as_str(),
+            install_dir.display()
         );
         self.game_cache_repos.save(game_cache).await?;
         while let Some(line) = lines.next_line().await? {
@@ -140,7 +178,7 @@ impl SteamServiceClient {
                 "+login",
                 "anonymous",
                 "+force_install_dir",
-                game_cache.path.clone().unwrap().as_str(),
+                path.as_str(),
                 "+app_uninstall",
                 game_cache.game_id.as_str(),
                 "+quit",

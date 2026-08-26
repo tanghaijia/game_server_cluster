@@ -39,6 +39,16 @@ pub struct GameInstance {
     /// B-04/P1-3：A2S 查询宿主端口（a2s 模式；旧记录缺省 None）
     #[serde(default)]
     pub query_host_port: Option<u16>,
+    /// P2-A：实例所属游戏（start_instance 时落库，remove_cache/refcount 释放用）
+    #[serde(default)]
+    pub game_id: String,
+    /// P2-A：实例解析到的 Steam 分支名（start_instance 时落库）
+    #[serde(default)]
+    pub branch_name: String,
+    /// P2-A：实例实际挂载的缓存版本 buildid（start_instance 时落库；
+    /// refcount 释放与"重启沿用原 buildid"用）
+    #[serde(default)]
+    pub cache_build_id: String,
 }
 
 impl GameInstance {
@@ -59,6 +69,9 @@ impl GameInstance {
             fail_reason: String::new(),
             probe_mode: String::new(), // B-04/P1-3：start_instance 时按声明填充
             query_host_port: None,
+            game_id: String::new(),     // P2-A：start_instance 时落库
+            branch_name: String::new(), // P2-A：start_instance 时落库
+            cache_build_id: String::new(), // P2-A：start_instance 时落库
         }
     }
 }

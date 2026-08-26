@@ -643,7 +643,10 @@ pub struct InMemoryGameCacheRepository {
 #[async_trait]
 impl GameCacheRepository for InMemoryGameCacheRepository {
     async fn save(&self, game_cache: &GameCache) -> anyhow::Result<()> {
-        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let key = format!(
+            "{}:{}:{}",
+            game_cache.game_id, game_cache.branch_name, game_cache.build_id
+        );
         let mut store = self
             .store
             .lock()
@@ -657,12 +660,54 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
         game_id: &String,
         branch_name: &String,
     ) -> anyhow::Result<Option<GameCache>> {
-        let key = format!("{}:{}", game_id, branch_name);
+        let versions = self.get_versions(game_id, branch_name).await?;
+        Ok(versions
+            .iter()
+            .filter(|v| v.status == GameCacheStatus::Available)
+            .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            .or_else(|| {
+                versions
+                    .iter()
+                    .filter(|v| v.status == GameCacheStatus::Downloading)
+                    .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            })
+            .or_else(|| {
+                versions
+                    .iter()
+                    .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            })
+            .cloned())
+    }
+
+    async fn get_version(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+        build_id: &String,
+    ) -> anyhow::Result<Option<GameCache>> {
+        let key = format!("{}:{}:{}", game_id, branch_name, build_id);
         let store = self
             .store
             .lock()
             .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
         Ok(store.get(&key).cloned())
+    }
+
+    async fn get_versions(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+    ) -> anyhow::Result<Vec<GameCache>> {
+        let prefix = format!("{}:{}:", game_id, branch_name);
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        Ok(store
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v.clone())
+            .collect())
     }
 
     async fn get_all(&self) -> anyhow::Result<Vec<GameCache>> {
@@ -674,7 +719,10 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
     }
 
     async fn insert_if_absent(&self, game_cache: &GameCache) -> anyhow::Result<bool> {
-        let key = format!("{}:{}", game_cache.game_id, game_cache.branch_name);
+        let key = format!(
+            "{}:{}:{}",
+            game_cache.game_id, game_cache.branch_name, game_cache.build_id
+        );
         let mut store = self
             .store
             .lock()
@@ -688,7 +736,22 @@ impl GameCacheRepository for InMemoryGameCacheRepository {
     }
 
     async fn delete(&self, game_id: &String, branch_name: &String) -> anyhow::Result<()> {
-        let key = format!("{}:{}", game_id, branch_name);
+        let prefix = format!("{}:{}:", game_id, branch_name);
+        let mut store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("lock: {e}"))?;
+        store.retain(|k, _| !k.starts_with(&prefix));
+        Ok(())
+    }
+
+    async fn delete_version(
+        &self,
+        game_id: &String,
+        branch_name: &String,
+        build_id: &String,
+    ) -> anyhow::Result<()> {
+        let key = format!("{}:{}:{}", game_id, branch_name, build_id);
         let mut store = self
             .store
             .lock()

@@ -336,3 +336,24 @@ reserved_cache(N)  = Σ已落地缓存 size + Σ下载中 staging size
 3. **实例 pin 具体 buildid**：实例跟分支 latest，不 pin；重启沿用实例记录的 buildid 不漂移（启动时把实际挂载 buildid 写回）。
 4. **`K` 常数 / `ceil(demand/K)` 副本公式**：被调度器资源模型 + 水位溢出取代。
 5. **node 自主 LRU**：淘汰决策统一由 controller 下发，node 不自行删。
+
+---
+
+## 13. 实现状态
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| P1 | RemoveCache RPC + 分支 Disable/Abandoned 删除 + 修 resolveBranch/panic | ✅ 已实现（commit aa7a3a0、1880c07） |
+| P2-A | 路径带 buildid + staging 原子切换 + refcount 延迟删除 + 实例落库 game_id/branch_name/cache_build_id | ✅ 已实现 |
+| P2-B | size_bytes 上报 + cache_budget 记账 + 更新缓冲 | ⬜ |
+| P2-C | 调度亲和评分 + 水位溢出 + 冷节点磁盘硬约束 + `cache_warming` 状态 | ⬜ |
+| P2-D | placer diff + `min_replicas` + GC 触发点 2/3/4 | ⬜ |
+| P3 | depot content-addressed 去重 | ⬜ 可选 |
+
+P2-A 落地口径：
+
+- 缓存记录主键 `game:branch:buildid`；"current" = 该分支 buildid 最大的 Available（否则最大 Downloading，再否则任意最高版本）；
+- 下载到 `/server/{g}/{b}/.staging/{buildid}`，成功后 rename 原子切换；失败只清 staging（§3.2/§8.4）；
+- refcount 仅用于旧目录延迟删除：start +1 / clean −1，孤儿（非 current 且 refcount=0）GC 删除目录+记录；
+- 旧数据库记录（key=`game:branch`）升级后不可见 → 该分支触发一次重新下载（可接受的迁移成本）；
+- 已知限制：start 失败路径的 refcount 可能残留（依赖后续 remove_cache / 周期 GC 收敛）；refcount 读写非事务（SQLite 单写者下并发窗口极小，观测优先，不阻塞 P2-B）。

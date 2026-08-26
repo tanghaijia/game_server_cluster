@@ -221,32 +221,45 @@ where
         build_id: &str,
     ) -> Result<DomainGameCache, NodeAgentError> {
         let now = Utc::now();
+        let target = build_id.to_string();
 
-        // 1) 查询现有缓存记录
-        let existing = self
+        // 1) 幂等：目标版本已是 Available/Downloading → 直接返回（并发共享同一次下载）
+        if let Ok(Some(v)) = self
+            .game_cache_repos
+            .get_version(&game_id.to_string(), &branch_name.to_string(), &target)
+            .await
+        {
+            if matches!(
+                v.status,
+                DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
+            ) {
+                return Ok(v);
+            }
+        }
+        // 1.1) 无版本记录但 current 已是目标且可用/下载中 → 返回 current
+        if let Ok(Some(cur)) = self
             .game_cache_repos
             .get(&game_id.to_string(), &branch_name.to_string())
             .await
-            .ok()
-            .flatten();
-
-        // 1.1) 已存在且 build_id 相同,并且处于可用/下载中 → 幂等返回,无需重新下载
-        if let Some(c) = &existing {
-            if c.build_id == build_id
+        {
+            if cur.build_id == target
                 && matches!(
-                    c.status,
+                    cur.status,
                     DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
                 )
             {
-                return Ok(c.clone());
+                return Ok(cur);
             }
         }
 
         let game = self.asset_service.get_game(game_id).await?;
 
+        // 路径带 buildid（P2-A）：/server/{game}/{branch}/{buildid}
+        // 下载落在同级 .staging/{buildid}，成功后原子 rename（steam_service_client.download）
         let mut path = PathBuf::from(GAME_CACHE_SERVER_ROOT_PATH);
         path.push(game.id);
         path.push(branch_name);
+        path.push(build_id);
         let path_str = path.to_str().ok_or_else(|| {
             let error = format!("{} {} path error.", game.name, branch_name);
             log::error!("{}", error);
@@ -256,39 +269,35 @@ where
         let cache = DomainGameCache {
             game_id: game_id.to_string(),
             branch_name: branch_name.to_string(),
-            build_id: build_id.to_string(),
+            build_id: target.clone(),
             status: DomainGameCacheStatus::Downloading,
             path: Some(path_str.to_string()),
             download_progress: None,
+            refcount: 0,
             create_time: now,
             update_time: now,
         };
 
-        // 2) 原子 get-or-create:仅"首个"插入者负责启动下载,防并发双下载
+        // 2) 原子 get-or-create（按版本 key）：仅"首个"插入者负责启动下载,防并发双下载
         match self.game_cache_repos.insert_if_absent(&cache).await {
             Ok(true) => {
                 self.steam_service.start_download(cache.clone()).await;
                 Ok(cache)
             }
             Ok(false) => {
-                // 已存在:可能是并发刚插入同一 build,或残留旧版本/清理态
+                // 已存在同版本记录：可能是并发刚插入,或残留清理态(Unavailable/Removed)
                 if let Ok(Some(existing)) = self
                     .game_cache_repos
-                    .get(&game_id.to_string(), &branch_name.to_string())
+                    .get_version(&game_id.to_string(), &branch_name.to_string(), &target)
                     .await
                 {
-                    // 并发方已插入相同 build 且可用/下载中 → 幂等返回
-                    if existing.build_id == build_id
-                        && matches!(
-                            existing.status,
-                            DomainGameCacheStatus::Available
-                                | DomainGameCacheStatus::Downloading
-                        )
-                    {
+                    if matches!(
+                        existing.status,
+                        DomainGameCacheStatus::Available | DomainGameCacheStatus::Downloading
+                    ) {
                         return Ok(existing);
                     }
-                    // build_id 不同(新版本)或残留清理态:覆盖为 Downloading 重新下载
-                    // steamcmd 会以 force_install_dir + validate 覆盖旧文件,无需手动清理
+                    // 残留清理态：覆盖为 Downloading 重新下载（staging 全新下载，不碰旧目录）
                     let _ = self.game_cache_repos.save(&cache).await;
                     self.steam_service.start_download(cache.clone()).await;
                     return Ok(cache);
@@ -318,33 +327,85 @@ where
             })
     }
 
-    /// 删除节点上的 (game, branch) 游戏缓存（RemoveCache RPC）。
+    /// 删除节点上的 (game, branch) 全部缓存版本（RemoveCache RPC）。
     ///
     /// 语义（与设计稿 docs/cache-placement-design.md §7 对齐）：
     /// - 幂等：无缓存记录时直接返回成功（removed_path 为空）；
-    /// - 引用检查：该 game 仍有活动实例（Preparing/Running/Stopping）时拒绝删除，
-    ///   避免误删正在挂载该目录的实例（P1 按 game 粒度保守判断，分支粒度待 P2
-    ///   实例落库 branch_name 后细化）；
-    /// - 成功：删除磁盘目录 + 清理缓存记录，释放磁盘。
+    /// - 引用检查：该 game 仍有活动实例（Preparing/Running/Stopping）引用该分支 → 拒绝删除；
+    /// - 任一版本 refcount>0 或 Downloading → 拒绝（不打断下载、不误删引用目录）；
+    /// - 成功：删除全部版本磁盘目录 + 清理记录，释放磁盘。
     pub async fn remove_cache(
         &self,
         game_id: &str,
         branch_name: &str,
     ) -> Result<String, NodeAgentError> {
-        let cache = self
+        let versions = self
             .game_cache_repos
-            .get(&game_id.to_string(), &branch_name.to_string())
+            .get_versions(&game_id.to_string(), &branch_name.to_string())
             .await
             .map_err(|e| NodeAgentError::DBOperationFail {
                 message: format!("get game_cache failed: {e}"),
             })?;
 
         // 幂等：无缓存记录视为已删除
-        let Some(cache) = cache else {
+        if versions.is_empty() {
             return Ok(String::new());
-        };
+        }
 
-        // 引用检查：该 game 仍有活动实例 → 拒绝删除
+        // 引用检查：该 game 仍有活动实例引用该分支 → 拒绝删除
+        if let Some(inst) = self.active_instance_of_game_branch(game_id, branch_name).await? {
+            return Err(NodeAgentError::InvalidRequest {
+                message: format!(
+                    "cache in use by active instance {}, refuse remove: game_id={}, branch_name={}",
+                    inst.id, game_id, branch_name
+                ),
+            });
+        }
+
+        // 版本检查：任一版本 refcount>0 或 Downloading → 拒绝
+        for v in &versions {
+            if v.refcount > 0 || v.status == DomainGameCacheStatus::Downloading {
+                return Err(NodeAgentError::InvalidRequest {
+                    message: format!(
+                        "cache version {} in use (refcount={}, status={:?}), refuse remove: game_id={}, branch_name={}",
+                        v.build_id, v.refcount, v.status, game_id, branch_name
+                    ),
+                });
+            }
+        }
+
+        // 删除磁盘目录 + 记录（幂等）
+        let mut removed = Vec::new();
+        for v in &versions {
+            if let Some(path) = &v.path {
+                let dir = PathBuf::from(path);
+                if dir.exists() {
+                    tokio::fs::remove_dir_all(&dir)
+                        .await
+                        .map_err(|e| NodeAgentError::PathError {
+                            message: format!("remove cache dir {} failed: {}", path, e),
+                        })?;
+                }
+                removed.push(path.clone());
+            }
+        }
+        self.game_cache_repos
+            .delete(&game_id.to_string(), &branch_name.to_string())
+            .await
+            .map_err(|e| NodeAgentError::DBOperationFail {
+                message: format!("delete game_cache failed: {e}"),
+            })?;
+
+        Ok(removed.join(","))
+    }
+
+    /// 该 game+branch 是否还有活动实例（Preparing/Running/Stopping）引用。
+    /// 优先用实例落库的 game_id/branch_name（P2-A）；旧实例回退本地构建缓存解析。
+    async fn active_instance_of_game_branch(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<Option<crate::domain::GameInstance>, NodeAgentError> {
         let instances = self
             .game_instance_repos
             .get_all()
@@ -352,7 +413,7 @@ where
             .map_err(|e| NodeAgentError::DBOperationFail {
                 message: format!("get instances failed: {e}"),
             })?;
-        for inst in &instances {
+        for inst in instances {
             let active = matches!(
                 inst.status,
                 crate::domain::GameInstanceStatus::Preparing
@@ -362,46 +423,103 @@ where
             if !active {
                 continue;
             }
-            // 解析实例所属 game（本地构建缓存）；解析不到 → 保守视为同 game，拒绝
-            let same_game = match self
-                .local_game_build_repos
-                .get(inst.game_build_id.clone())
-                .await
-            {
-                Ok(lb) => lb.game.id == game_id,
-                Err(_) => true,
+            let same_game = if !inst.game_id.is_empty() {
+                inst.game_id == game_id
+            } else {
+                match self.local_game_build_repos.get(inst.game_build_id.clone()).await {
+                    Ok(lb) => lb.game.id == game_id,
+                    Err(_) => true, // 解析不到 → 保守视为同 game
+                }
             };
-            if same_game {
-                return Err(NodeAgentError::InvalidRequest {
-                    message: format!(
-                        "cache in use by active instances, refuse remove: game_id={}, branch_name={}",
-                        game_id, branch_name
-                    ),
-                });
+            let same_branch = inst.branch_name.is_empty() || inst.branch_name == branch_name;
+            if same_game && same_branch {
+                return Ok(Some(inst));
             }
         }
+        Ok(None)
+    }
 
-        // 删除磁盘目录（存在才删）
-        if let Some(path) = &cache.path {
-            let dir = PathBuf::from(path);
-            if dir.exists() {
-                tokio::fs::remove_dir_all(&dir)
-                    .await
-                    .map_err(|e| NodeAgentError::PathError {
-                        message: format!("remove cache dir {} failed: {}", path, e),
-                    })?;
-            }
+    /// 释放实例对缓存版本的引用（stop/clean 时调用）：refcount −1，随后 GC 孤儿版本。
+    /// 旧实例（无 cache_build_id 记录）直接跳过。
+    async fn release_cache_reference(
+        &self,
+        instance: &crate::domain::GameInstance,
+    ) -> Result<(), NodeAgentError> {
+        if instance.cache_build_id.is_empty() {
+            return Ok(());
         }
+        let game_id = instance.game_id.clone();
+        let branch_name = instance.branch_name.clone();
+        let build_id = instance.cache_build_id.clone();
+        if let Ok(Some(mut v)) = self
+            .game_cache_repos
+            .get_version(&game_id, &branch_name, &build_id)
+            .await
+        {
+            v.refcount = (v.refcount - 1).max(0);
+            let _ = self.game_cache_repos.save(&v).await;
+        }
+        self.gc_orphan_versions(&game_id, &branch_name).await
+    }
 
-        // 清理记录（幂等）
-        self.game_cache_repos
-            .delete(&game_id.to_string(), &branch_name.to_string())
+    /// GC 孤儿版本：非 current（不是该分支 buildid 最大的 Available）且 refcount==0 → 删目录+记录。
+    /// 只做"旧目录延迟删除"，不做版本保留（P2-A 口径；下载中的版本跳过）。
+    async fn gc_orphan_versions(
+        &self,
+        game_id: &str,
+        branch_name: &str,
+    ) -> Result<(), NodeAgentError> {
+        let versions = self
+            .game_cache_repos
+            .get_versions(&game_id.to_string(), &branch_name.to_string())
             .await
             .map_err(|e| NodeAgentError::DBOperationFail {
-                message: format!("delete game_cache failed: {e}"),
+                message: format!("get game_cache versions failed: {e}"),
             })?;
-
-        Ok(cache.path.unwrap_or_default())
+        let current = versions
+            .iter()
+            .filter(|v| v.status == DomainGameCacheStatus::Available)
+            .max_by(|a, b| crate::domain::buildid_cmp(&a.build_id, &b.build_id))
+            .map(|v| v.build_id.clone());
+        for v in versions {
+            if v.status == DomainGameCacheStatus::Downloading {
+                continue;
+            }
+            if Some(v.build_id.clone()) == current {
+                continue;
+            }
+            if v.refcount > 0 {
+                continue;
+            }
+            if let Some(path) = &v.path {
+                let dir = PathBuf::from(path);
+                if dir.exists() {
+                    if let Err(e) = tokio::fs::remove_dir_all(&dir).await {
+                        log::warn!("GC 删除缓存目录失败 {}: {}", path, e);
+                    }
+                }
+            }
+            match self
+                .game_cache_repos
+                .delete_version(&game_id.to_string(), &branch_name.to_string(), &v.build_id)
+                .await
+            {
+                Ok(()) => log::info!(
+                    "GC 回收孤儿缓存版本 {}:{}:{}",
+                    game_id,
+                    branch_name,
+                    v.build_id
+                ),
+                Err(e) => log::warn!(
+                    "GC 删除缓存记录失败 {}:{}:{}: {}",
+                    game_id,
+                    branch_name,
+                    v.build_id,
+                    e
+                ),
+            }
+        }
+        Ok(())
     }
 
     pub fn failure(message: impl Into<String>, retryable: bool) -> FailureInfo {
@@ -485,6 +603,9 @@ where
         // B-04/P1-3：记录探针声明（a2s 模式带查询宿主端口），供 RuntimeProbeService 使用
         game_instance.probe_mode = argument.probe_mode.clone();
         game_instance.query_host_port = argument.query_host_port;
+        // P2-A：落库实例所属 game/branch（refcount 释放、remove_cache 判定用）
+        game_instance.game_id = argument.build.game.id.clone();
+        game_instance.branch_name = argument.branch_name.clone();
         game_instance.status = crate::domain::GameInstanceStatus::Preparing;
         self.game_instance_repos.save(&game_instance).await?;
 
@@ -496,7 +617,8 @@ where
                 message: format!("get local game build fail: {}", err),
             })?;
 
-        let game_cache = self
+        // 解析 current 缓存版本（该分支 buildid 最大的 Available，P2-A）
+        let mut game_cache = self
             .game_cache_repos
             .get(&argument.build.game.id, &argument.branch_name)
             .await
@@ -518,15 +640,28 @@ where
             });
         };
 
-        // 游戏服务器目录映射
+        // 游戏服务器目录映射（挂载具体 buildid 路径，不随 current 漂移）
         let host_path = game_cache
             .path
+            .clone()
             .ok_or_else(|| NodeAgentError::InvalidRequest {
                 message: format!(
                     "game cache path is empty for game_id={}, branch_name={}",
                     argument.build.game.id, argument.branch_name
                 ),
             })?;
+
+        // P2-A：实例持有该版本引用（refcount+1），记录挂载的 buildid；
+        // 旧目录只有 refcount==0 且非 current 才被 GC 回收（延迟删除）。
+        game_cache.refcount += 1;
+        game_instance.cache_build_id = game_cache.build_id.clone();
+        self.game_cache_repos
+            .save(&game_cache)
+            .await
+            .map_err(|err| NodeAgentError::DBOperationFail {
+                message: format!("save game cache refcount fail: {}", err),
+            })?;
+        self.game_instance_repos.save(&game_instance).await?;
 
         let mut v2: Vec<ContainerFilePathMappingHost> = Vec::new();
         let path_mapping = ContainerFilePathMappingHost {
@@ -829,6 +964,13 @@ where
         // 标记实例为 Stopped
         game_instance.status = crate::domain::GameInstanceStatus::Stopped;
         self.game_instance_repos.save(&game_instance).await?;
+
+        // P2-A：释放实例对缓存版本的引用（refcount−1 + 孤儿 GC 延迟删除）。
+        // 失败不影响实例清理主流程，只记日志。
+        if let Err(e) = self.release_cache_reference(&game_instance).await {
+            log::warn!("实例 {} 释放缓存引用失败: {}", instance_id, e);
+        }
+
         Ok(())
     }
 }
