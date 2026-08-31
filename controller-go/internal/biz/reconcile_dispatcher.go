@@ -114,6 +114,10 @@ var dispatchableStatuses = []entity.InstanceStatus{
 	entity.StatusPending,
 	entity.StatusScheduling,
 	entity.StatusQueued,
+	// ISSUE-000004：cache_warming 也需可重派/重启可恢复——
+	// 否则 CacheGame 失败后的重试入队（handleDispatchError → RequestDispatch）
+	// 与 controller 重启后的 Recover 都会漏掉卡在预热的实例。
+	entity.StatusCacheWarming,
 	entity.StatusPreparingBuild,
 	entity.StatusRestoringSnapshot,
 	entity.StatusStarting,
@@ -968,13 +972,19 @@ func (d *ReconcileDispatcher) onCacheWarmReady(ctx context.Context, instance *en
 }
 
 /**
-* 后台轮询节点 (game,branch) 缓存直到 AVAILABLE（或超时失败）。
-* 与 PollingResult 同模式：不阻塞消费管线；下载是异步的，轮询期间
-* GetCacheGame 返回 DOWNLOADING/Removed 均非致命，继续等到超时。
+* 后台轮询节点 (game,branch) 缓存直到 AVAILABLE（或失败/超时）。
+* 与 PollingResult 同模式：不阻塞消费管线。
+* ISSUE-000004 修复：
+*  - UNAVAILABLE（下载失败）→ 立即失败反馈，不再闷等超时；
+*  - REMOVED / 无缓存记录 → 幂等重发 CacheGame 重新下载，继续等；
+*  - 每 30s 打一条等待日志（含状态/进度），排障可见。
 **/
 func (d *ReconcileDispatcher) pollCacheReady(ctx context.Context, instance *entity.GameInstance,
 	client *nodeagent.NodeAgentFaceClient, onReady func(ctx context.Context, instance *entity.GameInstance)) {
 	deadline := time.Now().Add(cacheWarmTimeoutMin * time.Minute)
+	lastLog := time.Now()
+	lastReissue := time.Now().Add(-time.Minute)
+	lastState := ""
 	for time.Now().Before(deadline) {
 		time.Sleep(cacheWarmPollInterval)
 		callCtx, cancel := d.withRPCTimeout(ctx)
@@ -983,16 +993,75 @@ func (d *ReconcileDispatcher) pollCacheReady(ctx context.Context, instance *enti
 			BranchName: instance.BranchName,
 		})
 		cancel()
-		if err == nil && resp != nil && resp.GameCache != nil &&
-			resp.GameCache.GetStatus() == nodeagentv1.GameCacheStatus_AVAILABLE {
+		if err != nil {
+			// 无缓存记录（BUILD_CACHE_MISS / NOT_FOUND）→ 下载未生效，幂等重发 CacheGame
+			if isGameCacheNotFound(extractErrorDetail(err)) && time.Since(lastReissue) > 30*time.Second {
+				lastReissue = time.Now()
+				d.reissueCacheGame(context.Background(), instance, client)
+			}
+			continue // 瞬态错误继续轮询
+		}
+		if resp == nil || resp.GameCache == nil {
+			continue
+		}
+		gc := resp.GameCache
+		switch gc.GetStatus() {
+		case nodeagentv1.GameCacheStatus_AVAILABLE:
 			onReady(ctx, instance)
 			return
+		case nodeagentv1.GameCacheStatus_UNAVAILABLE:
+			// 下载失败：立即失败反馈（ISSUE-000004），不闷等超时
+			reason := "缓存下载失败（节点缓存不可用）"
+			if p := gc.GetDownloadProgress(); p > 0 {
+				reason += fmt.Sprintf("，进度 %.0f%%", p*100)
+			}
+			slog.Error("[ReconcileDispatcher] 缓存预热失败（节点缓存不可用）",
+				"instanceId", instance.ID, "gameId", instance.GameID,
+				"branch", instance.BranchName, "buildId", gc.GetBuildId())
+			instance.FailReason = reason
+			d.FailedInstance(context.Background(), instance)
+			return
+		case nodeagentv1.GameCacheStatus_REMOVED:
+			// 缓存被清理/重置 → 幂等重发 CacheGame 重新下载
+			if time.Since(lastReissue) > 30*time.Second {
+				lastReissue = time.Now()
+				d.reissueCacheGame(context.Background(), instance, client)
+			}
+		}
+		if time.Since(lastLog) > 30*time.Second {
+			lastLog = time.Now()
+			state := gc.GetStatus().String()
+			if state != lastState {
+				slog.Info("[ReconcileDispatcher] 缓存预热等待中",
+					"instanceId", instance.ID, "gameId", instance.GameID,
+					"branch", instance.BranchName, "status", state,
+					"progress", gc.GetDownloadProgress(), "buildId", gc.GetBuildId())
+				lastState = state
+			}
 		}
 	}
 	slog.Error("[ReconcileDispatcher] 缓存预热超时",
 		"instanceId", instance.ID, "gameId", instance.GameID, "branch", instance.BranchName)
 	instance.FailReason = "缓存预热超时（" + strconv.Itoa(cacheWarmTimeoutMin) + " 分钟）"
 	d.FailedInstance(context.Background(), instance)
+}
+
+// reissueCacheGame 幂等重发 CacheGame（缓存被删/下载未生效时），失败只记日志。
+func (d *ReconcileDispatcher) reissueCacheGame(ctx context.Context, instance *entity.GameInstance,
+	client *nodeagent.NodeAgentFaceClient) error {
+	callCtx, cancel := d.withRPCTimeout(ctx)
+	defer cancel()
+	_, err := client.CacheGame(callCtx, &nodeagentv1.CacheGameRequest{
+		GameId:     instance.GameID,
+		BranchName: instance.BranchName,
+		BuildId:    instance.CacheBuildID,
+	})
+	if err != nil {
+		slog.Warn("[ReconcileDispatcher] 重发 CacheGame 失败",
+			"instanceId", instance.ID, "gameId", instance.GameID,
+			"branch", instance.BranchName, "err", err)
+	}
+	return err
 }
 
 /**
