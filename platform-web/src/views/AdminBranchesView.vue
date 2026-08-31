@@ -2,10 +2,13 @@
   <div class="space-y-6">
     <div>
       <h1 class="text-2xl font-semibold">分支管理</h1>
-      <p class="text-sm text-muted-foreground">Steam 分支同步与节点缓存管理。</p>
+      <p class="text-sm text-muted-foreground">
+        Steam 分支同步与节点缓存管理。后台按「保底副本（min_replicas）+ 运行实例需求」自动对账缓存；
+        表格中的「更新缓存」仅用于手动把某分支下载/更新到指定节点。
+      </p>
     </div>
 
-    <div class="flex max-w-3xl items-end gap-3 rounded-lg border p-4">
+    <div class="flex max-w-4xl items-end gap-3 rounded-lg border p-4">
       <div class="w-64">
         <label class="mb-1 block text-sm font-medium">游戏</label>
         <select v-model="gameId" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2" @change="loadBranches">
@@ -14,11 +17,14 @@
         </select>
       </div>
       <div class="flex-1">
-        <label class="mb-1 block text-sm font-medium">目标 node_agent（缓存更新用）</label>
+        <label class="mb-1 block text-sm font-medium">手动更新缓存的目标节点（可选）</label>
         <select v-model="nodeAgentId" class="w-full rounded-md border px-3 py-2 text-sm outline-none focus:ring-2">
-          <option value="">未选择</option>
+          <option value="">未选择（仅查看分布，不做手动操作）</option>
           <option v-for="a in agents" :key="a.ID" :value="a.ID">{{ a.ID }} ({{ a.Status === 1 ? '启用' : '停用' }})</option>
         </select>
+        <p class="mt-1 text-[11px] text-muted-foreground">
+          只影响表格里「更新缓存」按钮的落点；不选也不会影响后台自动对账（保底副本/实例需求）。
+        </p>
       </div>
       <button class="rounded-md border px-4 py-2 text-sm hover:bg-muted" :disabled="!gameId" @click="onSync">同步分支</button>
     </div>
@@ -79,8 +85,9 @@
               <td class="px-4 py-3 text-xs text-muted-foreground">{{ b.Description || '-' }}</td>
               <td class="px-4 py-3">
                 <button
-                  class="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                  class="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                   :disabled="!nodeAgentId"
+                  :title="nodeAgentId ? `把 ${b.BranchName} 最新版下载/更新到 ${nodeAgentId}` : '请先在上方选择目标节点（手动更新用）'"
                   @click="onUpdateCache(b.BranchName)"
                 >
                   更新缓存
