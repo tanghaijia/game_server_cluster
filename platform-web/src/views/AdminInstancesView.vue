@@ -22,7 +22,7 @@
           <tr v-for="inst in instances" :key="inst.instance_id" class="border-b last:border-0">
             <td class="px-4 py-3 font-mono text-xs">{{ inst.order_id }}</td>
             <td class="px-4 py-3 font-mono text-xs">{{ inst.instance_id }}</td>
-            <td class="px-4 py-3">{{ inst.game_id }}</td>
+            <td class="px-4 py-3" :title="inst.game_id ? 'game_id：' + inst.game_id : undefined">{{ gameName(inst.game_id) }}</td>
             <td class="px-4 py-3 font-mono text-xs" :title="inst.game_build_id ? 'game_build_id：' + inst.game_build_id : undefined">
               {{ inst.game_build_id || '-' }}
             </td>
@@ -77,6 +77,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { listGames, type GameView } from '@/api/games'
 import {
   actionDisabledReason,
   allInstances,
@@ -95,10 +96,23 @@ const instances = ref<UserInstance[]>([])
 const busy = ref(false)
 const error = ref('')
 
+// 游戏名映射（game_id → 游戏名，展示用；加载失败回退显示 game_id）
+const gameNameMap = ref<Record<string, string>>({})
+function gameName(id: string) {
+  return gameNameMap.value[id] || id
+}
+
 async function load() {
   error.value = ''
   try {
-    instances.value = await allInstances()
+    const [list, games] = await Promise.all([
+      allInstances(),
+      listGames().catch(() => [] as GameView[]),
+    ])
+    instances.value = list
+    gameNameMap.value = Object.fromEntries(
+      games.map((g) => [g.ID, g.profile?.display_name || g.Name]),
+    )
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '加载实例失败（请确认已登录、后端已启动）'
   }
