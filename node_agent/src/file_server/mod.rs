@@ -1,4 +1,5 @@
-﻿pub mod auth;
+pub mod auth;
+pub mod logs;
 pub mod path;
 
 use std::path::{Path, PathBuf};
@@ -32,6 +33,9 @@ pub struct FileServer {
     instance_repo: Arc<dyn GameInstanceRepository>,
     secret: Vec<u8>,
     data_root_override: Option<PathBuf>, // 调试/测试用（环境变量 FILE_DATA_ROOT_OVERRIDE）
+    // P2：agent 日志目录（环境变量 NODE_AGENT_LOG_DIR，见 docs/node-agent-logging-design.md）。
+    // None = 未启用日志端点。
+    log_dir: Option<PathBuf>,
 }
 
 impl FileServer {
@@ -39,8 +43,9 @@ impl FileServer {
         instance_repo: Arc<dyn GameInstanceRepository>,
         secret: Vec<u8>,
         data_root_override: Option<PathBuf>,
+        log_dir: Option<PathBuf>,
     ) -> Self {
-        Self { instance_repo, secret, data_root_override }
+        Self { instance_repo, secret, data_root_override, log_dir }
     }
 
     pub fn router(self: Arc<Self>) -> Router {
@@ -50,6 +55,8 @@ impl FileServer {
             .route("/v1/instances/{instance_id}/files/text", get(read_text).put(write_text))
             .route("/v1/instances/{instance_id}/files/rename", post(rename_file))
             .route("/v1/instances/{instance_id}/files/mkdir", post(mkdir))
+            // P2：agent 日志 tail（agent 级 token，见 docs/node-agent-logging-design.md）
+            .route("/v1/agent/logs/tail", get(logs::tail))
             // 浏览器跨源直连（dev 5173 / 生产其他源）必须 CORS；token 走 header 非 cookie，允许 *
             .layer(middleware::from_fn(cors))
             .with_state(self)

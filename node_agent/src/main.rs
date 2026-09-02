@@ -25,7 +25,9 @@ use tonic::transport::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    // P1：双输出日志（stderr + 滚动文件 <NODE_AGENT_LOG_DIR>/node-agent.log），见 docs/node-agent-logging-design.md
+    let log_dir = std::env::var("NODE_AGENT_LOG_DIR").unwrap_or_else(|_| "./logs".to_string());
+    node_agent::logging::init_logging(&log_dir);
     if cfg!(debug_assertions) {
         let addr: SocketAddr = std::env::var("NODE_AGENT_ADDR")
             .unwrap_or_else(|_| "127.0.0.1:50052".to_string())
@@ -77,15 +79,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 6. 启动后台 worker
         let _worker_handles = start_all_workers(pool.clone(), task_ctx);
 
-        // 7. 文件服务（M1，见 docs/file-manager-design.md）
+        // 7. 文件服务（M1，见 docs/file-manager-design.md）+ agent 日志 tail（P2）
         let file_secret =
             std::env::var("NODE_AGENT_FILE_SECRET").unwrap_or_else(|_| "dev-file-secret-change-me".to_string());
         let file_data_override =
             std::env::var("FILE_DATA_ROOT_OVERRIDE").ok().map(PathBuf::from);
+        let log_dir = Some(PathBuf::from(&log_dir));
         let file_server = Arc::new(node_agent::file_server::FileServer::new(
             concrete_instance.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
             file_secret.into_bytes(),
             file_data_override,
+            log_dir,
         ));
         let file_addr: SocketAddr = std::env::var("FILE_SERVER_ADDR")
             .unwrap_or_else(|_| "127.0.0.1:50054".to_string())
@@ -215,15 +219,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             docker_client.clone() as Arc<dyn node_agent::ports::ContainerClient>,
         ));
 
-        // 9. 文件服务（M1，见 docs/file-manager-design.md）
+        // 9. 文件服务（M1，见 docs/file-manager-design.md）+ agent 日志 tail（P2）
         let file_secret =
             std::env::var("NODE_AGENT_FILE_SECRET").unwrap_or_else(|_| "dev-file-secret-change-me".to_string());
         let file_data_override =
             std::env::var("FILE_DATA_ROOT_OVERRIDE").ok().map(PathBuf::from);
+        let log_dir = Some(PathBuf::from(&log_dir));
         let file_server = Arc::new(node_agent::file_server::FileServer::new(
             sqlite_game_instances.clone() as Arc<dyn node_agent::ports::GameInstanceRepository>,
             file_secret.into_bytes(),
             file_data_override,
+            log_dir,
         ));
         let file_addr: SocketAddr = std::env::var("FILE_SERVER_ADDR")
             .unwrap_or_else(|_| "0.0.0.0:50054".to_string())

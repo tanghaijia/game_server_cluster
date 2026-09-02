@@ -3,6 +3,7 @@ pub mod common;
 pub mod domain;
 pub mod error;
 pub mod file_server;
+pub mod logging;
 pub mod ports;
 pub mod proto;
 pub mod providers;
