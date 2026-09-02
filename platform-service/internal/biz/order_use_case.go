@@ -176,6 +176,7 @@ type UserInstance struct {
 	OrderID        string `json:"order_id"`
 	InstanceID     string `json:"instance_id"`
 	GameID         string `json:"game_id"`
+	GameBuildID    string `json:"game_build_id,omitempty"` // 实例使用的资产版本（controller 解析落库）
 	Status         string `json:"status"`
 	NodeAgent      string `json:"node_agent,omitempty"`
 	ConnectAddress string `json:"connect_address,omitempty"` // node_ip:game_host_port（running 实例）
@@ -209,6 +210,7 @@ func (uc *OrderUseCase) ListInstances(ctx context.Context, userID, gameID string
 		if inst, err := uc.controller.GetGameInstance(ctx, o.InstanceID); err == nil && inst != nil {
 			ui.Status = inst.Status
 			ui.FailReason = inst.FailReason
+			ui.GameBuildID = inst.GameBuildId
 			if inst.NodeAgentID != nil {
 				ui.NodeAgent = *inst.NodeAgentID
 			}

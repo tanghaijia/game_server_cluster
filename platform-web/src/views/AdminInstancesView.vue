@@ -11,6 +11,7 @@
             <th class="px-4 py-3">订单</th>
             <th class="px-4 py-3">实例</th>
             <th class="px-4 py-3">游戏</th>
+            <th class="px-4 py-3" title="实例使用的资产版本 game_build_id">构建版本</th>
             <th class="px-4 py-3">状态</th>
             <th class="px-4 py-3">节点</th>
             <th class="px-4 py-3">连接地址</th>
@@ -22,6 +23,9 @@
             <td class="px-4 py-3 font-mono text-xs">{{ inst.order_id }}</td>
             <td class="px-4 py-3 font-mono text-xs">{{ inst.instance_id }}</td>
             <td class="px-4 py-3">{{ inst.game_id }}</td>
+            <td class="px-4 py-3 font-mono text-xs" :title="inst.game_build_id ? 'game_build_id：' + inst.game_build_id : undefined">
+              {{ inst.game_build_id || '-' }}
+            </td>
             <td class="px-4 py-3">
               <span
                 class="rounded px-2 py-0.5 text-xs"
@@ -60,7 +64,7 @@
             </td>
           </tr>
           <tr v-if="!instances.length">
-            <td colspan="7" class="px-4 py-8 text-center text-muted-foreground">暂无实例</td>
+            <td colspan="8" class="px-4 py-8 text-center text-muted-foreground">暂无实例</td>
           </tr>
         </tbody>
       </table>

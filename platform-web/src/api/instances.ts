@@ -4,6 +4,8 @@ export interface UserInstance {
   order_id: string
   instance_id: string
   game_id: string
+  /** 实例使用的资产版本（game_build_id，controller 创建/启动时解析落库；未知时为空） */
+  game_build_id?: string
   status: string
   node_agent?: string
   connect_address?: string
