@@ -284,6 +284,7 @@ func main() {
 	handler.NewNodeAgentHandler(nodeAgentUseCase).RegisterRoutes(router)
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
 	handler.NewFileSessionHandler(gameInstanceUseCase, nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
+	handler.NewNodeAgentLogSessionHandler(nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
 	handler.NewObserverHandler(observerUseCase).RegisterRoutes(router)
 

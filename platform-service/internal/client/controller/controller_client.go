@@ -270,6 +270,27 @@ func (c *Client) CreateFileSession(ctx context.Context, instanceID string) (*Fil
 }
 
 // ---------------------------------------------------------------------------
+// node_agent 日志会话（P2，见 docs/node-agent-logging-design.md）
+// ---------------------------------------------------------------------------
+
+// AgentLogSession controller 签发的 node_agent 日志会话（浏览器直连 agent 日志端点所需）
+type AgentLogSession struct {
+	BaseURL   string `json:"base_url"`
+	Token     string `json:"token"`
+	AgentID   string `json:"agent_id"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+// CreateAgentLogSession 获取 node_agent 的日志会话（controller 签发短效 JWT，scope=agent_logs）
+func (c *Client) CreateAgentLogSession(ctx context.Context, agentID string) (*AgentLogSession, error) {
+	var s AgentLogSession
+	if err := c.do(ctx, http.MethodPost, "/api/node-agents/"+agentID+"/log-session", nil, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ---------------------------------------------------------------------------
 // Node（管理员管理）
 // ---------------------------------------------------------------------------
 

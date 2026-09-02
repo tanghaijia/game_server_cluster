@@ -80,6 +80,9 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	// 文件会话（管理员可对任意实例）
 	group.POST("/instances/:instanceId/file-session", h.InstanceFileSession)
 
+	// node_agent 日志会话（P2，见 docs/node-agent-logging-design.md）
+	group.POST("/node-agents/:id/log-session", h.NodeAgentLogSession)
+
 	// Steam 分支
 	group.GET("/games/:id/branches", h.ListBranches)
 	group.POST("/games/:id/branches/sync", h.SyncBranches)
@@ -353,6 +356,16 @@ func (h *AdminHandler) InstanceFileSession(c *gin.Context) {
 	session, err := h.controller.CreateFileSession(c.Request.Context(), c.Param("instanceId"))
 	if err != nil {
 		fail(c, err);
+		return
+	}
+	c.JSON(http.StatusOK, session)
+}
+
+// NodeAgentLogSession 管理员为 node_agent 签发日志会话（浏览器直连 agent 日志端点）
+func (h *AdminHandler) NodeAgentLogSession(c *gin.Context) {
+	session, err := h.controller.CreateAgentLogSession(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		fail(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, session)

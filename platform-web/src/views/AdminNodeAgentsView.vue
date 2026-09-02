@@ -71,6 +71,14 @@
               >
                 启用
               </button>
+              <button
+                class="ml-1 rounded-md border px-3 py-1 text-xs hover:bg-muted"
+                :disabled="!a.NodeId"
+                :title="a.NodeId ? '查看该 node_agent 运行日志' : '该 agent 未绑定节点（NodeId 为空），无法定位日志服务地址'"
+                @click="openLogs(a)"
+              >
+                日志
+              </button>
             </td>
           </tr>
           <tr v-if="!agents.length">
@@ -80,6 +88,9 @@
       </table>
     </div>
     <p v-if="error" class="text-sm text-red-500">{{ error }}</p>
+
+    <!-- 日志查看弹层（P2：直连 node_agent 日志端点） -->
+    <AgentLogsDialog v-if="logAgent" :agent="logAgent" @close="logAgent = null" />
   </div>
 </template>
 
@@ -87,9 +98,11 @@
 import { onMounted, reactive, ref } from 'vue'
 
 import { createNodeAgent, listNodeAgents, setNodeAgentEnabled, type NodeAgent } from '@/api/admin'
+import AgentLogsDialog from './AgentLogsDialog.vue'
 
 const agents = ref<NodeAgent[]>([])
 const error = ref('')
+const logAgent = ref<NodeAgent | null>(null)
 
 const fmtTime = (t: string) => new Date(t).toLocaleString()
 const form = reactive({ name: '', nodeId: '', port: 9090 })
@@ -128,6 +141,11 @@ async function onToggle(a: NodeAgent, enabled: boolean) {
   } catch (e: any) {
     error.value = e.response?.data?.error ?? '操作失败'
   }
+}
+
+function openLogs(a: NodeAgent) {
+  error.value = ''
+  logAgent.value = a
 }
 
 onMounted(load)
