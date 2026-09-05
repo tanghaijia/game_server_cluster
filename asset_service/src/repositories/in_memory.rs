@@ -12,8 +12,9 @@ use crate::{
     },
     error::AssetServiceError,
     ports::{
-        BuildRepository, GameRepository, ModManifestRepository, NodeAgentRepository,
-        NodeRepository, SnapshotRepository, SteamBranch, SteamBranchRepository,
+        AgentReleaseStore, BuildRepository, GameRepository, ModManifestRepository,
+        NodeAgentRepository, NodeRepository, SnapshotRepository, SteamBranch,
+        SteamBranchRepository,
     },
 };
 
@@ -356,6 +357,45 @@ impl NodeAgentRepository for InMemoryNodeAgentRepository {
             message: format!("node agent repository lock poisoned: {e}"),
         })?;
         store.remove(node_id);
+        Ok(())
+    }
+}
+
+/// 内存 release 存储（开发/演示/测试用；数据不跨进程，重启即失）。
+/// key 以 "{bucket}/{object_key}" 存 HashMap，便于测试断言写入内容。
+#[derive(Default)]
+pub struct InMemoryAgentReleaseStore {
+    objects: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+}
+
+impl InMemoryAgentReleaseStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 读取已写入的对象（测试断言用）
+    pub fn get_object(&self, bucket: &str, key: &str) -> Option<Vec<u8>> {
+        self.objects
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&format!("{bucket}/{key}")).cloned())
+    }
+}
+
+#[async_trait]
+impl AgentReleaseStore for InMemoryAgentReleaseStore {
+    async fn put_object(
+        &self,
+        bucket: &str,
+        key: &str,
+        body: Vec<u8>,
+    ) -> Result<(), AssetServiceError> {
+        self.objects
+            .lock()
+            .map_err(|e| AssetServiceError::Internal {
+                message: format!("in-memory release store lock poisoned: {e}"),
+            })?
+            .insert(format!("{bucket}/{key}"), body);
         Ok(())
     }
 }

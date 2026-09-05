@@ -7,9 +7,9 @@ use asset_service::{
         asset_service_server::AssetServiceServer, business_service_server::BusinessServiceServer,
     },
     repositories::{
-        FakeSteamService, InMemoryBuildRepository, InMemoryGameRepository,
-        InMemoryModManifestRepository, InMemoryNodeAgentRepository, InMemoryNodeRepository,
-        InMemorySnapshotRepository, InMemorySteamBranchRepository,
+        FakeSteamService, InMemoryAgentReleaseStore, InMemoryBuildRepository,
+        InMemoryGameRepository, InMemoryModManifestRepository, InMemoryNodeAgentRepository,
+        InMemoryNodeRepository, InMemorySnapshotRepository, InMemorySteamBranchRepository,
     },
     rpc::{GrpcAssetService, GrpcBusinessService},
     service::{AssetService, RegisterBuildRequest, SteamBranchSync},
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         steam_branch_repo,
     );
 
-    let grpc = GrpcAssetService::new(service);
+    let grpc = GrpcAssetService::new(service, Arc::new(InMemoryAgentReleaseStore::new()), "cluster");
 
     println!("asset-service listening on {}", addr);
     Server::builder()

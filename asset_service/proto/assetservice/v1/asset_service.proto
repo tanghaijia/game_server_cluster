@@ -24,6 +24,25 @@ service AssetService {
   rpc RegisterModManifest(RegisterModManifestRequest) returns (RegisterModManifestResponse);
   rpc GetModManifest(GetModManifestRequest) returns (GetModManifestResponse);
   rpc CheckBuildModCompatibility(CheckBuildModCompatibilityRequest) returns (CheckBuildModCompatibilityResponse);
+
+  // node_agent 发布二进制托管（agent-release-asset-service-redesign，P1）：
+  // controller 上传（客户端流）→ 边收边算 sha256 → 写对象存储 → 返回 object_key/sha256/size。
+  rpc PutAgentRelease(stream PutAgentReleaseRequest) returns (PutAgentReleaseResponse);
+}
+
+// 上传流：首条消息必须带 version/os/arch（可无 chunk），随后每条携带数据块。
+message PutAgentReleaseRequest {
+  string version = 1;  // 如 v0.1.1（每条消息都带，服务端以首条为准）
+  string os = 2;       // linux / windows
+  string arch = 3;     // amd64 / arm64
+  bytes chunk = 4;     // 数据块（首条可为空）
+}
+
+message PutAgentReleaseResponse {
+  string bucket = 1;       // 对象实际落桶
+  string object_key = 2;   // agent-release/{version}/{os}-{arch}/node-agent
+  string sha256 = 3;       // 小写 hex，边收边算
+  uint64 size_bytes = 4;   // 收到的总字节数
 }
 
 message ListGameBuildsRequest {

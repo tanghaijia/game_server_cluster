@@ -1,3 +1,4 @@
+mod agent_release_store;
 mod build_repository;
 mod clock;
 mod game_repository;
@@ -8,6 +9,7 @@ mod snapshot_repository;
 mod steam_branch_repository;
 mod steam_service;
 
+pub use agent_release_store::*;
 pub use build_repository::*;
 pub use clock::*;
 pub use game_repository::*;

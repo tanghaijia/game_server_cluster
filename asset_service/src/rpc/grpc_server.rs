@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use tonic::{Request, Response, Status};
+use sha2::{Digest, Sha256};
+use tonic::{Request, Response, Status, Streaming};
 
 use crate::{
     domain::{
@@ -10,7 +11,10 @@ use crate::{
         SnapshotRestorePlan, SnapshotStatus, SnapshotType, VersionSelector,
     },
     error::AssetServiceError,
-    ports::{BuildRepository, Clock, GameRepository, ModManifestRepository, SnapshotRepository},
+    ports::{
+        AgentReleaseStore, BuildRepository, Clock, GameRepository, ModManifestRepository,
+        SnapshotRepository,
+    },
     proto::asset_service::{
         self, AdapterMetadata as ProtoAdapterMetadata, BuildCompatibility as ProtoBuildCompatibility,
         CompleteSnapshotRequest, CompleteSnapshotResponse, CreateSnapshotRequest,
@@ -42,6 +46,9 @@ where
     G: GameRepository,
 {
     service: Arc<AssetService<B, S, M, C, G>>,
+    // P1（agent-release-asset-service-redesign）：release 二进制对象存储
+    release_store: Arc<dyn AgentReleaseStore>,
+    release_bucket: String,
 }
 
 impl<B, S, M, C, G> GrpcAssetService<B, S, M, C, G>
@@ -52,8 +59,16 @@ where
     C: Clock,
     G: GameRepository,
 {
-    pub fn new(service: Arc<AssetService<B, S, M, C, G>>) -> Self {
-        Self { service }
+    pub fn new(
+        service: Arc<AssetService<B, S, M, C, G>>,
+        release_store: Arc<dyn AgentReleaseStore>,
+        release_bucket: impl Into<String>,
+    ) -> Self {
+        Self {
+            service,
+            release_store,
+            release_bucket: release_bucket.into(),
+        }
     }
 }
 
@@ -317,6 +332,65 @@ where
                 compatibility: Some(map_compatibility(compatibility)),
             },
         ))
+    }
+
+    /// P1（agent-release-asset-service-redesign）：接收 node_agent 发布二进制上传流，
+    /// 边收边算 sha256 → 写对象存储 → 返回 {bucket, object_key, sha256, size_bytes}。
+    /// 首条消息必须携带 version/os/arch（可无 chunk）；内容为空/超限（1 GiB）拒绝。
+    async fn put_agent_release(
+        &self,
+        request: Request<Streaming<asset_service::PutAgentReleaseRequest>>,
+    ) -> Result<Response<asset_service::PutAgentReleaseResponse>, Status> {
+        const MAX_BYTES: usize = 1 << 30; // 1 GiB 上限
+        let mut stream = request.into_inner();
+        let mut body: Vec<u8> = Vec::new();
+        let mut hasher = Sha256::new();
+        let mut version = String::new();
+        let mut os = String::new();
+        let mut arch = String::new();
+        while let Some(msg) = stream
+            .message()
+            .await
+            .map_err(|e| Status::internal(format!("接收 release 上传流失败: {e}")))?
+        {
+            if version.is_empty() {
+                version = msg.version;
+                os = msg.os;
+                arch = msg.arch;
+                if version.is_empty() || os.is_empty() || arch.is_empty() {
+                    return Err(Status::invalid_argument(
+                        "release 上传首条消息必须携带 version/os/arch",
+                    ));
+                }
+            }
+            if !msg.chunk.is_empty() {
+                hasher.update(&msg.chunk);
+                body.extend_from_slice(&msg.chunk);
+                if body.len() > MAX_BYTES {
+                    return Err(Status::resource_exhausted("release 超过 1 GiB 上限"));
+                }
+            }
+        }
+        if version.is_empty() {
+            return Err(Status::invalid_argument("release 上传流为空"));
+        }
+        if body.is_empty() {
+            return Err(Status::invalid_argument("release 内容为空"));
+        }
+        let key = format!("agent-release/{version}/{os}-{arch}/node-agent");
+        let size = body.len() as u64;
+        let sha256 = hex::encode(hasher.finalize());
+        self.release_store
+            .put_object(&self.release_bucket, &key, body)
+            .await
+            .map_err(|e| Status::internal(format!("release 存储失败: {e}")))?;
+        log::info!("release 已接收并存储: {key} sha256={sha256} size={size}");
+        Ok(Response::new(asset_service::PutAgentReleaseResponse {
+            bucket: self.release_bucket.clone(),
+            object_key: key,
+            sha256,
+            size_bytes: size,
+        }))
     }
 }
 

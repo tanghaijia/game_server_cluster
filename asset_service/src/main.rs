@@ -1,18 +1,18 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use asset_service::{
-    clients::SteamServiceHttp,
+    clients::{S3AgentReleaseStore, SteamServiceHttp},
     domain::{AdapterId, AdapterVersion, BuildId, BuildStatus, Game, GameBuild},
-    ports::{GameRepository, SystemClock},
+    ports::{AgentReleaseStore, GameRepository, SystemClock},
     proto::asset_service::{
         asset_service_server::AssetServiceServer, business_service_server::BusinessServiceServer,
     },
     repositories::{
-        InMemoryBuildRepository, InMemoryGameRepository, InMemoryModManifestRepository,
-        InMemoryNodeAgentRepository, InMemoryNodeRepository, InMemorySnapshotRepository,
-        InMemorySteamBranchRepository, SqlBuildRepository, SqlGameRepository,
-        SqlModManifestRepository, SqlNodeAgentRepository, SqlNodeRepository, SqlSnapshotRepository,
-        SqlSteamBranchRepository, create_pool, run_migrations,
+        InMemoryAgentReleaseStore, InMemoryBuildRepository, InMemoryGameRepository,
+        InMemoryModManifestRepository, InMemoryNodeAgentRepository, InMemoryNodeRepository,
+        InMemorySnapshotRepository, InMemorySteamBranchRepository, SqlBuildRepository,
+        SqlGameRepository, SqlModManifestRepository, SqlNodeAgentRepository, SqlNodeRepository,
+        SqlSnapshotRepository, SqlSteamBranchRepository, create_pool, run_migrations,
     },
     rpc::{GrpcAssetService, GrpcBusinessService},
     service::{AssetService, RegisterBuildRequest, SteamBranchSync},
@@ -35,6 +35,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+// ── release 对象存储（P1，agent-release-asset-service-redesign）────────────────
+
+/// 按环境构建 release 存储：S3_ENDPOINT/AWS_* 存在 → S3/MinIO（配置与 node_agent 快照同款）；
+/// 否则进程内内存（开发/演示，重启即失，WARN 提示）。
+async fn make_release_store() -> Arc<dyn AgentReleaseStore> {
+    let s3_endpoint = std::env::var("S3_ENDPOINT").ok();
+    let use_s3 = s3_endpoint.is_some()
+        || std::env::var("AWS_ACCESS_KEY_ID").is_ok()
+        || std::env::var("AWS_ENDPOINT_URL").is_ok();
+    if !use_s3 {
+        log::warn!("未配置 S3_ENDPOINT/AWS_*：release 存储退化为进程内内存（重启即失，仅开发/演示）");
+        return Arc::new(InMemoryAgentReleaseStore::new());
+    }
+    let sdk_config = aws_config::load_from_env().await;
+    let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let s3_client = if let Some(endpoint) = &s3_endpoint {
+        let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+            .endpoint_url(endpoint)
+            .force_path_style(true)
+            .region(aws_sdk_s3::config::Region::new(region))
+            .build();
+        aws_sdk_s3::Client::from_conf(s3_config)
+    } else {
+        let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+            .region(aws_sdk_s3::config::Region::new(region))
+            .build();
+        aws_sdk_s3::Client::from_conf(s3_config)
+    };
+    Arc::new(S3AgentReleaseStore::new(s3_client))
+}
+
+/// release 落桶（env ASSET_RELEASE_BUCKET，默认与快照一致的 cluster）
+fn release_bucket() -> String {
+    std::env::var("ASSET_RELEASE_BUCKET").unwrap_or_else(|_| "cluster".into())
 }
 
 // ── SQL (PostgreSQL) 模式 ─────────────────────────────────────────────────────
@@ -77,7 +113,7 @@ async fn run_with_sql(
 
     let business =
         GrpcBusinessService::new(game_repo, node_repo, node_agent_repo, steam_branch_repo);
-    let grpc = GrpcAssetService::new(service);
+    let grpc = GrpcAssetService::new(service, make_release_store().await, release_bucket());
 
     println!("asset-service listening on {}", addr);
     Server::builder()
@@ -126,7 +162,7 @@ async fn run_with_in_memory(addr: SocketAddr) -> Result<(), Box<dyn std::error::
         steam_branch_repo,
     );
 
-    let grpc = GrpcAssetService::new(service);
+    let grpc = GrpcAssetService::new(service, make_release_store().await, release_bucket());
 
     println!("asset-service listening on {}", addr);
     Server::builder()
