@@ -1,0 +1,36 @@
+# node_agent systemd unit（一键更新托管，见 docs/node-agent-upgrade-design.md §3.2.2）
+#
+# 要点：
+#  - ExecStartPre（root 上下文）完成 /server /data 创建与属主固定 —— 替代旧 start.sh 里的
+#    sudo 命令，运行期与更新期零 sudo、零密码。
+#  - Restart=always：node_agent 更新完成以退出码 42 退出后自动重跑 ExecStart（start.sh → 新二进制）。
+#  - User：请按实际运行用户替换（install-node-agent.sh 会写入）。
+#
+# 安装：cp 到 /etc/systemd/system/node_agent.service 后
+#   systemctl daemon-reload && systemctl enable --now node_agent
+
+[Unit]
+Description=node agent (game server cluster)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# root 段：目录准备（幂等；chown 属主 = User 行）
+ExecStartPre=/usr/bin/install -d -o __RUN_USER__ -g __RUN_USER__ /server
+ExecStartPre=/usr/bin/install -d -o __RUN_USER__ -g __RUN_USER__ /data
+# 若数据目录由旧版本 root 创建，此处兜底修正属主（无此情况可注释）
+ExecStartPre=/usr/bin/chown -R __RUN_USER__:__RUN_USER__ /server /data
+User=__RUN_USER__
+Group=__RUN_USER__
+WorkingDirectory=/opt/node-agent
+Environment=RUST_LOG=info
+# ExecStart 指向 start.sh：内部会 mkdir data/logs 并 exec 二进制（BINARY 默认同目录 node_agent）
+ExecStart=/opt/node-agent/start.sh
+Restart=always
+RestartSec=5
+# 更新相关：允许替换自身二进制所需（当前目录可写）
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target
