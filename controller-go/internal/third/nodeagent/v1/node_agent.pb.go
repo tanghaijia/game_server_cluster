@@ -1527,13 +1527,18 @@ func (x *GetHeartbeatResponse) GetAgentVersion() string {
 	return ""
 }
 
-// node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4）
+// node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4 + agent-release-asset-service-redesign P3）
 type UpdateNodeAgentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`                            // 目标发布版本，如 v0.1.1
-	Sha256        string                 `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`                              // 二进制 sha256（下载后复核）
-	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`      // 期望字节数（下载后校验）
-	DownloadUrl   string                 `protobuf:"bytes,4,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"` // controller 提供的下载地址（含短效签名，节点直连拉取）
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Version   string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`                       // 目标发布版本，如 v0.1.1
+	Sha256    string                 `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`                         // 二进制 sha256（下载后复核）
+	SizeBytes int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"` // 期望字节数（下载后校验）
+	// 下载源二选一：
+	// - P3 起：object_key/bucket 指向对象存储（asset_service 托管，agent 用自身 ObjectStore 直连拉取）；
+	// - download_url 为 P2 过渡遗留（controller 中转下载端点已退役），object_key 为空时回退使用。
+	DownloadUrl   string `protobuf:"bytes,4,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"` // deprecated：controller HTTP 下载端点（已退役，过渡兼容）
+	ObjectKey     string `protobuf:"bytes,5,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`       // 对象键，如 agent-release/v0.1.1/linux-amd64/node-agent
+	Bucket        string `protobuf:"bytes,6,opt,name=bucket,proto3" json:"bucket,omitempty"`                              // 对象所在桶
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1592,6 +1597,20 @@ func (x *UpdateNodeAgentRequest) GetSizeBytes() int64 {
 func (x *UpdateNodeAgentRequest) GetDownloadUrl() string {
 	if x != nil {
 		return x.DownloadUrl
+	}
+	return ""
+}
+
+func (x *UpdateNodeAgentRequest) GetObjectKey() string {
+	if x != nil {
+		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *UpdateNodeAgentRequest) GetBucket() string {
+	if x != nil {
+		return x.Bucket
 	}
 	return ""
 }
@@ -2904,13 +2923,16 @@ const file_nodeagent_v1_node_agent_proto_rawDesc = "" +
 	"\x13GetHeartbeatRequest\"v\n" +
 	"\x14GetHeartbeatResponse\x129\n" +
 	"\theartbeat\x18\x01 \x01(\v2\x1b.nodeagent.v1.NodeHeartbeatR\theartbeat\x12#\n" +
-	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\"\x8c\x01\n" +
+	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\"\xc3\x01\n" +
 	"\x16UpdateNodeAgentRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12!\n" +
-	"\fdownload_url\x18\x04 \x01(\tR\vdownloadUrl\"I\n" +
+	"\fdownload_url\x18\x04 \x01(\tR\vdownloadUrl\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x05 \x01(\tR\tobjectKey\x12\x16\n" +
+	"\x06bucket\x18\x06 \x01(\tR\x06bucket\"I\n" +
 	"\x17UpdateNodeAgentResponse\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x99\x05\n" +

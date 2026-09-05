@@ -181,15 +181,13 @@ func main() {
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	nodeUseCase := biz.NewNodeUseCase(nodeRepo, nodeAgentRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
-	// node_agent 发布版本管理：P2 起二进制经 asset_service 写对象存储（docs/agent-release-asset-service-redesign.md），
-	// controller 只登记清单；LocalReleaseStore 仅保留供 P4 前旧编排器参数过渡
+	// node_agent 发布版本管理：二进制经 asset_service 写对象存储，controller 只登记清单
+	// （docs/agent-release-asset-service-redesign.md）
 	agentReleaseRepo := repogorm.NewAgentReleaseRepo(db)
-	agentReleaseStore := biz.NewLocalReleaseStore(cfg.AgentReleaseDir)
 	agentReleaseUC := biz.NewAgentReleaseUseCase(agentReleaseRepo, assetClient)
-	// P3：一键更新编排（串行滚动；下载端点 base 供 node_agent 拉取）
+	// 一键更新编排（串行滚动；P4 起下载源 = 对象存储 object_key/bucket）
 	updateOrchestrator := biz.NewNodeAgentUpdateOrchestrator(
 		nodeAgentRepo, nodeRepo, gameInstanceRepo, agentReleaseRepo, nodeAgentClients,
-		agentReleaseStore, cfg.AgentUpdateBaseURL,
 		time.Duration(cfg.RPCTimeoutSec)*time.Second,
 		time.Duration(cfg.AgentUpdateWaitSec)*time.Second,
 	)

@@ -32,7 +32,8 @@ type NodeAgentUpdateResult struct {
 	CurrentVer  string `json:"current_version,omitempty"`
 }
 
-// NodeAgentUpdateOrchestrator node_agent 一键更新编排（P3，见 docs/node-agent-upgrade-design.md §3.3）。
+// NodeAgentUpdateOrchestrator node_agent 一键更新编排（P3 原 + P4 下载源改对象存储，
+// 见 docs/agent-release-asset-service-redesign.md）。
 // 串行执行：前置过滤（失联/有活跃实例/已是最新）→ 状态机落库 → gRPC 下发 →
 // 轮询心跳回归新版本确认完成。
 type NodeAgentUpdateOrchestrator struct {
@@ -41,10 +42,7 @@ type NodeAgentUpdateOrchestrator struct {
 	instanceRepo  repository.GameInstanceRepository
 	releaseRepo   repository.AgentReleaseRepository
 	clients       *nodeagent.ClientRegistry
-	store         ReleaseStore
-	// 下载端点 base：node_agent 可达的 controller 地址（http://host:port）
-	downloadBaseURL string
-	rpcTimeout      time.Duration
+	rpcTimeout    time.Duration
 	// 等待心跳回归新版本的轮询参数
 	waitTimeout time.Duration
 	pollEvery   time.Duration
@@ -56,22 +54,18 @@ func NewNodeAgentUpdateOrchestrator(
 	instanceRepo repository.GameInstanceRepository,
 	releaseRepo repository.AgentReleaseRepository,
 	clients *nodeagent.ClientRegistry,
-	store ReleaseStore,
-	downloadBaseURL string,
 	rpcTimeout time.Duration,
 	waitTimeout time.Duration,
 ) *NodeAgentUpdateOrchestrator {
 	return &NodeAgentUpdateOrchestrator{
-		nodeAgentRepo:   nodeAgentRepo,
-		nodeRepo:        nodeRepo,
-		instanceRepo:    instanceRepo,
-		releaseRepo:     releaseRepo,
-		clients:         clients,
-		store:           store,
-		downloadBaseURL: downloadBaseURL,
-		rpcTimeout:      rpcTimeout,
-		waitTimeout:     waitTimeout,
-		pollEvery:       3 * time.Second,
+		nodeAgentRepo: nodeAgentRepo,
+		nodeRepo:      nodeRepo,
+		instanceRepo:  instanceRepo,
+		releaseRepo:   releaseRepo,
+		clients:       clients,
+		rpcTimeout:    rpcTimeout,
+		waitTimeout:   waitTimeout,
+		pollEvery:     3 * time.Second,
 	}
 }
 
@@ -156,14 +150,15 @@ func (o *NodeAgentUpdateOrchestrator) updateOne(ctx context.Context, t NodeAgent
 		return NodeAgentUpdateResult{AgentID: t.AgentID, TargetVer: release.Version, Reason: "connect node_agent: " + err.Error()}
 	}
 
-	downloadURL := fmt.Sprintf("%s/api/node-agents/releases/%s/download", o.downloadBaseURL, release.ID)
 	rpcCtx, cancel := context.WithTimeout(ctx, o.rpcTimeout)
 	defer cancel()
 	resp, err := client.UpdateNodeAgent(rpcCtx, &nodeagentv1.UpdateNodeAgentRequest{
-		Version:     release.Version,
-		Sha256:      release.SHA256,
-		SizeBytes:   release.SizeBytes,
-		DownloadUrl: downloadURL,
+		Version:   release.Version,
+		Sha256:    release.SHA256,
+		SizeBytes: release.SizeBytes,
+		// P4：下载源 = 对象存储（asset_service 托管），不再依赖 controller 下载端点
+		Bucket:    release.Bucket,
+		ObjectKey: release.StorageKey,
 	}, grpc.WaitForReady(true))
 	if err != nil {
 		o.fail(ctx, t.AgentID, release.Version, "下发更新失败: "+err.Error())
