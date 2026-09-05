@@ -159,12 +159,17 @@ message GetHeartbeatResponse {
   string agent_version = 2;
 }
 
-// node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4）
+// node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4 + agent-release-asset-service-redesign P3）
 message UpdateNodeAgentRequest {
   string version = 1;        // 目标发布版本，如 v0.1.1
   string sha256 = 2;         // 二进制 sha256（下载后复核）
   int64 size_bytes = 3;      // 期望字节数（下载后校验）
-  string download_url = 4;   // controller 提供的下载地址（含短效签名，节点直连拉取）
+  // 下载源二选一：
+  // - P3 起：object_key/bucket 指向对象存储（asset_service 托管，agent 用自身 ObjectStore 直连拉取）；
+  // - download_url 为 P2 过渡遗留（controller 中转下载端点已退役），object_key 为空时回退使用。
+  string download_url = 4;   // deprecated：controller HTTP 下载端点（已退役，过渡兼容）
+  string object_key = 5;     // 对象键，如 agent-release/v0.1.1/linux-amd64/node-agent
+  string bucket = 6;         // 对象所在桶
 }
 
 message UpdateNodeAgentResponse {

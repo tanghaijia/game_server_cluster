@@ -25,8 +25,8 @@ use crate::{
     },
     error::NodeAgentError,
     ports::{
-        AssetServiceFace, ContainerClient, GameInstanceRepository, OperationRepository,
-        SystemInfoProvider,
+        AssetServiceFace, ContainerClient, GameInstanceRepository, ObjectStore,
+        OperationRepository, SystemInfoProvider,
     },
     proto::{
         asset_service::Node,
@@ -74,6 +74,8 @@ where
     game_instance_repository: Arc<dyn GameInstanceRepository>,
     // B-04/P1-1：运行时探针缓存（健康 + 在线人数），心跳读取
     runtime_probe: Option<Arc<RuntimeProbeService>>,
+    // P3（agent-release-asset-service-redesign）：更新下载走对象存储（与快照同构）
+    object_store: Arc<dyn ObjectStore>,
 }
 
 impl<I, S, A, IMC> GrpcNodeAgentServer<I, S, A, IMC>
@@ -88,6 +90,7 @@ where
         pool: SqlitePool,
         operations: Arc<dyn OperationRepository>,
         game_instance_repository: Arc<dyn GameInstanceRepository>,
+        object_store: Arc<dyn ObjectStore>,
     ) -> Self {
         Self {
             service,
@@ -95,6 +98,7 @@ where
             operations,
             game_instance_repository,
             runtime_probe: None,
+            object_store,
         }
     }
 
@@ -371,8 +375,12 @@ where
         let sha256 = req.sha256.clone();
         let size_bytes = req.size_bytes;
         let url = req.download_url.clone();
+        let bucket = req.bucket.clone();
+        let object_key = req.object_key.clone();
+        let store = self.object_store.clone();
         tokio::spawn(async move {
-            run_update_and_restart(&version, &sha256, size_bytes, &url).await;
+            run_update_and_restart(&version, &sha256, size_bytes, &bucket, &object_key, &url, store)
+                .await;
         });
 
         Ok(Response::new(UpdateNodeAgentResponse {

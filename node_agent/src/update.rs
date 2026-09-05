@@ -8,6 +8,7 @@
 //! （已知限制，见设计稿 §8）。
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use log::{error, info, warn};
@@ -60,23 +61,54 @@ async fn http_get(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+/// 拉取目标二进制：优先对象存储（object_key/bucket，P3 起），
+/// download_url 为 P2 过渡遗留（controller 下载端点已退役）——object_key 为空时回退。
+async fn fetch_binary(
+    store: &Arc<dyn crate::ports::ObjectStore>,
+    bucket: &str,
+    object_key: &str,
+    download_url: &str,
+) -> Result<Vec<u8>, String> {
+    if !object_key.is_empty() {
+        if bucket.is_empty() {
+            return Err("object_key 已提供但 bucket 为空".to_string());
+        }
+        store
+            .get_object(bucket, object_key)
+            .await
+            .map_err(|e| format!("对象存储拉取失败 {bucket}/{object_key}: {e}"))
+    } else if !download_url.is_empty() {
+        http_get(download_url).await
+    } else {
+        Err("缺少下载源（object_key/bucket 或 download_url）".to_string())
+    }
+}
+
 /// 执行一次更新：下载 → 校验 → staging → 备份 → 原子替换 → 返回（调用方负责 exit(42)）。
 /// 任一环节失败返回 Err，不触碰当前二进制（staging/备份文件残留由日志提示人工清理）。
 pub async fn apply_update(
     version: &str,
     sha256_hex: &str,
     size_bytes: i64,
+    bucket: &str,
+    object_key: &str,
     download_url: &str,
+    store: &Arc<dyn crate::ports::ObjectStore>,
 ) -> Result<PathBuf, String> {
-    if version.is_empty() || sha256_hex.is_empty() || download_url.is_empty() {
-        return Err("update 参数不完整（version/sha256/download_url 必填）".to_string());
+    if version.is_empty() || sha256_hex.is_empty() {
+        return Err("update 参数不完整（version/sha256 必填）".to_string());
     }
-    info!(
-        "开始更新 node_agent: version={version} sha256={sha256_hex} url={download_url}"
-    );
+    if object_key.is_empty() && download_url.is_empty() {
+        return Err("update 参数不完整（object_key 或 download_url 至少其一）".to_string());
+    }
+    if !object_key.is_empty() {
+        info!("开始更新 node_agent: version={version} sha256={sha256_hex} object={bucket}/{object_key}");
+    } else {
+        info!("开始更新 node_agent: version={version} sha256={sha256_hex} url={download_url}");
+    }
 
-    // 1) 下载
-    let bytes = http_get(download_url).await?;
+    // 1) 下载（对象存储优先，download_url 回退）
+    let bytes = fetch_binary(store, bucket, object_key, download_url).await?;
 
     // 2) 大小校验（期望非 0 时）
     if size_bytes > 0 && bytes.len() as i64 != size_bytes {
@@ -143,9 +175,12 @@ pub async fn run_update_and_restart(
     version: &str,
     sha256_hex: &str,
     size_bytes: i64,
+    bucket: &str,
+    object_key: &str,
     download_url: &str,
+    store: Arc<dyn crate::ports::ObjectStore>,
 ) {
-    match apply_update(version, sha256_hex, size_bytes, download_url).await {
+    match apply_update(version, sha256_hex, size_bytes, bucket, object_key, download_url, &store).await {
         Ok(_) => {
             // 等响应 flush（tonic 响应通常在 handler 返回后写出）
             tokio::time::sleep(Duration::from_millis(500)).await;

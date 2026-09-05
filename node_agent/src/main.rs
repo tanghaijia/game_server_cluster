@@ -105,8 +105,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 8. gRPC server（附加运行时探针：B-04/P1-1，debug 走 fake 实现，无实际探测）
         runtime_probe.start(std::time::Duration::from_secs(20)).await;
-        let grpc = GrpcNodeAgentServer::new(node_agent_service, pool, concrete_ops, concrete_instance)
-            .with_runtime_probe(Arc::new(runtime_probe));
+        let grpc = GrpcNodeAgentServer::new(
+            node_agent_service,
+            pool,
+            concrete_ops,
+            concrete_instance,
+            concrete_object_store.clone(),
+        )
+        .with_runtime_probe(Arc::new(runtime_probe));
 
         println!("node-agent listening on {}", addr);
         Server::builder()
@@ -262,6 +268,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             pool,
             sqlite_ops,
             sqlite_game_instances.clone(),
+            object_store.clone(),
         )
         .with_runtime_probe(Arc::new(runtime_probe));
 
