@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================
-# node-agent 启动脚本
+# node-agent 启动脚本（一键更新友好版，见 docs/node-agent-upgrade-design.md §3.2）
+#
+# 与旧版的差异：删除 4 条 `sudo mkdir/chown /server /data`。
+#   - systemd 托管路径：root 准备由 node_agent.service 的 ExecStartPre 完成（无需 sudo/密码）；
+#   - 裸跑路径（无 systemd，仅开发/调试）：请先用 root 执行一次
+#       install -d -o "$USER" -g "$USER" /server /data
+#     （或运行 deploy/install-node-agent.sh）。
+#
 # 用法:
 #   ./start.sh                    # 使用默认配置启动
 #   NODE_ID=node-1 ./start.sh     # 指定节点 ID
@@ -34,7 +41,6 @@ export REGISTRY_PORT="${REGISTRY_PORT:-5000}"
 # export REGISTRY_SERVER_ADDRESS="https://"
 
 # AWS S3 / S3 兼容对象存储配置
-# 如果使用 AWS S3（默认），配置 region 和凭据即可，SDK 自动推导 endpoint：
 export AWS_REGION="${AWS_REGION:-us-east-1}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-}"
@@ -63,15 +69,21 @@ if ! command -v docker &>/dev/null; then
     echo "[WARN] docker 未安装或不在 PATH 中"
 fi
 
-# 检查配置目录（sqlite/apalis 数据目录）
+# 检查配置目录（sqlite/apalis 数据目录）；agent 用户自有目录，无需 root
 DATA_DIR="${DATA_DIR:-./data}"
 mkdir -p "$DATA_DIR"
 
-export RUST_LOG=info
-sudo mkdir -p /server
-sudo mkdir -p /data
-sudo chown -R $USER:$USER /server
-sudo chown -R $USER:$USER /data
+export RUST_LOG="${RUST_LOG:-info}"
+# 一键更新日志目录（见 docs/node-agent-logging-design.md）
+export NODE_AGENT_LOG_DIR="${NODE_AGENT_LOG_DIR:-./logs}"
+mkdir -p "$NODE_AGENT_LOG_DIR"
+
+# /server /data 由部署方预置（systemd ExecStartPre / install 脚本），此处不重复 sudo
+for d in /server /data; do
+    if [ ! -d "$d" ]; then
+        echo "[WARN] 全局目录 $d 不存在（生产由 node_agent.service ExecStartPre 创建；裸跑请先 root 预置）"
+    fi
+done
 
 # ============================================================
 # 启动
