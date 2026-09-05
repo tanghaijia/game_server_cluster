@@ -32,7 +32,13 @@ func (f *fakeUpdateAgentRepo) GetByID(_ context.Context, id string) (*entity.Nod
 	return nil, gorm.ErrRecordNotFound
 }
 func (f *fakeUpdateAgentRepo) ListEnabledIDs(context.Context) ([]string, error) { return nil, nil }
-func (f *fakeUpdateAgentRepo) ListAll(context.Context) ([]*entity.NodeAgent, error) { return nil, nil }
+func (f *fakeUpdateAgentRepo) ListAll(context.Context) ([]*entity.NodeAgent, error) {
+	out := make([]*entity.NodeAgent, 0, len(f.agents))
+	for _, a := range f.agents {
+		out = append(out, a)
+	}
+	return out, nil
+}
 func (f *fakeUpdateAgentRepo) UpdateHealth(context.Context, string, bool, time.Time) error {
 	return nil
 }

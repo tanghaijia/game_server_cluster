@@ -208,6 +208,27 @@ func main() {
 	dispatcher.Start(ctx)
 	slog.Info("ReconcileDispatcher 已启动")
 
+	// 一键更新状态机自动对账（每 15s）：自动收敛「卡在 downloading/rebooting」的残留
+	// （请求中断/agent 异常导致 updated/failed 未落库），无需手工清状态。
+	updateReconciler := biz.NewNodeAgentUpdateReconciler(
+		nodeAgentRepo, time.Duration(cfg.AgentUpdateWaitSec)*time.Second)
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				slog.Info("NodeAgentUpdateReconciler 退出")
+				return
+			case <-ticker.C:
+				if err := updateReconciler.ReconcileOnce(ctx); err != nil {
+					slog.Error("NodeAgentUpdateReconciler 对账失败", "err", err)
+				}
+			}
+		}
+	}()
+	slog.Info("NodeAgentUpdateReconciler 已启动（15s 周期对账，超时窗口=AgentUpdateWaitSec）")
+
 	// 调度事件持久化消费者（批量 flush + 定期清理）
 	eventBus.Start(ctx)
 	slog.Info("SchedulerEventBus 已启动（事件持久化）")
