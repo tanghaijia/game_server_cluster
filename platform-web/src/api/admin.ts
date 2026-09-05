@@ -41,6 +41,44 @@ export interface NodeAgent {
   Status: number // 0=Disabled 1=Enabled
   Alive: boolean // 存活检测结果（controller 心跳探测）
   LastHeartbeatAt?: string
+  // 一键更新（000032，见 docs/node-agent-upgrade-design.md）
+  AgentVersion?: string // 心跳上报当前版本
+  UpdateState?: string // idle/downloading/rebooting/updated/failed
+  TargetVersion?: string // 目标发布版本
+  LastUpdateAt?: string
+  LastUpdateErr?: string // 最近失败原因
+}
+
+// node_agent 发布版本清单（P1/P3）
+export interface AgentRelease {
+  ID: string
+  Version: string
+  OS: string
+  Arch: string
+  SHA256: string
+  SizeBytes: number
+  Note?: string
+  CreatedBy?: string
+  CreatedAt?: string
+}
+
+// 单节点更新结果
+export interface AgentUpdateResult {
+  agent_id: string
+  ok?: boolean
+  skipped?: boolean
+  reason?: string
+  target_version?: string
+  current_version?: string
+}
+
+/** 更新状态文案（与 controller node_agents.update_state 对齐） */
+export const AGENT_UPDATE_STATE_LABELS: Record<string, string> = {
+  idle: '空闲',
+  downloading: '下载中',
+  rebooting: '重启中',
+  updated: '已更新',
+  failed: '失败',
 }
 
 export interface SteamBranch {
@@ -91,6 +129,45 @@ export async function createNodeAgent(data: { name: string; node_id?: string; po
 export async function setNodeAgentEnabled(id: string, enabled: boolean): Promise<NodeAgent> {
   const resp = await http.post('/admin/node-agents/' + id + (enabled ? '/enable' : '/disable'))
   return resp.data
+}
+
+// ---- AgentRelease + 一键更新（P1/P3） ----
+
+export async function listAgentReleases(): Promise<AgentRelease[]> {
+  const resp = await http.get('/admin/node-agents/releases')
+  return resp.data.releases
+}
+
+// 上传新版 node_agent 二进制（multipart；大文件需长超时）
+export async function uploadAgentRelease(data: {
+  version: string
+  os: string
+  arch: string
+  note?: string
+  file: File
+}): Promise<AgentRelease> {
+  const fd = new FormData()
+  fd.append('file', data.file)
+  fd.append('version', data.version)
+  fd.append('os', data.os)
+  fd.append('arch', data.arch)
+  if (data.note) fd.append('note', data.note)
+  const resp = await http.post('/admin/node-agents/releases', fd, {
+    timeout: 600000,
+  })
+  return resp.data
+}
+
+// 批量滚动更新（controller 同步执行，等待心跳回归最多 ~120s，需长超时）
+export async function batchUpdateNodeAgents(updates: Array<{ agent_id: string; release_id: string }>): Promise<AgentUpdateResult[]> {
+  const resp = await http.post('/admin/node-agents/batch-update', { updates }, { timeout: 300000 })
+  return resp.data.results
+}
+
+// 回滚到指定 release（同样同步执行，长超时）
+export async function rollbackNodeAgent(agentId: string, releaseId: string): Promise<AgentUpdateResult> {
+  const resp = await http.post('/admin/node-agents/' + agentId + '/rollback', { release_id: releaseId }, { timeout: 300000 })
+  return resp.data.result
 }
 
 // ---- Game ----
