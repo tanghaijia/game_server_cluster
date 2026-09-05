@@ -170,6 +170,7 @@
               <th class="px-3 py-2">build_id</th>
               <th class="px-3 py-2">进度</th>
               <th class="px-3 py-2" title="缓存内容实测大小（node 下载完成后上报；0 = 未知）">大小</th>
+              <th class="px-3 py-2" title="最近一次下载失败原因（node_agent 落库透传；空 = 无失败/成功）">失败原因</th>
             </tr>
           </thead>
           <tbody>
@@ -184,9 +185,13 @@
               <td class="px-3 py-2 font-mono">{{ c.build_id || '-' }}</td>
               <td class="px-3 py-2 font-mono">{{ c.download_progress > 0 ? (c.download_progress * 100).toFixed(0) + '%' : '-' }}</td>
               <td class="px-3 py-2 font-mono">{{ formatBytes(c.size_bytes ?? 0) }}</td>
+              <td class="px-3 py-2">
+                <span v-if="c.last_error" class="block max-w-[300px] truncate text-red-600" :title="c.last_error">{{ c.last_error }}</span>
+                <span v-else class="text-muted-foreground">-</span>
+              </td>
             </tr>
             <tr v-if="!cache.length">
-              <td colspan="8" class="px-3 py-8 text-center text-muted-foreground">暂无缓存数据（NodeCacheView 快照周期刷新，需 node_agent 在线）</td>
+              <td colspan="9" class="px-3 py-8 text-center text-muted-foreground">暂无缓存数据（NodeCacheView 快照周期刷新，需 node_agent 在线）</td>
             </tr>
           </tbody>
         </table>

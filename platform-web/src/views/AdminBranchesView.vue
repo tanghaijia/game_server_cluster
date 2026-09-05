@@ -104,11 +104,17 @@
                     v-for="(c, i) in branchCacheItems(gameId, b.BranchName)"
                     :key="i"
                     class="inline-flex items-center gap-1.5 rounded border bg-background px-2 py-1 text-xs"
+                    :title="c.last_error ? '失败原因：' + c.last_error : undefined"
                   >
                     <span class="font-mono">{{ c.node_agent_id }}</span>
                     <span :class="cacheStatusClass(c.status)">{{ CACHE_STATUS_LABELS[c.status] ?? c.status }}</span>
                     <span class="text-muted-foreground">build {{ c.build_id || '-' }}</span>
                     <span class="font-mono text-muted-foreground">{{ formatBytes(c.size_bytes ?? 0) }}</span>
+                    <span
+                      v-if="c.last_error && c.status !== 'available'"
+                      class="max-w-[180px] truncate text-red-600"
+                      :title="c.last_error"
+                    >{{ c.last_error }}</span>
                   </span>
                 </div>
               </td>

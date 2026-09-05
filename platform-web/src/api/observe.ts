@@ -43,6 +43,7 @@ export interface NodeCacheItem {
   build_id: string
   download_progress: number
   size_bytes?: number // P2-B：缓存内容实测字节数（0/undefined = 未知）
+  last_error?: string // P4：最近一次失败原因（空/undefined = 无失败或成功）
 }
 
 export interface QueueItem {
