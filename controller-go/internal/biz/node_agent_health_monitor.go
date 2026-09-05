@@ -133,6 +133,12 @@ func (m *NodeAgentHealthMonitor) probeAgent(ctx context.Context, agentID string)
 	// 自检指标 → 健康状态（healthy/degraded）+ 动态资源/采样落库（3.4）
 	if resp != nil {
 		m.applyHeartbeat(ctx, agent, node, resp.GetHeartbeat())
+		// P2：agent 版本自述（仅变化时更新；更新编排用）
+		if v := resp.GetAgentVersion(); v != "" && v != agent.AgentVersion {
+			if err := m.nodeAgentRepo.UpdateAgentVersion(ctx, agentID, v); err != nil {
+				slog.Error("NodeAgentHealthMonitor 更新 agent 版本失败", "agent", agentID, "version", v, "err", err)
+			}
+		}
 	}
 }
 

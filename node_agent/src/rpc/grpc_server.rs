@@ -50,6 +50,7 @@ use crate::{
             SnapshotRestoreResult as ProtoSnapshotRestoreResult, StartInstanceRequest,
             StartInstanceResponse, StopInstanceRequest, StopInstanceResponse,
             RestartInstanceRequest, RestartInstanceResponse,
+            UpdateNodeAgentRequest, UpdateNodeAgentResponse,
             node_agent_service_server::NodeAgentService as NodeAgentRpc,
         },
     },
@@ -58,6 +59,7 @@ use crate::{
         enqueue_restart_instance, enqueue_restore_snapshot, enqueue_start_instance,
         enqueue_stop_instance,
     },
+    update::{self, run_update_and_restart},
 };
 pub struct GrpcNodeAgentServer<I, S, A, IMC>
 where
@@ -308,6 +310,77 @@ where
         }
         Ok(Response::new(GetHeartbeatResponse {
             heartbeat: Some(proto),
+            agent_version: update::current_version(),
+        }))
+    }
+
+    /// P2：node_agent 一键更新（docs/node-agent-upgrade-design.md §3.2.4）。
+    /// 校验（版本不同 + 无活跃实例）通过后 spawn 后台下载→校验→替换→exit(42)。
+    async fn update_node_agent(
+        &self,
+        request: Request<UpdateNodeAgentRequest>,
+    ) -> Result<Response<UpdateNodeAgentResponse>, Status> {
+        let req = request.into_inner();
+
+        // 1) 目标版本 ≠ 当前版本（防重复）
+        let cur = update::current_version();
+        if req.version.is_empty() {
+            return Ok(Response::new(UpdateNodeAgentResponse {
+                state: "failed".to_string(),
+                message: "version 必填".to_string(),
+            }));
+        }
+        if req.version == cur {
+            return Ok(Response::new(UpdateNodeAgentResponse {
+                state: "failed".to_string(),
+                message: format!("已是最新版本 {cur}，无需更新"),
+            }));
+        }
+
+        // 2) 无活跃实例（running/启动/停止中/准备中）才允许更新
+        let instances = self
+            .game_instance_repository
+            .get_all()
+            .await
+            .map_err(map_error)?;
+        let active: Vec<&GameInstance> = instances
+            .iter()
+            .filter(|i| {
+                matches!(
+                    i.status,
+                    GameInstanceStatus::Running
+                        | GameInstanceStatus::Stopping
+                        | GameInstanceStatus::Preparing
+                        | GameInstanceStatus::Pedding
+                )
+            })
+            .collect();
+        if !active.is_empty() {
+            return Ok(Response::new(UpdateNodeAgentResponse {
+                state: "failed".to_string(),
+                message: format!(
+                    "节点仍有 {} 个活跃实例（如 {}），拒绝更新",
+                    active.len(),
+                    active[0].id
+                ),
+            }));
+        }
+
+        // 3) 后台执行更新（下载/校验/替换在响应返回后异步完成，成功即 exit(42) 请求重启）
+        let version = req.version.clone();
+        let sha256 = req.sha256.clone();
+        let size_bytes = req.size_bytes;
+        let url = req.download_url.clone();
+        tokio::spawn(async move {
+            run_update_and_restart(&version, &sha256, size_bytes, &url).await;
+        });
+
+        Ok(Response::new(UpdateNodeAgentResponse {
+            state: "accepted".to_string(),
+            message: format!(
+                "更新已受理（{cur} → {}），完成后自动重启",
+                req.version
+            ),
         }))
     }
 

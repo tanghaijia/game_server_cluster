@@ -36,6 +36,10 @@ service NodeAgentService {
   // 节点上有该 game 的活动实例引用时拒绝（错误）。
   // 由 controller 在分支 Disable/Abandoned、需求归零、磁盘压力、管理员显式删除时下发。
   rpc RemoveCache (RemoveCacheRequest) returns (RemoveCacheResponse);
+
+  // node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4）：
+  // controller 下发目标版本与下载地址；node_agent 下载→sha256 校验→原子替换→exit(42) 请求重启。
+  rpc UpdateNodeAgent (UpdateNodeAgentRequest) returns (UpdateNodeAgentResponse);
 }
 
 message GetInstancesRequest {}
@@ -151,6 +155,22 @@ message GetHeartbeatRequest {}
 
 message GetHeartbeatResponse {
   NodeHeartbeat heartbeat = 1;
+  // node_agent 一键更新：当前版本自述（P2，心跳携带；controller 落库比对新版本）
+  string agent_version = 2;
+}
+
+// node_agent 一键更新（docs/node-agent-upgrade-design.md §3.4）
+message UpdateNodeAgentRequest {
+  string version = 1;        // 目标发布版本，如 v0.1.1
+  string sha256 = 2;         // 二进制 sha256（下载后复核）
+  int64 size_bytes = 3;      // 期望字节数（下载后校验）
+  string download_url = 4;   // controller 提供的下载地址（含短效签名，节点直连拉取）
+}
+
+message UpdateNodeAgentResponse {
+  // accepted（已受理，下载替换中，即将 exit(42) 重启）/ failed（拒绝或失败，见 message）
+  string state = 1;
+  string message = 2;
 }
 
 enum BuildStatus {

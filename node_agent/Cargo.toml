@@ -11,7 +11,7 @@ prost = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal", "process","io-util", "fs"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal", "process","io-util", "fs", "net"] }
 tonic = "0.12"
 prost-types = "0.13"
 uuid = { version = "1", features = ["serde", "v4"] }
@@ -45,6 +45,10 @@ regex = "1"
 # 实例文件管理服务（M1，见 docs/file-manager-design.md）
 axum = "0.8"
 jsonwebtoken = "9"
+
+# node_agent 一键更新（P2，见 docs/node-agent-upgrade-design.md）：拉取新版二进制用
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 
 [build-dependencies]
 protoc-bin-vendored = "3"

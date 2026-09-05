@@ -9,3 +9,4 @@ pub mod proto;
 pub mod providers;
 pub mod rpc;
 pub mod service;
+pub mod update;
