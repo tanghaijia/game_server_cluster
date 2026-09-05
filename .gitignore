@@ -23,7 +23,6 @@ vendor
 .cargo
 .go-cache
 *.log
-# controller 本地运行时目录（node_agent release 二进制落地/一次性修复脚本/临时 gocache）
+# controller 本地运行时目录（release 二进制落地/一次性探针脚本/临时 gocache）
 /controller-go/agent-releases/
-/controller-go/.tmp/
-/controller-go/.tmp_fix/
+/controller-go/.tmp*/
