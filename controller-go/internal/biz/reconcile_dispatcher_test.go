@@ -82,6 +82,14 @@ func (m *mockNodeAgentRepo) UpdateHealthStatus(ctx context.Context, agentID stri
 	return nil
 }
 
+func (m *mockNodeAgentRepo) UpdateAgentVersion(ctx context.Context, agentID, version string) error {
+	return nil
+}
+
+func (m *mockNodeAgentRepo) UpdateUpdateState(ctx context.Context, agentID, state, targetVersion, errMsg string) error {
+	return nil
+}
+
 var _ repository.NodeAgentRepository = (*mockNodeAgentRepo)(nil)
 
 type mockNodeRepo struct{}

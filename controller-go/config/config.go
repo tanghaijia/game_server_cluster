@@ -34,6 +34,9 @@ type Config struct {
 	HeartbeatProbeTimeoutMs   int
 	HeartbeatFailThreshold    int
 
+	// node_agent 一键更新（P1，见 docs/node-agent-upgrade-design.md）：发布二进制本地存储目录
+	AgentReleaseDir string
+
 	// 调度器（P1）
 	SchedulerScoreWeights      string  // json: {"region":1.0,"bandwidth":0.8,"locality":0.5,"history":0.6,"balance":0.7,"degraded_penalty":2.0,"frequency":0.0,"cache":2.0}
 	SchedulerUtilizationTarget float64 // 节点利用率目标（headroom = 1 - target）
@@ -105,6 +108,9 @@ func Load() *Config {
 		HeartbeatProbeTimeoutMs:   getEnvInt("HEARTBEAT_PROBE_TIMEOUT_MS", 5000),
 		// 连续失败多少次才标记失联（防启动/重连瞬态误报）
 		HeartbeatFailThreshold: getEnvInt("HEARTBEAT_FAIL_THRESHOLD", 2),
+
+		// node_agent 一键更新：发布二进制本地目录（默认 ./agent-releases）
+		AgentReleaseDir: getEnv("AGENT_RELEASE_DIR", "./agent-releases"),
 
 		// 调度器（P1）
 		SchedulerScoreWeights:      getEnv("SCHEDULER_SCORE_WEIGHTS", ""),

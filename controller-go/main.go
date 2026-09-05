@@ -181,6 +181,8 @@ func main() {
 	_ = biz.NewGameInstanceAdvanceUseCase(scheduler, gameInstanceRepo, assetClient)
 	nodeUseCase := biz.NewNodeUseCase(nodeRepo, nodeAgentRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
+	// P1：node_agent 发布版本管理（本地 ReleaseStore，见 docs/node-agent-upgrade-design.md）
+	agentReleaseUC := biz.NewAgentReleaseUseCase(repogorm.NewAgentReleaseRepo(db), biz.NewLocalReleaseStore(cfg.AgentReleaseDir))
 	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
 	fileSessionIssuer := biz.NewFileSessionIssuer(cfg.NodeAgentFileSecret, 30*time.Minute)
 	observerUseCase := biz.NewObserverUseCase(
@@ -285,6 +287,7 @@ func main() {
 	handler.NewGameCacheHandler(gameCacheManager).RegisterRoutes(router)
 	handler.NewFileSessionHandler(gameInstanceUseCase, nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewNodeAgentLogSessionHandler(nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
+	handler.NewAgentReleaseHandler(agentReleaseUC).RegisterRoutes(router)
 	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
 	handler.NewObserverHandler(observerUseCase).RegisterRoutes(router)
 

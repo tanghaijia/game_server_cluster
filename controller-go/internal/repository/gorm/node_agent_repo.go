@@ -61,3 +61,20 @@ func (r *NodeAgentRepo) UpdateHealthStatus(ctx context.Context, agentID string, 
 		Where("id = ?", agentID).
 		Update("health_status", status).Error
 }
+
+func (r *NodeAgentRepo) UpdateAgentVersion(ctx context.Context, agentID, version string) error {
+	return r.db.WithContext(ctx).Model(&entity.NodeAgent{}).
+		Where("id = ?", agentID).
+		Update("agent_version", version).Error
+}
+
+func (r *NodeAgentRepo) UpdateUpdateState(ctx context.Context, agentID, state, targetVersion, errMsg string) error {
+	return r.db.WithContext(ctx).Model(&entity.NodeAgent{}).
+		Where("id = ?", agentID).
+		Updates(map[string]any{
+			"update_state":     state,
+			"target_version":   targetVersion,
+			"last_update_err":  errMsg,
+			"last_update_at":   gorm.Expr("now()"),
+		}).Error
+}

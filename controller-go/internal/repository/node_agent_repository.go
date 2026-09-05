@@ -19,4 +19,8 @@ type NodeAgentRepository interface {
 	UpdateHealth(ctx context.Context, agentID string, alive bool, at time.Time) error
 	// UpdateHealthStatus 更新健康状态机（9.3，S23）
 	UpdateHealthStatus(ctx context.Context, agentID string, status entity.NodeAgentHealthStatus) error
+	// UpdateAgentVersion 心跳上报 agent 版本（仅在与当前不同时更新，减少写入）
+	UpdateAgentVersion(ctx context.Context, agentID, version string) error
+	// UpdateUpdateState 更新一键更新状态机（000032）
+	UpdateUpdateState(ctx context.Context, agentID, state, targetVersion, errMsg string) error
 }
