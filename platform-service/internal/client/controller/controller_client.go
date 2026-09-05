@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -381,6 +382,14 @@ type NodeAgent struct {
 	Status          int32   `json:"Status"` // 0=Disabled 1=Enabled
 	Alive           bool    `json:"Alive"`             // 存活检测（controller 心跳探测）
 	LastHeartbeatAt *string `json:"LastHeartbeatAt"`
+	// 000016：健康状态（unknown/healthy/degraded/unhealthy）
+	HealthStatus int32 `json:"HealthStatus"`
+	// 000032：一键更新（docs/node-agent-upgrade-design.md）
+	AgentVersion   string  `json:"AgentVersion"`   // 心跳上报当前版本
+	UpdateState    string  `json:"UpdateState"`    // idle/downloading/rebooting/updated/failed
+	TargetVersion  string  `json:"TargetVersion"`  // 目标发布版本
+	LastUpdateAt   *string `json:"LastUpdateAt"`
+	LastUpdateErr  string  `json:"LastUpdateErr"` // 最近失败原因
 }
 
 func (c *Client) CreateNodeAgent(ctx context.Context, name, nodeID string, port int32) (*NodeAgent, error) {
@@ -415,6 +424,103 @@ func (c *Client) SetNodeAgentEnabled(ctx context.Context, id string, enabled boo
 		return nil, err
 	}
 	return &a, nil
+}
+
+// ---------------------------------------------------------------------------
+// AgentRelease + 一键更新（P1/P3，见 docs/node-agent-upgrade-design.md）
+// ---------------------------------------------------------------------------
+
+// AgentRelease node_agent 发布版本清单（controller agent_releases 表，PascalCase JSON）
+type AgentRelease struct {
+	ID         string `json:"ID"`
+	Version    string `json:"Version"`
+	OS         string `json:"OS"`
+	Arch       string `json:"Arch"`
+	SHA256     string `json:"SHA256"`
+	SizeBytes  int64  `json:"SizeBytes"`
+	StorageKey string `json:"StorageKey"`
+	Note       string `json:"Note"`
+	CreatedBy  string `json:"CreatedBy"`
+	CreatedAt  string `json:"CreatedAt"`
+}
+
+// UploadAgentRelease 上传新版 node_agent 二进制（multipart 流式透传 controller）
+func (c *Client) UploadAgentRelease(ctx context.Context, version, osName, arch, note, filename string, body io.Reader) (*AgentRelease, error) {
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+	go func() {
+		defer pw.Close()
+		part, err := writer.CreateFormFile("file", filename)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		if _, err := io.Copy(part, body); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		_ = writer.WriteField("version", version)
+		_ = writer.WriteField("os", osName)
+		_ = writer.WriteField("arch", arch)
+		_ = writer.WriteField("note", note)
+		_ = writer.Close()
+	}()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/node-agents/releases", pr)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Admin-User", "admin")
+	var out AgentRelease
+	if err := c.doRaw(req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListAgentReleases 发布清单
+func (c *Client) ListAgentReleases(ctx context.Context) ([]*AgentRelease, error) {
+	var out struct {
+		Releases []*AgentRelease `json:"releases"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/node-agents/releases", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Releases, nil
+}
+
+// AgentUpdateResult 单节点更新结果
+type AgentUpdateResult struct {
+	AgentID    string `json:"agent_id"`
+	OK         bool   `json:"ok"`
+	Skipped    bool   `json:"skipped,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	TargetVer  string `json:"target_version,omitempty"`
+	CurrentVer string `json:"current_version,omitempty"`
+}
+
+// BatchUpdateNodeAgents 批量滚动更新（controller 串行执行）
+func (c *Client) BatchUpdateNodeAgents(ctx context.Context, updates []map[string]string) ([]*AgentUpdateResult, error) {
+	var out struct {
+		Results []*AgentUpdateResult `json:"results"`
+	}
+	body := map[string]any{"updates": updates}
+	if err := c.do(ctx, http.MethodPost, "/api/node-agents/batch-update", body, &out); err != nil {
+		return nil, err
+	}
+	return out.Results, nil
+}
+
+// RollbackNodeAgent 回滚到指定 release
+func (c *Client) RollbackNodeAgent(ctx context.Context, agentID, releaseID string) (*AgentUpdateResult, error) {
+	var out struct {
+		Result *AgentUpdateResult `json:"result"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/node-agents/"+agentID+"/rollback",
+		map[string]string{"release_id": releaseID}, &out); err != nil {
+		return nil, err
+	}
+	return out.Result, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -591,6 +697,30 @@ func (c *Client) UpdateBranchCache(ctx context.Context, gameID, branchName, node
 func (c *Client) SetBranchMinReplicas(ctx context.Context, gameID, branchName string, minReplicas int32) error {
 	return c.do(ctx, http.MethodPut, "/api/games/"+gameID+"/branches/"+branchName,
 		map[string]int32{"min_replicas": minReplicas}, nil)
+}
+
+// doRaw 发送已构造好的请求（body/header 由调用方设置）；out 非空时解码 2xx JSON
+func (c *Client) doRaw(req *http.Request, out any) error {
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("request controller %s %s: %w", req.Method, req.URL.Path, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		err := fmt.Errorf("controller %s %s returned %d: %s", req.Method, req.URL.Path, resp.StatusCode, strings.TrimSpace(string(b)))
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: %v", ErrNotFound, err)
+		}
+		if resp.StatusCode == http.StatusConflict {
+			return fmt.Errorf("%w: %v", ErrConflict, err)
+		}
+		return err
+	}
+	if out != nil {
+		return json.NewDecoder(resp.Body).Decode(out)
+	}
+	return nil
 }
 
 // do 发送请求；out 非空时把 2xx 响应 JSON 解码到 out

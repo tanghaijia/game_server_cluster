@@ -43,6 +43,12 @@ func (h *AdminHandler) RegisterRoutes(router *gin.Engine, auth gin.HandlerFunc) 
 	group.POST("/node-agents/:id/enable", h.EnableNodeAgent)
 	group.POST("/node-agents/:id/disable", h.DisableNodeAgent)
 
+	// node_agent 发布与一键更新（P1/P3，见 docs/node-agent-upgrade-design.md）
+	group.POST("/node-agents/releases", h.UploadAgentRelease)
+	group.GET("/node-agents/releases", h.ListAgentReleases)
+	group.POST("/node-agents/batch-update", h.BatchUpdateNodeAgents)
+	group.POST("/node-agents/:id/rollback", h.RollbackNodeAgent)
+
 	// 游戏
 	group.GET("/games", h.ListGames)
 	group.POST("/games", h.CreateGame)
@@ -202,6 +208,89 @@ func (h *AdminHandler) setNodeAgentEnabled(c *gin.Context, enabled bool) {
 		fail(c, err); return
 	}
 	c.JSON(http.StatusOK, agent)
+}
+
+// ------------------------- AgentRelease + 一键更新（P1/P3） -------------------------
+
+// UploadAgentRelease 上传新版 node_agent 二进制（multipart 流式转发 controller）
+func (h *AdminHandler) UploadAgentRelease(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 file 字段（multipart 文件）"}); return
+	}
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "open upload: " + err.Error()}); return
+	}
+	defer f.Close()
+
+	release, err := h.controller.UploadAgentRelease(
+		c.Request.Context(),
+		c.PostForm("version"),
+		c.PostForm("os"),
+		c.PostForm("arch"),
+		c.PostForm("note"),
+		file.Filename,
+		f,
+	)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusCreated, release)
+}
+
+// ListAgentReleases 发布清单
+func (h *AdminHandler) ListAgentReleases(c *gin.Context) {
+	releases, err := h.controller.ListAgentReleases(c.Request.Context())
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"releases": releases})
+}
+
+type agentUpdateEntry struct {
+	AgentID   string `json:"agent_id"`
+	ReleaseID string `json:"release_id"`
+}
+
+// BatchUpdateNodeAgents 批量滚动更新
+func (h *AdminHandler) BatchUpdateNodeAgents(c *gin.Context) {
+	var req struct {
+		Updates []agentUpdateEntry `json:"updates"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	if len(req.Updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "updates 不能为空"}); return
+	}
+	updates := make([]map[string]string, 0, len(req.Updates))
+	for _, u := range req.Updates {
+		updates = append(updates, map[string]string{"agent_id": u.AgentID, "release_id": u.ReleaseID})
+	}
+	results, err := h.controller.BatchUpdateNodeAgents(c.Request.Context(), updates)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"results": results})
+}
+
+// RollbackNodeAgent 回滚 node_agent 到指定 release
+func (h *AdminHandler) RollbackNodeAgent(c *gin.Context) {
+	var req struct {
+		ReleaseID string `json:"release_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()}); return
+	}
+	if req.ReleaseID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "release_id 必填"}); return
+	}
+	result, err := h.controller.RollbackNodeAgent(c.Request.Context(), c.Param("id"), req.ReleaseID)
+	if err != nil {
+		fail(c, err); return
+	}
+	c.JSON(http.StatusOK, gin.H{"result": result})
 }
 
 // ------------------------- Game -------------------------
