@@ -139,11 +139,19 @@ pub async fn apply_update(
     let staging = dir.join(".node-agent.new");
     let backup = dir.join("node-agent.prev");
 
-    // 5) staging 落盘
+    // 5) staging 落盘 + 设可执行权限（0o755）：rename 保留权限，
+    //    否则替换后的新二进制无 x 权限，systemd 拉起 start.sh 报 Permission denied（126）失联。
     tokio::fs::write(&staging, &bytes)
         .await
         .map_err(|e| format!("写 staging 失败 {}: {e}", staging.display()))?;
-    info!("staging 已写入: {}", staging.display());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o755))
+            .await
+            .map_err(|e| format!("设置 staging 可执行权限失败 {}: {e}", staging.display()))?;
+    }
+    info!("staging 已写入（可执行）: {}", staging.display());
 
     // 6) 备份当前 → rename staging → 当前路径（Linux 下运行中 exe 可 rename）
     if let Err(e) = std::fs::rename(&exe, &backup) {
