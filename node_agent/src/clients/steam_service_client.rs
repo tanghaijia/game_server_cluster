@@ -75,7 +75,9 @@ impl SteamServiceClient {
                 path_str.as_str(),
                 reject
             );
+            // P4：拒绝原因落库（last_error），admin/controller 直接可见
             game_cache.status = GameCacheStatus::Unavailable;
+            game_cache.last_error = Some(reject.clone());
             let _ = self.game_cache_repos.save(&game_cache).await;
             return Err(SteamServiceError::PreflightRejected(reject));
         }
@@ -115,6 +117,8 @@ impl SteamServiceClient {
                 })?;
                 // P2-B：实测缓存大小（供 controller 磁盘记账/调度；统计失败不阻塞下载）
                 game_cache.size_bytes = dir_size(&final_dir).await.unwrap_or(0);
+                // P4：成功转 Available 时清空上次失败原因
+                game_cache.last_error = None;
                 game_cache.status = GameCacheStatus::Available;
                 self.game_cache_repos.save(&game_cache).await?;
                 log::info!(
@@ -145,7 +149,9 @@ impl SteamServiceClient {
                 if staging_dir.exists() {
                     let _ = fs::remove_dir_all(&staging_dir).await;
                 }
+                // P4：失败原因落库（admin/controller 可见；成功后再清空）
                 game_cache.status = GameCacheStatus::Unavailable;
+                game_cache.last_error = Some(steam_error_summary(&e));
                 let _ = self.game_cache_repos.save(&game_cache).await;
                 Err(e)
             }
@@ -500,6 +506,40 @@ fn steamcmd_stream_read_error(
     SteamServiceError::IoError(e)
 }
 
+/// P4：错误转可读摘要（last_error 落库用，进 controller/admin 视图）：
+/// - 预检拒绝：直接取文案（如「磁盘可用空间不足：需约 16.9 GiB…」）；
+/// - DownloadError：退出码 + 输出尾部前 3 行（拼接、截断 300 字符）；
+/// - 其余：Display。
+fn steam_error_summary(e: &SteamServiceError) -> String {
+    match e {
+        SteamServiceError::PreflightRejected(msg) => msg.clone(),
+        SteamServiceError::DownloadError(game, branch, status, tail) => {
+            let mut s = format!("steamcmd 下载失败：game={game} branch={branch} exit={status}");
+            // 跳过我们自己的标记行（"stdout 尾部:"/"stderr 尾部:"/"[已截断 N 行]"），只取实质输出
+            let first: Vec<&str> = tail
+                .lines()
+                .map(str::trim)
+                .filter(|l| {
+                    !l.is_empty()
+                        && !l.starts_with("stdout 尾部")
+                        && !l.starts_with("stderr 尾部")
+                        && !l.starts_with("[已截断")
+                })
+                .take(3)
+                .collect();
+            if !first.is_empty() {
+                s.push_str("，输出尾部：");
+                s.push_str(&first.join(" | "));
+            }
+            if s.chars().count() > 300 {
+                s.truncate(300);
+            }
+            s
+        }
+        other => other.to_string(),
+    }
+}
+
 // ============================================================
 // P3（磁盘预检，见 docs/game-cache-download-observability-design.md §4.3）
 // ============================================================
@@ -699,5 +739,41 @@ mod tests {
         assert_eq!(parse_total_size_on_disk(sample), Some(17485494806u64));
         assert_eq!(parse_total_size_on_disk("no depot sizes here"), None);
         assert_eq!(parse_total_size_on_disk(""), None);
+    }
+
+    #[test]
+    fn error_summary_is_readable() {
+        // 预检拒绝：直接文案（P4 落库给 admin 看的核心场景）
+        let pre = SteamServiceError::PreflightRejected("磁盘可用空间不足：需约 16.9 GiB".into());
+        assert_eq!(steam_error_summary(&pre), "磁盘可用空间不足：需约 16.9 GiB");
+        // DownloadError：退出码 + tail 前几行
+        let dl = SteamServiceError::DownloadError(
+            "294420".into(),
+            "public".into(),
+            exit_status_for_test(10),
+            "stdout 尾部:\n[已截断 30 行]\nError! App '294420' state is 0x202 after update job.\n".into(),
+        );
+        let s = steam_error_summary(&dl);
+        assert!(s.contains("exit"), "应含退出码: {s}");
+        assert!(s.contains("0x202"), "应含 steamcmd 原话: {s}");
+        assert!(!s.contains("已截断"), "标记行不应进摘要: {s}");
+    }
+
+    /// 生成指定退出码的 ExitStatus（测试用；ExitStatus 无公开构造，需跑真实子进程）。
+    fn exit_status_for_test(code: i32) -> std::process::ExitStatus {
+        #[cfg(unix)]
+        {
+            std::process::Command::new("sh")
+                .args(["-c", &format!("exit {code}")])
+                .status()
+                .unwrap()
+        }
+        #[cfg(windows)]
+        {
+            std::process::Command::new("cmd")
+                .args(["/C", "exit", &code.to_string()])
+                .status()
+                .unwrap()
+        }
     }
 }

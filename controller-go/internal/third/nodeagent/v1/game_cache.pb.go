@@ -85,7 +85,10 @@ type GameCache struct {
 	CreateTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	UpdateTime       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	// P2-B：缓存内容实测字节数（下载完成后 du 统计上报，供 controller 磁盘记账/调度）
-	SizeBytes     uint64 `protobuf:"varint,9,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	SizeBytes uint64 `protobuf:"varint,9,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// P4（下载可观测性）：最近一次失败的可读原因（预检拒绝/下载失败）；成功转 AVAILABLE 时清空。
+	// 空串 = 无失败或成功。见 docs/game-cache-download-observability-design.md
+	LastError     string `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -183,11 +186,18 @@ func (x *GameCache) GetSizeBytes() uint64 {
 	return 0
 }
 
+func (x *GameCache) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
 var File_nodeagent_v1_game_cache_proto protoreflect.FileDescriptor
 
 const file_nodeagent_v1_game_cache_proto_rawDesc = "" +
 	"\n" +
-	"\x1dnodeagent/v1/game_cache.proto\x12\fnodeagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9a\x03\n" +
+	"\x1dnodeagent/v1/game_cache.proto\x12\fnodeagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb9\x03\n" +
 	"\tGameCache\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1f\n" +
 	"\vbranch_name\x18\x02 \x01(\tR\n" +
@@ -201,7 +211,10 @@ const file_nodeagent_v1_game_cache_proto_rawDesc = "" +
 	"\vupdate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\t \x01(\x04R\tsizeBytesB\a\n" +
+	"size_bytes\x18\t \x01(\x04R\tsizeBytes\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\n" +
+	" \x01(\tR\tlastErrorB\a\n" +
 	"\x05_pathB\x14\n" +
 	"\x12_download_progress*O\n" +
 	"\x0fGameCacheStatus\x12\x0f\n" +

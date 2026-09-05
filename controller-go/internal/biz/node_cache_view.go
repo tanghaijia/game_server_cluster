@@ -27,6 +27,8 @@ type CacheEntry struct {
 	DownloadProgress float32 `json:"download_progress"`
 	// P2-B：缓存内容实测字节数（node 下载完成后上报；0 = 未知）
 	SizeBytes uint64 `json:"size_bytes"`
+	// P4（下载可观测性）：最近一次失败原因（node 落库透传；空 = 无失败/成功）
+	LastError string `json:"last_error,omitempty"`
 }
 
 // NodeCacheView game-cache 视图（§10）：进程内快照，周期刷新；
@@ -156,6 +158,8 @@ func (v *NodeCacheView) fetchEntry(ctx context.Context, agentID, gameID, branch 
 	entry.DownloadProgress = gc.GetDownloadProgress()
 	// P2-B：缓存内容实测大小（磁盘记账输入）
 	entry.SizeBytes = gc.GetSizeBytes()
+	// P4：失败原因透传（快照 30s 刷新，admin 观测可见）
+	entry.LastError = gc.GetLastError()
 	switch gc.GetStatus() {
 	case nodeagentv1.GameCacheStatus_AVAILABLE:
 		entry.Available = true

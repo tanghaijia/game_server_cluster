@@ -1010,9 +1010,13 @@ func (d *ReconcileDispatcher) pollCacheReady(ctx context.Context, instance *enti
 			onReady(ctx, instance)
 			return
 		case nodeagentv1.GameCacheStatus_UNAVAILABLE:
-			// 下载失败：立即失败反馈（ISSUE-000004），不闷等超时
+			// 下载失败：立即失败反馈（ISSUE-000004），不闷等超时。
+			// P4（下载可观测性）：失败原因优先取节点 last_error（真实原因，
+			// 如「磁盘可用空间不足：需约 16.9 GiB…」），实例 FailReason 直接可见。
 			reason := "缓存下载失败（节点缓存不可用）"
-			if p := gc.GetDownloadProgress(); p > 0 {
+			if le := gc.GetLastError(); le != "" {
+				reason = "缓存下载失败：" + le
+			} else if p := gc.GetDownloadProgress(); p > 0 {
 				reason += fmt.Sprintf("，进度 %.0f%%", p*100)
 			}
 			slog.Error("[ReconcileDispatcher] 缓存预热失败（节点缓存不可用）",

@@ -30,6 +30,12 @@ pub struct GameCache {
     /// 0 = 未知（未下载完成或统计失败）。
     #[serde(default)]
     pub size_bytes: u64,
+    /// 最近一次失败的可读原因（P4，见 docs/game-cache-download-observability-design.md）：
+    /// 下载失败/预检拒绝时写入（如「磁盘可用空间不足…」「steamcmd 下载失败…」）；
+    /// 成功转 Available 时清空。None = 无失败或成功。
+    /// #[serde(default)] 兼容旧 SQLite 记录（无该字段时反序列化为 None）。
+    #[serde(default)]
+    pub last_error: Option<String>,
     pub create_time: DateTime<Utc>,
     pub update_time: DateTime<Utc>,
 }

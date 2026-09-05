@@ -275,6 +275,7 @@ where
             download_progress: None,
             refcount: 0,
             size_bytes: 0,
+            last_error: None,
             create_time: now,
             update_time: now,
         };

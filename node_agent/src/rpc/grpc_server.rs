@@ -795,6 +795,8 @@ fn map_domain_cache_to_proto(cache: DomainGameCache) -> node_agent::GameCache {
         path: cache.path,
         download_progress: cache.download_progress,
         size_bytes: cache.size_bytes,
+        // P4：失败原因透传（空串 = 无失败/成功）
+        last_error: cache.last_error.unwrap_or_default(),
         create_time: Some(Timestamp {
             seconds: cache.create_time.timestamp(),
             nanos: cache.create_time.timestamp_subsec_nanos() as i32,

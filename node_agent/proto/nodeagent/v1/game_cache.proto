@@ -23,4 +23,7 @@ message GameCache {
     google.protobuf.Timestamp update_time = 7;
     // P2-B：缓存内容实测字节数（下载完成后 du 统计上报，供 controller 磁盘记账/调度）
     uint64 size_bytes = 9;
+    // P4（下载可观测性）：最近一次失败的可读原因（预检拒绝/下载失败）；成功转 AVAILABLE 时清空。
+    // 空串 = 无失败或成功。见 docs/game-cache-download-observability-design.md
+    string last_error = 10;
 }

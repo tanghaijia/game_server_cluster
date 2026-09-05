@@ -269,6 +269,8 @@ type NodeCacheOverview struct {
 	DownloadProgress float32 `json:"download_progress"`
 	// P2-B：缓存内容实测字节数（0 = 未知）
 	SizeBytes uint64 `json:"size_bytes"`
+	// P4：最近一次失败原因（admin 视图展示；空 = 无失败/成功）
+	LastError string `json:"last_error,omitempty"`
 }
 
 // CacheOverview 全部 enabled 节点的 game-cache 状态（来自 NodeCacheView 快照，§10）
@@ -299,6 +301,7 @@ func (uc *ObserverUseCase) CacheOverview(ctx context.Context) ([]*NodeCacheOverv
 			row.BuildID = e.BuildID
 			row.DownloadProgress = e.DownloadProgress
 			row.SizeBytes = e.SizeBytes
+			row.LastError = e.LastError
 			out = append(out, &row)
 		}
 	}
