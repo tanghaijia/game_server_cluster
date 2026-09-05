@@ -5,11 +5,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 
+	"controller-go/internal/client/assetservice"
 	"controller-go/internal/entity"
 
+	assetservicev1 "controller-go/internal/third/assetservice/v1"
+	"google.golang.org/grpc"
 	"gorm.io/gorm"
 )
 
@@ -45,11 +49,51 @@ func (f *fakeAgentReleaseRepo) GetByVersionOSArch(_ context.Context, version, os
 	return nil, gorm.ErrRecordNotFound
 }
 
-// 注册合法 release → 清单可查、sha256 与内容一致
+// ---- fake uploader：模拟 asset_service PutAgentRelease 流（收集分块并算 sha256） ----
+
+type fakeReleaseUploader struct {
+	chunks [][]byte
+	err    error // CloseAndRecv 时返回的错误（可注入）
+}
+
+type fakeUploadStream struct {
+	u *fakeReleaseUploader
+}
+
+func (s *fakeUploadStream) Send(req *assetservicev1.PutAgentReleaseRequest) error {
+	if len(req.Chunk) > 0 {
+		s.u.chunks = append(s.u.chunks, append([]byte{}, req.Chunk...))
+	}
+	return nil
+}
+
+func (s *fakeUploadStream) CloseAndRecv() (*assetservicev1.PutAgentReleaseResponse, error) {
+	if s.u.err != nil {
+		return nil, s.u.err
+	}
+	h := sha256.New()
+	var total uint64
+	for _, c := range s.u.chunks {
+		h.Write(c)
+		total += uint64(len(c))
+	}
+	return &assetservicev1.PutAgentReleaseResponse{
+		Bucket:    "cluster",
+		ObjectKey: "agent-release/test/node-agent",
+		Sha256:    hex.EncodeToString(h.Sum(nil)),
+		SizeBytes: total,
+	}, nil
+}
+
+func (f *fakeReleaseUploader) PutAgentRelease(_ context.Context, _ ...grpc.CallOption) (assetservice.AgentReleaseUploadStream, error) {
+	return &fakeUploadStream{u: f}, nil
+}
+
+// 注册合法 release → 清单可查、sha256/大小与上传内容一致、storage_key 带对象键前缀
 func TestAgentReleaseRegisterAndList(t *testing.T) {
 	repo := newFakeAgentReleaseRepo()
-	store := NewLocalReleaseStore(t.TempDir())
-	uc := NewAgentReleaseUseCase(repo, store)
+	uploader := &fakeReleaseUploader{}
+	uc := NewAgentReleaseUseCase(repo, uploader)
 
 	body := []byte("node-agent-binary-v0.1.1")
 	sum := sha256.Sum256(body)
@@ -66,31 +110,30 @@ func TestAgentReleaseRegisterAndList(t *testing.T) {
 	if rel.SizeBytes != int64(len(body)) {
 		t.Errorf("size = %d, want %d", rel.SizeBytes, len(body))
 	}
+	if rel.Bucket != "cluster" {
+		t.Errorf("bucket = %q, want cluster", rel.Bucket)
+	}
+	if !strings.HasPrefix(rel.StorageKey, "agent-release/") {
+		t.Errorf("storage_key = %q, 应为对象键前缀 agent-release/", rel.StorageKey)
+	}
+	// 上传分块确实把完整内容送出去了
+	var got []byte
+	for _, c := range uploader.chunks {
+		got = append(got, c...)
+	}
+	if !bytes.Equal(got, body) {
+		t.Errorf("uploaded bytes mismatch: %d vs %d", len(got), len(body))
+	}
 
 	list, err := uc.List(context.Background())
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list: %v len=%d", err, len(list))
 	}
-
-	// 下载回读内容一致
-	got, rc, err := uc.OpenBinary(context.Background(), rel.ID)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer rc.Close()
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(rc)
-	if buf.String() != string(body) {
-		t.Errorf("binary mismatch: %q", buf.String())
-	}
-	if got.SHA256 != rel.SHA256 {
-		t.Errorf("release meta mismatch")
-	}
 }
 
 // 非法版本/平台被拒
 func TestAgentReleaseInvalidInput(t *testing.T) {
-	uc := NewAgentReleaseUseCase(newFakeAgentReleaseRepo(), NewLocalReleaseStore(t.TempDir()))
+	uc := NewAgentReleaseUseCase(newFakeAgentReleaseRepo(), &fakeReleaseUploader{})
 	cases := []RegisterParams{
 		{Version: "0.1.1", OS: "linux", Arch: "amd64", Body: strings.NewReader("x")}, // 缺 v 前缀
 		{Version: "v0.1.1", OS: "darwin", Arch: "amd64", Body: strings.NewReader("x")}, // 平台不支持
@@ -105,7 +148,7 @@ func TestAgentReleaseInvalidInput(t *testing.T) {
 
 // 重复版本+平台拒绝
 func TestAgentReleaseDuplicate(t *testing.T) {
-	uc := NewAgentReleaseUseCase(newFakeAgentReleaseRepo(), NewLocalReleaseStore(t.TempDir()))
+	uc := NewAgentReleaseUseCase(newFakeAgentReleaseRepo(), &fakeReleaseUploader{})
 	for i := 0; i < 2; i++ {
 		_, err := uc.Register(context.Background(), RegisterParams{
 			Version: "v0.1.1", OS: "linux", Arch: "amd64", Body: strings.NewReader("same"),
@@ -116,6 +159,18 @@ func TestAgentReleaseDuplicate(t *testing.T) {
 		if i == 1 && err == nil {
 			t.Fatal("duplicate register should fail")
 		}
+	}
+}
+
+// 上传通道报错 → Register 返回错误
+func TestAgentReleaseUploadError(t *testing.T) {
+	uploader := &fakeReleaseUploader{err: fmt.Errorf("asset_service 不可达")}
+	uc := NewAgentReleaseUseCase(newFakeAgentReleaseRepo(), uploader)
+	_, err := uc.Register(context.Background(), RegisterParams{
+		Version: "v0.1.1", OS: "linux", Arch: "amd64", Body: strings.NewReader("body"),
+	})
+	if err == nil {
+		t.Fatal("expected upload error, got nil")
 	}
 }
 

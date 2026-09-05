@@ -82,6 +82,143 @@ func (BuildStatus) EnumDescriptor() ([]byte, []int) {
 	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{0}
 }
 
+// 上传流：首条消息必须带 version/os/arch（可无 chunk），随后每条携带数据块。
+type PutAgentReleaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"` // 如 v0.1.1（每条消息都带，服务端以首条为准）
+	Os            string                 `protobuf:"bytes,2,opt,name=os,proto3" json:"os,omitempty"`           // linux / windows
+	Arch          string                 `protobuf:"bytes,3,opt,name=arch,proto3" json:"arch,omitempty"`       // amd64 / arm64
+	Chunk         []byte                 `protobuf:"bytes,4,opt,name=chunk,proto3" json:"chunk,omitempty"`     // 数据块（首条可为空）
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutAgentReleaseRequest) Reset() {
+	*x = PutAgentReleaseRequest{}
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutAgentReleaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutAgentReleaseRequest) ProtoMessage() {}
+
+func (x *PutAgentReleaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutAgentReleaseRequest.ProtoReflect.Descriptor instead.
+func (*PutAgentReleaseRequest) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PutAgentReleaseRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseRequest) GetOs() string {
+	if x != nil {
+		return x.Os
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseRequest) GetArch() string {
+	if x != nil {
+		return x.Arch
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseRequest) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
+type PutAgentReleaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`                         // 对象实际落桶
+	ObjectKey     string                 `protobuf:"bytes,2,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`  // agent-release/{version}/{os}-{arch}/node-agent
+	Sha256        string                 `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`                         // 小写 hex，边收边算
+	SizeBytes     uint64                 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"` // 收到的总字节数
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutAgentReleaseResponse) Reset() {
+	*x = PutAgentReleaseResponse{}
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutAgentReleaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutAgentReleaseResponse) ProtoMessage() {}
+
+func (x *PutAgentReleaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutAgentReleaseResponse.ProtoReflect.Descriptor instead.
+func (*PutAgentReleaseResponse) Descriptor() ([]byte, []int) {
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PutAgentReleaseResponse) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseResponse) GetObjectKey() string {
+	if x != nil {
+		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *PutAgentReleaseResponse) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
 type ListGameBuildsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GameId        string                 `protobuf:"bytes,1,opt,name=game_id,json=gameId,proto3" json:"game_id,omitempty"`
@@ -92,7 +229,7 @@ type ListGameBuildsRequest struct {
 
 func (x *ListGameBuildsRequest) Reset() {
 	*x = ListGameBuildsRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[0]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -104,7 +241,7 @@ func (x *ListGameBuildsRequest) String() string {
 func (*ListGameBuildsRequest) ProtoMessage() {}
 
 func (x *ListGameBuildsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[0]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +254,7 @@ func (x *ListGameBuildsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGameBuildsRequest.ProtoReflect.Descriptor instead.
 func (*ListGameBuildsRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{0}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListGameBuildsRequest) GetGameId() string {
@@ -143,7 +280,7 @@ type ListGameBuildsResponse struct {
 
 func (x *ListGameBuildsResponse) Reset() {
 	*x = ListGameBuildsResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[1]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -155,7 +292,7 @@ func (x *ListGameBuildsResponse) String() string {
 func (*ListGameBuildsResponse) ProtoMessage() {}
 
 func (x *ListGameBuildsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[1]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -168,7 +305,7 @@ func (x *ListGameBuildsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGameBuildsResponse.ProtoReflect.Descriptor instead.
 func (*ListGameBuildsResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{1}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListGameBuildsResponse) GetBuilds() []*GameBuild {
@@ -188,7 +325,7 @@ type ResolveGameBuildRequest struct {
 
 func (x *ResolveGameBuildRequest) Reset() {
 	*x = ResolveGameBuildRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[2]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -200,7 +337,7 @@ func (x *ResolveGameBuildRequest) String() string {
 func (*ResolveGameBuildRequest) ProtoMessage() {}
 
 func (x *ResolveGameBuildRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[2]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -213,7 +350,7 @@ func (x *ResolveGameBuildRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveGameBuildRequest.ProtoReflect.Descriptor instead.
 func (*ResolveGameBuildRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{2}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ResolveGameBuildRequest) GetGame() *Game {
@@ -239,7 +376,7 @@ type ResolveGameBuildResponse struct {
 
 func (x *ResolveGameBuildResponse) Reset() {
 	*x = ResolveGameBuildResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[3]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -251,7 +388,7 @@ func (x *ResolveGameBuildResponse) String() string {
 func (*ResolveGameBuildResponse) ProtoMessage() {}
 
 func (x *ResolveGameBuildResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[3]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -264,7 +401,7 @@ func (x *ResolveGameBuildResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveGameBuildResponse.ProtoReflect.Descriptor instead.
 func (*ResolveGameBuildResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{3}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ResolveGameBuildResponse) GetBuild() *GameBuild {
@@ -289,7 +426,7 @@ type RegisterGameBuildRequest struct {
 
 func (x *RegisterGameBuildRequest) Reset() {
 	*x = RegisterGameBuildRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[4]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +438,7 @@ func (x *RegisterGameBuildRequest) String() string {
 func (*RegisterGameBuildRequest) ProtoMessage() {}
 
 func (x *RegisterGameBuildRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[4]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +451,7 @@ func (x *RegisterGameBuildRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterGameBuildRequest.ProtoReflect.Descriptor instead.
 func (*RegisterGameBuildRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{4}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RegisterGameBuildRequest) GetBuild() *GameBuild {
@@ -340,7 +477,7 @@ type RegisterGameBuildResponse struct {
 
 func (x *RegisterGameBuildResponse) Reset() {
 	*x = RegisterGameBuildResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[5]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +489,7 @@ func (x *RegisterGameBuildResponse) String() string {
 func (*RegisterGameBuildResponse) ProtoMessage() {}
 
 func (x *RegisterGameBuildResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[5]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +502,7 @@ func (x *RegisterGameBuildResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterGameBuildResponse.ProtoReflect.Descriptor instead.
 func (*RegisterGameBuildResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{5}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RegisterGameBuildResponse) GetBuild() *GameBuild {
@@ -384,7 +521,7 @@ type GetGameBuildRequest struct {
 
 func (x *GetGameBuildRequest) Reset() {
 	*x = GetGameBuildRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[6]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +533,7 @@ func (x *GetGameBuildRequest) String() string {
 func (*GetGameBuildRequest) ProtoMessage() {}
 
 func (x *GetGameBuildRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[6]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,7 +546,7 @@ func (x *GetGameBuildRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGameBuildRequest.ProtoReflect.Descriptor instead.
 func (*GetGameBuildRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{6}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetGameBuildRequest) GetBuildId() string {
@@ -428,7 +565,7 @@ type GetGameBuildResponse struct {
 
 func (x *GetGameBuildResponse) Reset() {
 	*x = GetGameBuildResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[7]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +577,7 @@ func (x *GetGameBuildResponse) String() string {
 func (*GetGameBuildResponse) ProtoMessage() {}
 
 func (x *GetGameBuildResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[7]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +590,7 @@ func (x *GetGameBuildResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGameBuildResponse.ProtoReflect.Descriptor instead.
 func (*GetGameBuildResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{7}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetGameBuildResponse) GetBuild() *GameBuild {
@@ -475,7 +612,7 @@ type CreateSnapshotRequest struct {
 
 func (x *CreateSnapshotRequest) Reset() {
 	*x = CreateSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[8]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -487,7 +624,7 @@ func (x *CreateSnapshotRequest) String() string {
 func (*CreateSnapshotRequest) ProtoMessage() {}
 
 func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[8]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -500,7 +637,7 @@ func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*CreateSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{8}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateSnapshotRequest) GetInstanceId() string {
@@ -540,7 +677,7 @@ type CreateSnapshotResponse struct {
 
 func (x *CreateSnapshotResponse) Reset() {
 	*x = CreateSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[9]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +689,7 @@ func (x *CreateSnapshotResponse) String() string {
 func (*CreateSnapshotResponse) ProtoMessage() {}
 
 func (x *CreateSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[9]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +702,7 @@ func (x *CreateSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*CreateSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{9}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -587,7 +724,7 @@ type CompleteSnapshotRequest struct {
 
 func (x *CompleteSnapshotRequest) Reset() {
 	*x = CompleteSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[10]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +736,7 @@ func (x *CompleteSnapshotRequest) String() string {
 func (*CompleteSnapshotRequest) ProtoMessage() {}
 
 func (x *CompleteSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[10]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +749,7 @@ func (x *CompleteSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*CompleteSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{10}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CompleteSnapshotRequest) GetSnapshotId() string {
@@ -652,7 +789,7 @@ type CompleteSnapshotResponse struct {
 
 func (x *CompleteSnapshotResponse) Reset() {
 	*x = CompleteSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[11]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +801,7 @@ func (x *CompleteSnapshotResponse) String() string {
 func (*CompleteSnapshotResponse) ProtoMessage() {}
 
 func (x *CompleteSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[11]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +814,7 @@ func (x *CompleteSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*CompleteSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{11}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CompleteSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -697,7 +834,7 @@ type FailSnapshotRequest struct {
 
 func (x *FailSnapshotRequest) Reset() {
 	*x = FailSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[12]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +846,7 @@ func (x *FailSnapshotRequest) String() string {
 func (*FailSnapshotRequest) ProtoMessage() {}
 
 func (x *FailSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[12]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +859,7 @@ func (x *FailSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*FailSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{12}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *FailSnapshotRequest) GetSnapshotId() string {
@@ -748,7 +885,7 @@ type FailSnapshotResponse struct {
 
 func (x *FailSnapshotResponse) Reset() {
 	*x = FailSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[13]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -760,7 +897,7 @@ func (x *FailSnapshotResponse) String() string {
 func (*FailSnapshotResponse) ProtoMessage() {}
 
 func (x *FailSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[13]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -773,7 +910,7 @@ func (x *FailSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*FailSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{13}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *FailSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -792,7 +929,7 @@ type GetSnapshotRequest struct {
 
 func (x *GetSnapshotRequest) Reset() {
 	*x = GetSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[14]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +941,7 @@ func (x *GetSnapshotRequest) String() string {
 func (*GetSnapshotRequest) ProtoMessage() {}
 
 func (x *GetSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[14]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +954,7 @@ func (x *GetSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*GetSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{14}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetSnapshotRequest) GetSnapshotId() string {
@@ -836,7 +973,7 @@ type GetSnapshotResponse struct {
 
 func (x *GetSnapshotResponse) Reset() {
 	*x = GetSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[15]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -848,7 +985,7 @@ func (x *GetSnapshotResponse) String() string {
 func (*GetSnapshotResponse) ProtoMessage() {}
 
 func (x *GetSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[15]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -861,7 +998,7 @@ func (x *GetSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*GetSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{15}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -880,7 +1017,7 @@ type GetLatestSnapshotRequest struct {
 
 func (x *GetLatestSnapshotRequest) Reset() {
 	*x = GetLatestSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[16]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -892,7 +1029,7 @@ func (x *GetLatestSnapshotRequest) String() string {
 func (*GetLatestSnapshotRequest) ProtoMessage() {}
 
 func (x *GetLatestSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[16]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -905,7 +1042,7 @@ func (x *GetLatestSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*GetLatestSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{16}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetLatestSnapshotRequest) GetInstanceId() string {
@@ -924,7 +1061,7 @@ type GetLatestSnapshotResponse struct {
 
 func (x *GetLatestSnapshotResponse) Reset() {
 	*x = GetLatestSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[17]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +1073,7 @@ func (x *GetLatestSnapshotResponse) String() string {
 func (*GetLatestSnapshotResponse) ProtoMessage() {}
 
 func (x *GetLatestSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[17]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -949,7 +1086,7 @@ func (x *GetLatestSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLatestSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*GetLatestSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{17}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetLatestSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -969,7 +1106,7 @@ type SetLatestSnapshotRequest struct {
 
 func (x *SetLatestSnapshotRequest) Reset() {
 	*x = SetLatestSnapshotRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[18]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -981,7 +1118,7 @@ func (x *SetLatestSnapshotRequest) String() string {
 func (*SetLatestSnapshotRequest) ProtoMessage() {}
 
 func (x *SetLatestSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[18]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -994,7 +1131,7 @@ func (x *SetLatestSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLatestSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*SetLatestSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{18}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetLatestSnapshotRequest) GetInstanceId() string {
@@ -1020,7 +1157,7 @@ type SetLatestSnapshotResponse struct {
 
 func (x *SetLatestSnapshotResponse) Reset() {
 	*x = SetLatestSnapshotResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[19]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1032,7 +1169,7 @@ func (x *SetLatestSnapshotResponse) String() string {
 func (*SetLatestSnapshotResponse) ProtoMessage() {}
 
 func (x *SetLatestSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[19]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1045,7 +1182,7 @@ func (x *SetLatestSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLatestSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*SetLatestSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{19}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SetLatestSnapshotResponse) GetSnapshot() *SnapshotRecord {
@@ -1064,7 +1201,7 @@ type GetSnapshotRestorePlanRequest struct {
 
 func (x *GetSnapshotRestorePlanRequest) Reset() {
 	*x = GetSnapshotRestorePlanRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[20]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1076,7 +1213,7 @@ func (x *GetSnapshotRestorePlanRequest) String() string {
 func (*GetSnapshotRestorePlanRequest) ProtoMessage() {}
 
 func (x *GetSnapshotRestorePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[20]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1089,7 +1226,7 @@ func (x *GetSnapshotRestorePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSnapshotRestorePlanRequest.ProtoReflect.Descriptor instead.
 func (*GetSnapshotRestorePlanRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{20}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetSnapshotRestorePlanRequest) GetSnapshotId() string {
@@ -1108,7 +1245,7 @@ type GetSnapshotRestorePlanResponse struct {
 
 func (x *GetSnapshotRestorePlanResponse) Reset() {
 	*x = GetSnapshotRestorePlanResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[21]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1120,7 +1257,7 @@ func (x *GetSnapshotRestorePlanResponse) String() string {
 func (*GetSnapshotRestorePlanResponse) ProtoMessage() {}
 
 func (x *GetSnapshotRestorePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[21]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1133,7 +1270,7 @@ func (x *GetSnapshotRestorePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSnapshotRestorePlanResponse.ProtoReflect.Descriptor instead.
 func (*GetSnapshotRestorePlanResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{21}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetSnapshotRestorePlanResponse) GetRestorePlan() *SnapshotRestorePlan {
@@ -1152,7 +1289,7 @@ type ListSnapshotsRequest struct {
 
 func (x *ListSnapshotsRequest) Reset() {
 	*x = ListSnapshotsRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[22]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1164,7 +1301,7 @@ func (x *ListSnapshotsRequest) String() string {
 func (*ListSnapshotsRequest) ProtoMessage() {}
 
 func (x *ListSnapshotsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[22]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1177,7 +1314,7 @@ func (x *ListSnapshotsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSnapshotsRequest.ProtoReflect.Descriptor instead.
 func (*ListSnapshotsRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{22}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListSnapshotsRequest) GetInstanceId() string {
@@ -1196,7 +1333,7 @@ type ListSnapshotsResponse struct {
 
 func (x *ListSnapshotsResponse) Reset() {
 	*x = ListSnapshotsResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[23]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1208,7 +1345,7 @@ func (x *ListSnapshotsResponse) String() string {
 func (*ListSnapshotsResponse) ProtoMessage() {}
 
 func (x *ListSnapshotsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[23]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1221,7 +1358,7 @@ func (x *ListSnapshotsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSnapshotsResponse.ProtoReflect.Descriptor instead.
 func (*ListSnapshotsResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{23}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListSnapshotsResponse) GetSnapshots() []*SnapshotRecord {
@@ -1240,7 +1377,7 @@ type RegisterModManifestRequest struct {
 
 func (x *RegisterModManifestRequest) Reset() {
 	*x = RegisterModManifestRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[24]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1252,7 +1389,7 @@ func (x *RegisterModManifestRequest) String() string {
 func (*RegisterModManifestRequest) ProtoMessage() {}
 
 func (x *RegisterModManifestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[24]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1265,7 +1402,7 @@ func (x *RegisterModManifestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterModManifestRequest.ProtoReflect.Descriptor instead.
 func (*RegisterModManifestRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{24}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RegisterModManifestRequest) GetManifest() *ModManifest {
@@ -1284,7 +1421,7 @@ type RegisterModManifestResponse struct {
 
 func (x *RegisterModManifestResponse) Reset() {
 	*x = RegisterModManifestResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[25]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1296,7 +1433,7 @@ func (x *RegisterModManifestResponse) String() string {
 func (*RegisterModManifestResponse) ProtoMessage() {}
 
 func (x *RegisterModManifestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[25]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1309,7 +1446,7 @@ func (x *RegisterModManifestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterModManifestResponse.ProtoReflect.Descriptor instead.
 func (*RegisterModManifestResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{25}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RegisterModManifestResponse) GetManifest() *ModManifest {
@@ -1328,7 +1465,7 @@ type GetModManifestRequest struct {
 
 func (x *GetModManifestRequest) Reset() {
 	*x = GetModManifestRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[26]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1340,7 +1477,7 @@ func (x *GetModManifestRequest) String() string {
 func (*GetModManifestRequest) ProtoMessage() {}
 
 func (x *GetModManifestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[26]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1353,7 +1490,7 @@ func (x *GetModManifestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModManifestRequest.ProtoReflect.Descriptor instead.
 func (*GetModManifestRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{26}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetModManifestRequest) GetManifestId() string {
@@ -1372,7 +1509,7 @@ type GetModManifestResponse struct {
 
 func (x *GetModManifestResponse) Reset() {
 	*x = GetModManifestResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[27]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1521,7 @@ func (x *GetModManifestResponse) String() string {
 func (*GetModManifestResponse) ProtoMessage() {}
 
 func (x *GetModManifestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[27]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1534,7 @@ func (x *GetModManifestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModManifestResponse.ProtoReflect.Descriptor instead.
 func (*GetModManifestResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{27}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetModManifestResponse) GetManifest() *ModManifest {
@@ -1417,7 +1554,7 @@ type CheckBuildModCompatibilityRequest struct {
 
 func (x *CheckBuildModCompatibilityRequest) Reset() {
 	*x = CheckBuildModCompatibilityRequest{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[28]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1429,7 +1566,7 @@ func (x *CheckBuildModCompatibilityRequest) String() string {
 func (*CheckBuildModCompatibilityRequest) ProtoMessage() {}
 
 func (x *CheckBuildModCompatibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[28]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1442,7 +1579,7 @@ func (x *CheckBuildModCompatibilityRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CheckBuildModCompatibilityRequest.ProtoReflect.Descriptor instead.
 func (*CheckBuildModCompatibilityRequest) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{28}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CheckBuildModCompatibilityRequest) GetBuildId() string {
@@ -1468,7 +1605,7 @@ type CheckBuildModCompatibilityResponse struct {
 
 func (x *CheckBuildModCompatibilityResponse) Reset() {
 	*x = CheckBuildModCompatibilityResponse{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[29]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1480,7 +1617,7 @@ func (x *CheckBuildModCompatibilityResponse) String() string {
 func (*CheckBuildModCompatibilityResponse) ProtoMessage() {}
 
 func (x *CheckBuildModCompatibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[29]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1493,7 +1630,7 @@ func (x *CheckBuildModCompatibilityResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CheckBuildModCompatibilityResponse.ProtoReflect.Descriptor instead.
 func (*CheckBuildModCompatibilityResponse) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{29}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CheckBuildModCompatibilityResponse) GetCompatibility() *BuildCompatibility {
@@ -1516,7 +1653,7 @@ type VersionSelector struct {
 
 func (x *VersionSelector) Reset() {
 	*x = VersionSelector{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[30]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1528,7 +1665,7 @@ func (x *VersionSelector) String() string {
 func (*VersionSelector) ProtoMessage() {}
 
 func (x *VersionSelector) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[30]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1541,7 +1678,7 @@ func (x *VersionSelector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionSelector.ProtoReflect.Descriptor instead.
 func (*VersionSelector) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{30}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *VersionSelector) GetSelector() isVersionSelector_Selector {
@@ -1612,7 +1749,7 @@ type GameBuild struct {
 
 func (x *GameBuild) Reset() {
 	*x = GameBuild{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[31]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1624,7 +1761,7 @@ func (x *GameBuild) String() string {
 func (*GameBuild) ProtoMessage() {}
 
 func (x *GameBuild) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[31]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1637,7 +1774,7 @@ func (x *GameBuild) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameBuild.ProtoReflect.Descriptor instead.
 func (*GameBuild) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{31}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GameBuild) GetBuildId() string {
@@ -1771,7 +1908,7 @@ type AdapterMetadata struct {
 
 func (x *AdapterMetadata) Reset() {
 	*x = AdapterMetadata{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1783,7 +1920,7 @@ func (x *AdapterMetadata) String() string {
 func (*AdapterMetadata) ProtoMessage() {}
 
 func (x *AdapterMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[32]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1796,7 +1933,7 @@ func (x *AdapterMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdapterMetadata.ProtoReflect.Descriptor instead.
 func (*AdapterMetadata) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{32}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *AdapterMetadata) GetPortInjectEnv() string {
@@ -1864,7 +2001,7 @@ type CredentialSpec struct {
 
 func (x *CredentialSpec) Reset() {
 	*x = CredentialSpec{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1876,7 +2013,7 @@ func (x *CredentialSpec) String() string {
 func (*CredentialSpec) ProtoMessage() {}
 
 func (x *CredentialSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[33]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1889,7 +2026,7 @@ func (x *CredentialSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialSpec.ProtoReflect.Descriptor instead.
 func (*CredentialSpec) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{33}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CredentialSpec) GetKey() string {
@@ -1923,7 +2060,7 @@ type BuildCompatibility struct {
 
 func (x *BuildCompatibility) Reset() {
 	*x = BuildCompatibility{}
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[34]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1935,7 +2072,7 @@ func (x *BuildCompatibility) String() string {
 func (*BuildCompatibility) ProtoMessage() {}
 
 func (x *BuildCompatibility) ProtoReflect() protoreflect.Message {
-	mi := &file_assetservice_v1_asset_service_proto_msgTypes[34]
+	mi := &file_assetservice_v1_asset_service_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1948,7 +2085,7 @@ func (x *BuildCompatibility) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildCompatibility.ProtoReflect.Descriptor instead.
 func (*BuildCompatibility) Descriptor() ([]byte, []int) {
-	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{34}
+	return file_assetservice_v1_asset_service_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *BuildCompatibility) GetCompatible() bool {
@@ -1969,7 +2106,19 @@ var File_assetservice_v1_asset_service_proto protoreflect.FileDescriptor
 
 const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\n" +
-	"#assetservice/v1/asset_service.proto\x12\x0fassetservice.v1\x1a\x1eassetservice/v1/snapshot.proto\x1a\x1aassetservice/v1/game.proto\"[\n" +
+	"#assetservice/v1/asset_service.proto\x12\x0fassetservice.v1\x1a\x1eassetservice/v1/snapshot.proto\x1a\x1aassetservice/v1/game.proto\"l\n" +
+	"\x16PutAgentReleaseRequest\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x0e\n" +
+	"\x02os\x18\x02 \x01(\tR\x02os\x12\x12\n" +
+	"\x04arch\x18\x03 \x01(\tR\x04arch\x12\x14\n" +
+	"\x05chunk\x18\x04 \x01(\fR\x05chunk\"\x87\x01\n" +
+	"\x17PutAgentReleaseResponse\x12\x16\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x02 \x01(\tR\tobjectKey\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x04 \x01(\x04R\tsizeBytes\"[\n" +
 	"\x15ListGameBuildsRequest\x12\x17\n" +
 	"\agame_id\x18\x01 \x01(\tR\x06gameId\x12\x1d\n" +
 	"\achannel\x18\x02 \x01(\tH\x00R\achannel\x88\x01\x01B\n" +
@@ -2128,7 +2277,7 @@ const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\x16BUILD_STATUS_AVAILABLE\x10\x03\x12\x1b\n" +
 	"\x17BUILD_STATUS_DEPRECATED\x10\x04\x12\x1c\n" +
 	"\x18BUILD_STATUS_UNAVAILABLE\x10\x05\x12\x18\n" +
-	"\x14BUILD_STATUS_DELETED\x10\x062\xb6\f\n" +
+	"\x14BUILD_STATUS_DELETED\x10\x062\x9e\r\n" +
 	"\fAssetService\x12a\n" +
 	"\x0eListGameBuilds\x12&.assetservice.v1.ListGameBuildsRequest\x1a'.assetservice.v1.ListGameBuildsResponse\x12g\n" +
 	"\x10ResolveGameBuild\x12(.assetservice.v1.ResolveGameBuildRequest\x1a).assetservice.v1.ResolveGameBuildResponse\x12j\n" +
@@ -2144,7 +2293,8 @@ const file_assetservice_v1_asset_service_proto_rawDesc = "" +
 	"\rListSnapshots\x12%.assetservice.v1.ListSnapshotsRequest\x1a&.assetservice.v1.ListSnapshotsResponse\x12p\n" +
 	"\x13RegisterModManifest\x12+.assetservice.v1.RegisterModManifestRequest\x1a,.assetservice.v1.RegisterModManifestResponse\x12a\n" +
 	"\x0eGetModManifest\x12&.assetservice.v1.GetModManifestRequest\x1a'.assetservice.v1.GetModManifestResponse\x12\x85\x01\n" +
-	"\x1aCheckBuildModCompatibility\x122.assetservice.v1.CheckBuildModCompatibilityRequest\x1a3.assetservice.v1.CheckBuildModCompatibilityResponseb\x06proto3"
+	"\x1aCheckBuildModCompatibility\x122.assetservice.v1.CheckBuildModCompatibilityRequest\x1a3.assetservice.v1.CheckBuildModCompatibilityResponse\x12f\n" +
+	"\x0fPutAgentRelease\x12'.assetservice.v1.PutAgentReleaseRequest\x1a(.assetservice.v1.PutAgentReleaseResponse(\x01b\x06proto3"
 
 var (
 	file_assetservice_v1_asset_service_proto_rawDescOnce sync.Once
@@ -2159,107 +2309,111 @@ func file_assetservice_v1_asset_service_proto_rawDescGZIP() []byte {
 }
 
 var file_assetservice_v1_asset_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_assetservice_v1_asset_service_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_assetservice_v1_asset_service_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_assetservice_v1_asset_service_proto_goTypes = []any{
 	(BuildStatus)(0),                           // 0: assetservice.v1.BuildStatus
-	(*ListGameBuildsRequest)(nil),              // 1: assetservice.v1.ListGameBuildsRequest
-	(*ListGameBuildsResponse)(nil),             // 2: assetservice.v1.ListGameBuildsResponse
-	(*ResolveGameBuildRequest)(nil),            // 3: assetservice.v1.ResolveGameBuildRequest
-	(*ResolveGameBuildResponse)(nil),           // 4: assetservice.v1.ResolveGameBuildResponse
-	(*RegisterGameBuildRequest)(nil),           // 5: assetservice.v1.RegisterGameBuildRequest
-	(*RegisterGameBuildResponse)(nil),          // 6: assetservice.v1.RegisterGameBuildResponse
-	(*GetGameBuildRequest)(nil),                // 7: assetservice.v1.GetGameBuildRequest
-	(*GetGameBuildResponse)(nil),               // 8: assetservice.v1.GetGameBuildResponse
-	(*CreateSnapshotRequest)(nil),              // 9: assetservice.v1.CreateSnapshotRequest
-	(*CreateSnapshotResponse)(nil),             // 10: assetservice.v1.CreateSnapshotResponse
-	(*CompleteSnapshotRequest)(nil),            // 11: assetservice.v1.CompleteSnapshotRequest
-	(*CompleteSnapshotResponse)(nil),           // 12: assetservice.v1.CompleteSnapshotResponse
-	(*FailSnapshotRequest)(nil),                // 13: assetservice.v1.FailSnapshotRequest
-	(*FailSnapshotResponse)(nil),               // 14: assetservice.v1.FailSnapshotResponse
-	(*GetSnapshotRequest)(nil),                 // 15: assetservice.v1.GetSnapshotRequest
-	(*GetSnapshotResponse)(nil),                // 16: assetservice.v1.GetSnapshotResponse
-	(*GetLatestSnapshotRequest)(nil),           // 17: assetservice.v1.GetLatestSnapshotRequest
-	(*GetLatestSnapshotResponse)(nil),          // 18: assetservice.v1.GetLatestSnapshotResponse
-	(*SetLatestSnapshotRequest)(nil),           // 19: assetservice.v1.SetLatestSnapshotRequest
-	(*SetLatestSnapshotResponse)(nil),          // 20: assetservice.v1.SetLatestSnapshotResponse
-	(*GetSnapshotRestorePlanRequest)(nil),      // 21: assetservice.v1.GetSnapshotRestorePlanRequest
-	(*GetSnapshotRestorePlanResponse)(nil),     // 22: assetservice.v1.GetSnapshotRestorePlanResponse
-	(*ListSnapshotsRequest)(nil),               // 23: assetservice.v1.ListSnapshotsRequest
-	(*ListSnapshotsResponse)(nil),              // 24: assetservice.v1.ListSnapshotsResponse
-	(*RegisterModManifestRequest)(nil),         // 25: assetservice.v1.RegisterModManifestRequest
-	(*RegisterModManifestResponse)(nil),        // 26: assetservice.v1.RegisterModManifestResponse
-	(*GetModManifestRequest)(nil),              // 27: assetservice.v1.GetModManifestRequest
-	(*GetModManifestResponse)(nil),             // 28: assetservice.v1.GetModManifestResponse
-	(*CheckBuildModCompatibilityRequest)(nil),  // 29: assetservice.v1.CheckBuildModCompatibilityRequest
-	(*CheckBuildModCompatibilityResponse)(nil), // 30: assetservice.v1.CheckBuildModCompatibilityResponse
-	(*VersionSelector)(nil),                    // 31: assetservice.v1.VersionSelector
-	(*GameBuild)(nil),                          // 32: assetservice.v1.GameBuild
-	(*AdapterMetadata)(nil),                    // 33: assetservice.v1.AdapterMetadata
-	(*CredentialSpec)(nil),                     // 34: assetservice.v1.CredentialSpec
-	(*BuildCompatibility)(nil),                 // 35: assetservice.v1.BuildCompatibility
-	(*Game)(nil),                               // 36: assetservice.v1.Game
-	(SnapshotType)(0),                          // 37: assetservice.v1.SnapshotType
-	(*SnapshotRecord)(nil),                     // 38: assetservice.v1.SnapshotRecord
-	(*SnapshotRestorePlan)(nil),                // 39: assetservice.v1.SnapshotRestorePlan
-	(*ModManifest)(nil),                        // 40: assetservice.v1.ModManifest
+	(*PutAgentReleaseRequest)(nil),             // 1: assetservice.v1.PutAgentReleaseRequest
+	(*PutAgentReleaseResponse)(nil),            // 2: assetservice.v1.PutAgentReleaseResponse
+	(*ListGameBuildsRequest)(nil),              // 3: assetservice.v1.ListGameBuildsRequest
+	(*ListGameBuildsResponse)(nil),             // 4: assetservice.v1.ListGameBuildsResponse
+	(*ResolveGameBuildRequest)(nil),            // 5: assetservice.v1.ResolveGameBuildRequest
+	(*ResolveGameBuildResponse)(nil),           // 6: assetservice.v1.ResolveGameBuildResponse
+	(*RegisterGameBuildRequest)(nil),           // 7: assetservice.v1.RegisterGameBuildRequest
+	(*RegisterGameBuildResponse)(nil),          // 8: assetservice.v1.RegisterGameBuildResponse
+	(*GetGameBuildRequest)(nil),                // 9: assetservice.v1.GetGameBuildRequest
+	(*GetGameBuildResponse)(nil),               // 10: assetservice.v1.GetGameBuildResponse
+	(*CreateSnapshotRequest)(nil),              // 11: assetservice.v1.CreateSnapshotRequest
+	(*CreateSnapshotResponse)(nil),             // 12: assetservice.v1.CreateSnapshotResponse
+	(*CompleteSnapshotRequest)(nil),            // 13: assetservice.v1.CompleteSnapshotRequest
+	(*CompleteSnapshotResponse)(nil),           // 14: assetservice.v1.CompleteSnapshotResponse
+	(*FailSnapshotRequest)(nil),                // 15: assetservice.v1.FailSnapshotRequest
+	(*FailSnapshotResponse)(nil),               // 16: assetservice.v1.FailSnapshotResponse
+	(*GetSnapshotRequest)(nil),                 // 17: assetservice.v1.GetSnapshotRequest
+	(*GetSnapshotResponse)(nil),                // 18: assetservice.v1.GetSnapshotResponse
+	(*GetLatestSnapshotRequest)(nil),           // 19: assetservice.v1.GetLatestSnapshotRequest
+	(*GetLatestSnapshotResponse)(nil),          // 20: assetservice.v1.GetLatestSnapshotResponse
+	(*SetLatestSnapshotRequest)(nil),           // 21: assetservice.v1.SetLatestSnapshotRequest
+	(*SetLatestSnapshotResponse)(nil),          // 22: assetservice.v1.SetLatestSnapshotResponse
+	(*GetSnapshotRestorePlanRequest)(nil),      // 23: assetservice.v1.GetSnapshotRestorePlanRequest
+	(*GetSnapshotRestorePlanResponse)(nil),     // 24: assetservice.v1.GetSnapshotRestorePlanResponse
+	(*ListSnapshotsRequest)(nil),               // 25: assetservice.v1.ListSnapshotsRequest
+	(*ListSnapshotsResponse)(nil),              // 26: assetservice.v1.ListSnapshotsResponse
+	(*RegisterModManifestRequest)(nil),         // 27: assetservice.v1.RegisterModManifestRequest
+	(*RegisterModManifestResponse)(nil),        // 28: assetservice.v1.RegisterModManifestResponse
+	(*GetModManifestRequest)(nil),              // 29: assetservice.v1.GetModManifestRequest
+	(*GetModManifestResponse)(nil),             // 30: assetservice.v1.GetModManifestResponse
+	(*CheckBuildModCompatibilityRequest)(nil),  // 31: assetservice.v1.CheckBuildModCompatibilityRequest
+	(*CheckBuildModCompatibilityResponse)(nil), // 32: assetservice.v1.CheckBuildModCompatibilityResponse
+	(*VersionSelector)(nil),                    // 33: assetservice.v1.VersionSelector
+	(*GameBuild)(nil),                          // 34: assetservice.v1.GameBuild
+	(*AdapterMetadata)(nil),                    // 35: assetservice.v1.AdapterMetadata
+	(*CredentialSpec)(nil),                     // 36: assetservice.v1.CredentialSpec
+	(*BuildCompatibility)(nil),                 // 37: assetservice.v1.BuildCompatibility
+	(*Game)(nil),                               // 38: assetservice.v1.Game
+	(SnapshotType)(0),                          // 39: assetservice.v1.SnapshotType
+	(*SnapshotRecord)(nil),                     // 40: assetservice.v1.SnapshotRecord
+	(*SnapshotRestorePlan)(nil),                // 41: assetservice.v1.SnapshotRestorePlan
+	(*ModManifest)(nil),                        // 42: assetservice.v1.ModManifest
 }
 var file_assetservice_v1_asset_service_proto_depIdxs = []int32{
-	32, // 0: assetservice.v1.ListGameBuildsResponse.builds:type_name -> assetservice.v1.GameBuild
-	36, // 1: assetservice.v1.ResolveGameBuildRequest.game:type_name -> assetservice.v1.Game
-	31, // 2: assetservice.v1.ResolveGameBuildRequest.selector:type_name -> assetservice.v1.VersionSelector
-	32, // 3: assetservice.v1.ResolveGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
-	32, // 4: assetservice.v1.RegisterGameBuildRequest.build:type_name -> assetservice.v1.GameBuild
-	32, // 5: assetservice.v1.RegisterGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
-	32, // 6: assetservice.v1.GetGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
-	37, // 7: assetservice.v1.CreateSnapshotRequest.snapshot_type:type_name -> assetservice.v1.SnapshotType
-	38, // 8: assetservice.v1.CreateSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	38, // 9: assetservice.v1.CompleteSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	38, // 10: assetservice.v1.FailSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	38, // 11: assetservice.v1.GetSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	38, // 12: assetservice.v1.GetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	38, // 13: assetservice.v1.SetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
-	39, // 14: assetservice.v1.GetSnapshotRestorePlanResponse.restore_plan:type_name -> assetservice.v1.SnapshotRestorePlan
-	38, // 15: assetservice.v1.ListSnapshotsResponse.snapshots:type_name -> assetservice.v1.SnapshotRecord
-	40, // 16: assetservice.v1.RegisterModManifestRequest.manifest:type_name -> assetservice.v1.ModManifest
-	40, // 17: assetservice.v1.RegisterModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
-	40, // 18: assetservice.v1.GetModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
-	35, // 19: assetservice.v1.CheckBuildModCompatibilityResponse.compatibility:type_name -> assetservice.v1.BuildCompatibility
-	36, // 20: assetservice.v1.GameBuild.game:type_name -> assetservice.v1.Game
+	34, // 0: assetservice.v1.ListGameBuildsResponse.builds:type_name -> assetservice.v1.GameBuild
+	38, // 1: assetservice.v1.ResolveGameBuildRequest.game:type_name -> assetservice.v1.Game
+	33, // 2: assetservice.v1.ResolveGameBuildRequest.selector:type_name -> assetservice.v1.VersionSelector
+	34, // 3: assetservice.v1.ResolveGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
+	34, // 4: assetservice.v1.RegisterGameBuildRequest.build:type_name -> assetservice.v1.GameBuild
+	34, // 5: assetservice.v1.RegisterGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
+	34, // 6: assetservice.v1.GetGameBuildResponse.build:type_name -> assetservice.v1.GameBuild
+	39, // 7: assetservice.v1.CreateSnapshotRequest.snapshot_type:type_name -> assetservice.v1.SnapshotType
+	40, // 8: assetservice.v1.CreateSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	40, // 9: assetservice.v1.CompleteSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	40, // 10: assetservice.v1.FailSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	40, // 11: assetservice.v1.GetSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	40, // 12: assetservice.v1.GetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	40, // 13: assetservice.v1.SetLatestSnapshotResponse.snapshot:type_name -> assetservice.v1.SnapshotRecord
+	41, // 14: assetservice.v1.GetSnapshotRestorePlanResponse.restore_plan:type_name -> assetservice.v1.SnapshotRestorePlan
+	40, // 15: assetservice.v1.ListSnapshotsResponse.snapshots:type_name -> assetservice.v1.SnapshotRecord
+	42, // 16: assetservice.v1.RegisterModManifestRequest.manifest:type_name -> assetservice.v1.ModManifest
+	42, // 17: assetservice.v1.RegisterModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
+	42, // 18: assetservice.v1.GetModManifestResponse.manifest:type_name -> assetservice.v1.ModManifest
+	37, // 19: assetservice.v1.CheckBuildModCompatibilityResponse.compatibility:type_name -> assetservice.v1.BuildCompatibility
+	38, // 20: assetservice.v1.GameBuild.game:type_name -> assetservice.v1.Game
 	0,  // 21: assetservice.v1.GameBuild.status:type_name -> assetservice.v1.BuildStatus
-	33, // 22: assetservice.v1.GameBuild.adapter_metadata:type_name -> assetservice.v1.AdapterMetadata
-	34, // 23: assetservice.v1.AdapterMetadata.credentials:type_name -> assetservice.v1.CredentialSpec
-	1,  // 24: assetservice.v1.AssetService.ListGameBuilds:input_type -> assetservice.v1.ListGameBuildsRequest
-	3,  // 25: assetservice.v1.AssetService.ResolveGameBuild:input_type -> assetservice.v1.ResolveGameBuildRequest
-	5,  // 26: assetservice.v1.AssetService.RegisterGameBuild:input_type -> assetservice.v1.RegisterGameBuildRequest
-	7,  // 27: assetservice.v1.AssetService.GetGameBuild:input_type -> assetservice.v1.GetGameBuildRequest
-	9,  // 28: assetservice.v1.AssetService.CreateSnapshot:input_type -> assetservice.v1.CreateSnapshotRequest
-	11, // 29: assetservice.v1.AssetService.CompleteSnapshot:input_type -> assetservice.v1.CompleteSnapshotRequest
-	13, // 30: assetservice.v1.AssetService.FailSnapshot:input_type -> assetservice.v1.FailSnapshotRequest
-	15, // 31: assetservice.v1.AssetService.GetSnapshot:input_type -> assetservice.v1.GetSnapshotRequest
-	17, // 32: assetservice.v1.AssetService.GetLatestSnapshot:input_type -> assetservice.v1.GetLatestSnapshotRequest
-	19, // 33: assetservice.v1.AssetService.SetLatestSnapshot:input_type -> assetservice.v1.SetLatestSnapshotRequest
-	21, // 34: assetservice.v1.AssetService.GetSnapshotRestorePlan:input_type -> assetservice.v1.GetSnapshotRestorePlanRequest
-	23, // 35: assetservice.v1.AssetService.ListSnapshots:input_type -> assetservice.v1.ListSnapshotsRequest
-	25, // 36: assetservice.v1.AssetService.RegisterModManifest:input_type -> assetservice.v1.RegisterModManifestRequest
-	27, // 37: assetservice.v1.AssetService.GetModManifest:input_type -> assetservice.v1.GetModManifestRequest
-	29, // 38: assetservice.v1.AssetService.CheckBuildModCompatibility:input_type -> assetservice.v1.CheckBuildModCompatibilityRequest
-	2,  // 39: assetservice.v1.AssetService.ListGameBuilds:output_type -> assetservice.v1.ListGameBuildsResponse
-	4,  // 40: assetservice.v1.AssetService.ResolveGameBuild:output_type -> assetservice.v1.ResolveGameBuildResponse
-	6,  // 41: assetservice.v1.AssetService.RegisterGameBuild:output_type -> assetservice.v1.RegisterGameBuildResponse
-	8,  // 42: assetservice.v1.AssetService.GetGameBuild:output_type -> assetservice.v1.GetGameBuildResponse
-	10, // 43: assetservice.v1.AssetService.CreateSnapshot:output_type -> assetservice.v1.CreateSnapshotResponse
-	12, // 44: assetservice.v1.AssetService.CompleteSnapshot:output_type -> assetservice.v1.CompleteSnapshotResponse
-	14, // 45: assetservice.v1.AssetService.FailSnapshot:output_type -> assetservice.v1.FailSnapshotResponse
-	16, // 46: assetservice.v1.AssetService.GetSnapshot:output_type -> assetservice.v1.GetSnapshotResponse
-	18, // 47: assetservice.v1.AssetService.GetLatestSnapshot:output_type -> assetservice.v1.GetLatestSnapshotResponse
-	20, // 48: assetservice.v1.AssetService.SetLatestSnapshot:output_type -> assetservice.v1.SetLatestSnapshotResponse
-	22, // 49: assetservice.v1.AssetService.GetSnapshotRestorePlan:output_type -> assetservice.v1.GetSnapshotRestorePlanResponse
-	24, // 50: assetservice.v1.AssetService.ListSnapshots:output_type -> assetservice.v1.ListSnapshotsResponse
-	26, // 51: assetservice.v1.AssetService.RegisterModManifest:output_type -> assetservice.v1.RegisterModManifestResponse
-	28, // 52: assetservice.v1.AssetService.GetModManifest:output_type -> assetservice.v1.GetModManifestResponse
-	30, // 53: assetservice.v1.AssetService.CheckBuildModCompatibility:output_type -> assetservice.v1.CheckBuildModCompatibilityResponse
-	39, // [39:54] is the sub-list for method output_type
-	24, // [24:39] is the sub-list for method input_type
+	35, // 22: assetservice.v1.GameBuild.adapter_metadata:type_name -> assetservice.v1.AdapterMetadata
+	36, // 23: assetservice.v1.AdapterMetadata.credentials:type_name -> assetservice.v1.CredentialSpec
+	3,  // 24: assetservice.v1.AssetService.ListGameBuilds:input_type -> assetservice.v1.ListGameBuildsRequest
+	5,  // 25: assetservice.v1.AssetService.ResolveGameBuild:input_type -> assetservice.v1.ResolveGameBuildRequest
+	7,  // 26: assetservice.v1.AssetService.RegisterGameBuild:input_type -> assetservice.v1.RegisterGameBuildRequest
+	9,  // 27: assetservice.v1.AssetService.GetGameBuild:input_type -> assetservice.v1.GetGameBuildRequest
+	11, // 28: assetservice.v1.AssetService.CreateSnapshot:input_type -> assetservice.v1.CreateSnapshotRequest
+	13, // 29: assetservice.v1.AssetService.CompleteSnapshot:input_type -> assetservice.v1.CompleteSnapshotRequest
+	15, // 30: assetservice.v1.AssetService.FailSnapshot:input_type -> assetservice.v1.FailSnapshotRequest
+	17, // 31: assetservice.v1.AssetService.GetSnapshot:input_type -> assetservice.v1.GetSnapshotRequest
+	19, // 32: assetservice.v1.AssetService.GetLatestSnapshot:input_type -> assetservice.v1.GetLatestSnapshotRequest
+	21, // 33: assetservice.v1.AssetService.SetLatestSnapshot:input_type -> assetservice.v1.SetLatestSnapshotRequest
+	23, // 34: assetservice.v1.AssetService.GetSnapshotRestorePlan:input_type -> assetservice.v1.GetSnapshotRestorePlanRequest
+	25, // 35: assetservice.v1.AssetService.ListSnapshots:input_type -> assetservice.v1.ListSnapshotsRequest
+	27, // 36: assetservice.v1.AssetService.RegisterModManifest:input_type -> assetservice.v1.RegisterModManifestRequest
+	29, // 37: assetservice.v1.AssetService.GetModManifest:input_type -> assetservice.v1.GetModManifestRequest
+	31, // 38: assetservice.v1.AssetService.CheckBuildModCompatibility:input_type -> assetservice.v1.CheckBuildModCompatibilityRequest
+	1,  // 39: assetservice.v1.AssetService.PutAgentRelease:input_type -> assetservice.v1.PutAgentReleaseRequest
+	4,  // 40: assetservice.v1.AssetService.ListGameBuilds:output_type -> assetservice.v1.ListGameBuildsResponse
+	6,  // 41: assetservice.v1.AssetService.ResolveGameBuild:output_type -> assetservice.v1.ResolveGameBuildResponse
+	8,  // 42: assetservice.v1.AssetService.RegisterGameBuild:output_type -> assetservice.v1.RegisterGameBuildResponse
+	10, // 43: assetservice.v1.AssetService.GetGameBuild:output_type -> assetservice.v1.GetGameBuildResponse
+	12, // 44: assetservice.v1.AssetService.CreateSnapshot:output_type -> assetservice.v1.CreateSnapshotResponse
+	14, // 45: assetservice.v1.AssetService.CompleteSnapshot:output_type -> assetservice.v1.CompleteSnapshotResponse
+	16, // 46: assetservice.v1.AssetService.FailSnapshot:output_type -> assetservice.v1.FailSnapshotResponse
+	18, // 47: assetservice.v1.AssetService.GetSnapshot:output_type -> assetservice.v1.GetSnapshotResponse
+	20, // 48: assetservice.v1.AssetService.GetLatestSnapshot:output_type -> assetservice.v1.GetLatestSnapshotResponse
+	22, // 49: assetservice.v1.AssetService.SetLatestSnapshot:output_type -> assetservice.v1.SetLatestSnapshotResponse
+	24, // 50: assetservice.v1.AssetService.GetSnapshotRestorePlan:output_type -> assetservice.v1.GetSnapshotRestorePlanResponse
+	26, // 51: assetservice.v1.AssetService.ListSnapshots:output_type -> assetservice.v1.ListSnapshotsResponse
+	28, // 52: assetservice.v1.AssetService.RegisterModManifest:output_type -> assetservice.v1.RegisterModManifestResponse
+	30, // 53: assetservice.v1.AssetService.GetModManifest:output_type -> assetservice.v1.GetModManifestResponse
+	32, // 54: assetservice.v1.AssetService.CheckBuildModCompatibility:output_type -> assetservice.v1.CheckBuildModCompatibilityResponse
+	2,  // 55: assetservice.v1.AssetService.PutAgentRelease:output_type -> assetservice.v1.PutAgentReleaseResponse
+	40, // [40:56] is the sub-list for method output_type
+	24, // [24:40] is the sub-list for method input_type
 	24, // [24:24] is the sub-list for extension type_name
 	24, // [24:24] is the sub-list for extension extendee
 	0,  // [0:24] is the sub-list for field type_name
@@ -2272,25 +2426,25 @@ func file_assetservice_v1_asset_service_proto_init() {
 	}
 	file_assetservice_v1_snapshot_proto_init()
 	file_assetservice_v1_game_proto_init()
-	file_assetservice_v1_asset_service_proto_msgTypes[0].OneofWrappers = []any{}
-	file_assetservice_v1_asset_service_proto_msgTypes[4].OneofWrappers = []any{}
-	file_assetservice_v1_asset_service_proto_msgTypes[8].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[2].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[6].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[10].OneofWrappers = []any{}
-	file_assetservice_v1_asset_service_proto_msgTypes[17].OneofWrappers = []any{}
-	file_assetservice_v1_asset_service_proto_msgTypes[30].OneofWrappers = []any{
+	file_assetservice_v1_asset_service_proto_msgTypes[12].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[19].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[32].OneofWrappers = []any{
 		(*VersionSelector_Channel)(nil),
 		(*VersionSelector_BuildId)(nil),
 	}
-	file_assetservice_v1_asset_service_proto_msgTypes[31].OneofWrappers = []any{}
-	file_assetservice_v1_asset_service_proto_msgTypes[32].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[33].OneofWrappers = []any{}
 	file_assetservice_v1_asset_service_proto_msgTypes[34].OneofWrappers = []any{}
+	file_assetservice_v1_asset_service_proto_msgTypes[36].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_assetservice_v1_asset_service_proto_rawDesc), len(file_assetservice_v1_asset_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   35,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

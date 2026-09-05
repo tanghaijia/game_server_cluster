@@ -8,10 +8,14 @@ import (
 	"regexp"
 	"strings"
 
+	"controller-go/internal/client/assetservice"
 	"controller-go/internal/entity"
 	"controller-go/internal/repository"
 
+	assetservicev1 "controller-go/internal/third/assetservice/v1"
+
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
 	"gorm.io/gorm"
 )
 
@@ -24,15 +28,27 @@ var (
 	ErrReleaseNotFound       = errors.New("release not found")
 )
 
-// AgentReleaseUseCase node_agent 发布版本管理（P1，docs/node-agent-upgrade-design.md §3.1）
-type AgentReleaseUseCase struct {
-	repo   repository.AgentReleaseRepository
-	store  ReleaseStore
-	byUser string // 上传者标识（admin 用户名，可空）
+// uploadChunkSize 上传分块大小（1 MiB），经 gRPC 客户端流转发给 asset_service。
+const uploadChunkSize = 1 << 20
+
+// AgentReleaseUploader 上传通道抽象：*assetservice.AssetServiceFaceClient 满足；
+// 测试用 fake 实现（不依赖真实 gRPC 连接）。
+type AgentReleaseUploader interface {
+	PutAgentRelease(ctx context.Context, opts ...grpc.CallOption) (assetservice.AgentReleaseUploadStream, error)
 }
 
-func NewAgentReleaseUseCase(repo repository.AgentReleaseRepository, store ReleaseStore) *AgentReleaseUseCase {
-	return &AgentReleaseUseCase{repo: repo, store: store}
+// AgentReleaseUseCase node_agent 发布版本管理。
+//
+// P2（docs/agent-release-asset-service-redesign.md）：二进制本体由 asset_service 接收并写入
+// 对象存储（S3/MinIO），controller 只登记清单 —— storage_key = 对象键 object_key，bucket 落库，
+// controller 不再本地落盘、不再提供下载端点。
+type AgentReleaseUseCase struct {
+	repo     repository.AgentReleaseRepository
+	uploader AgentReleaseUploader // → asset_service PutAgentRelease 流
+}
+
+func NewAgentReleaseUseCase(repo repository.AgentReleaseRepository, uploader AgentReleaseUploader) *AgentReleaseUseCase {
+	return &AgentReleaseUseCase{repo: repo, uploader: uploader}
 }
 
 // RegisterParams 上传登记参数
@@ -48,7 +64,8 @@ type RegisterParams struct {
 var allowedOS = map[string]bool{"linux": true, "windows": true}
 var allowedArch = map[string]bool{"amd64": true, "arm64": true}
 
-// Register 校验参数 → 落 ReleaseStore → 登记清单（重复版本+平台：409）
+// Register 校验参数 → 流式上传 asset_service（边传边由对方算 sha256）→ 登记清单。
+// 重复版本+平台：409。落库失败时对象已写（无删除接口），记日志由后续清理。
 func (uc *AgentReleaseUseCase) Register(ctx context.Context, p RegisterParams) (*entity.AgentRelease, error) {
 	if !versionRe.MatchString(p.Version) {
 		return nil, ErrReleaseInvalidVersion
@@ -67,26 +84,57 @@ func (uc *AgentReleaseUseCase) Register(ctx context.Context, p RegisterParams) (
 		return nil, err
 	}
 
-	id := uuid.NewString()
-	key := fmt.Sprintf("agent-release-%s-%s-%s", p.Version, osName, arch)
-	storageKey, sha, size, err := uc.store.Put(key, p.Body)
+	stream, err := uc.uploader.PutAgentRelease(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("store release: %w", err)
+		return nil, fmt.Errorf("open release upload: %w", err)
 	}
+	// 首条带元数据（asset_service 以首条 version/os/arch 为准）
+	if err := stream.Send(&assetservicev1.PutAgentReleaseRequest{
+		Version: p.Version, Os: osName, Arch: arch,
+	}); err != nil {
+		return nil, fmt.Errorf("send release header: %w", err)
+	}
+	buf := make([]byte, uploadChunkSize)
+	for {
+		n, readErr := p.Body.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			if err := stream.Send(&assetservicev1.PutAgentReleaseRequest{
+				Version: p.Version, Os: osName, Arch: arch, Chunk: chunk,
+			}); err != nil {
+				return nil, fmt.Errorf("send release chunk: %w", err)
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("read upload body: %w", readErr)
+		}
+	}
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return nil, fmt.Errorf("asset_service 接收 release 失败: %w", err)
+	}
+
 	release := &entity.AgentRelease{
-		ID:         id,
+		ID:         uuid.NewString(),
 		Version:    p.Version,
 		OS:         osName,
 		Arch:       arch,
-		SHA256:     sha,
-		SizeBytes:  size,
-		StorageKey: storageKey,
+		SHA256:     resp.GetSha256(),
+		SizeBytes:  int64(resp.GetSizeBytes()),
+		Bucket:     resp.GetBucket(),
+		StorageKey: resp.GetObjectKey(),
 		Note:       p.Note,
 		CreatedBy:  p.ByUser,
 	}
+	if release.SHA256 == "" || release.StorageKey == "" {
+		return nil, errors.New("asset_service 返回缺 sha256/object_key")
+	}
 	if err := uc.repo.Save(ctx, release); err != nil {
-		// 落库失败回收文件，避免孤儿
-		_ = uc.store.Delete(storageKey)
+		// 对象已写入对象存储；无删除接口，先记录（孤儿由后续清理/覆盖发布处理）
 		return nil, err
 	}
 	return release, nil
@@ -107,17 +155,4 @@ func (uc *AgentReleaseUseCase) Get(ctx context.Context, id string) (*entity.Agen
 		return nil, err
 	}
 	return release, nil
-}
-
-// OpenBinary 打开二进制流（下载）
-func (uc *AgentReleaseUseCase) OpenBinary(ctx context.Context, id string) (*entity.AgentRelease, io.ReadCloser, error) {
-	release, err := uc.Get(ctx, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	rc, err := uc.store.Open(release.StorageKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("open release binary: %w", err)
-	}
-	return release, rc, nil
 }

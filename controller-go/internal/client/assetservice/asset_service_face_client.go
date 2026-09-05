@@ -127,6 +127,26 @@ func (c *AssetServiceFaceClient) ListSnapshots(ctx context.Context, in *assetser
 }
 
 // ---------------------------------------------------------------------------
+// AgentRelease 领域（P2，agent-release-asset-service-redesign）：
+// 发布二进制经 asset_service 写对象存储，controller 不再本地落盘
+// ---------------------------------------------------------------------------
+
+// AgentReleaseUploadStream 客户端流式上传句柄（grpc client-streaming）。
+type AgentReleaseUploadStream interface {
+	Send(*assetservicev1.PutAgentReleaseRequest) error
+	CloseAndRecv() (*assetservicev1.PutAgentReleaseResponse, error)
+}
+
+// PutAgentRelease 打开到 asset_service 的 release 上传流（调用方 Send 分块 → CloseAndRecv 收结果）。
+func (c *AssetServiceFaceClient) PutAgentRelease(ctx context.Context, opts ...grpc.CallOption) (AgentReleaseUploadStream, error) {
+	stream, err := c.client.PutAgentRelease(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("open put agent release stream: %w", err)
+	}
+	return stream, nil
+}
+
+// ---------------------------------------------------------------------------
 // ModManifest 领域
 // ---------------------------------------------------------------------------
 

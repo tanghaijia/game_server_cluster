@@ -34,6 +34,7 @@ const (
 	AssetService_RegisterModManifest_FullMethodName        = "/assetservice.v1.AssetService/RegisterModManifest"
 	AssetService_GetModManifest_FullMethodName             = "/assetservice.v1.AssetService/GetModManifest"
 	AssetService_CheckBuildModCompatibility_FullMethodName = "/assetservice.v1.AssetService/CheckBuildModCompatibility"
+	AssetService_PutAgentRelease_FullMethodName            = "/assetservice.v1.AssetService/PutAgentRelease"
 )
 
 // AssetServiceClient is the client API for AssetService service.
@@ -56,6 +57,9 @@ type AssetServiceClient interface {
 	RegisterModManifest(ctx context.Context, in *RegisterModManifestRequest, opts ...grpc.CallOption) (*RegisterModManifestResponse, error)
 	GetModManifest(ctx context.Context, in *GetModManifestRequest, opts ...grpc.CallOption) (*GetModManifestResponse, error)
 	CheckBuildModCompatibility(ctx context.Context, in *CheckBuildModCompatibilityRequest, opts ...grpc.CallOption) (*CheckBuildModCompatibilityResponse, error)
+	// node_agent 发布二进制托管（agent-release-asset-service-redesign，P1）：
+	// controller 上传（客户端流）→ 边收边算 sha256 → 写对象存储 → 返回 object_key/sha256/size。
+	PutAgentRelease(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutAgentReleaseRequest, PutAgentReleaseResponse], error)
 }
 
 type assetServiceClient struct {
@@ -216,6 +220,19 @@ func (c *assetServiceClient) CheckBuildModCompatibility(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *assetServiceClient) PutAgentRelease(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[PutAgentReleaseRequest, PutAgentReleaseResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AssetService_ServiceDesc.Streams[0], AssetService_PutAgentRelease_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PutAgentReleaseRequest, PutAgentReleaseResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AssetService_PutAgentReleaseClient = grpc.ClientStreamingClient[PutAgentReleaseRequest, PutAgentReleaseResponse]
+
 // AssetServiceServer is the server API for AssetService service.
 // All implementations must embed UnimplementedAssetServiceServer
 // for forward compatibility.
@@ -236,6 +253,9 @@ type AssetServiceServer interface {
 	RegisterModManifest(context.Context, *RegisterModManifestRequest) (*RegisterModManifestResponse, error)
 	GetModManifest(context.Context, *GetModManifestRequest) (*GetModManifestResponse, error)
 	CheckBuildModCompatibility(context.Context, *CheckBuildModCompatibilityRequest) (*CheckBuildModCompatibilityResponse, error)
+	// node_agent 发布二进制托管（agent-release-asset-service-redesign，P1）：
+	// controller 上传（客户端流）→ 边收边算 sha256 → 写对象存储 → 返回 object_key/sha256/size。
+	PutAgentRelease(grpc.ClientStreamingServer[PutAgentReleaseRequest, PutAgentReleaseResponse]) error
 	mustEmbedUnimplementedAssetServiceServer()
 }
 
@@ -290,6 +310,9 @@ func (UnimplementedAssetServiceServer) GetModManifest(context.Context, *GetModMa
 }
 func (UnimplementedAssetServiceServer) CheckBuildModCompatibility(context.Context, *CheckBuildModCompatibilityRequest) (*CheckBuildModCompatibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckBuildModCompatibility not implemented")
+}
+func (UnimplementedAssetServiceServer) PutAgentRelease(grpc.ClientStreamingServer[PutAgentReleaseRequest, PutAgentReleaseResponse]) error {
+	return status.Error(codes.Unimplemented, "method PutAgentRelease not implemented")
 }
 func (UnimplementedAssetServiceServer) mustEmbedUnimplementedAssetServiceServer() {}
 func (UnimplementedAssetServiceServer) testEmbeddedByValue()                      {}
@@ -582,6 +605,13 @@ func _AssetService_CheckBuildModCompatibility_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AssetService_PutAgentRelease_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AssetServiceServer).PutAgentRelease(&grpc.GenericServerStream[PutAgentReleaseRequest, PutAgentReleaseResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AssetService_PutAgentReleaseServer = grpc.ClientStreamingServer[PutAgentReleaseRequest, PutAgentReleaseResponse]
+
 // AssetService_ServiceDesc is the grpc.ServiceDesc for AssetService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -650,6 +680,12 @@ var AssetService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AssetService_CheckBuildModCompatibility_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "PutAgentRelease",
+			Handler:       _AssetService_PutAgentRelease_Handler,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "assetservice/v1/asset_service.proto",
 }
