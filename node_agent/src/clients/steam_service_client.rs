@@ -153,6 +153,7 @@ impl SteamServiceClient {
                 "+quit",
             ])
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| {
                 // spawn 失败（steamcmd 不在 PATH / 依赖缺失等）：带 install_dir 上下文打日志
@@ -166,8 +167,14 @@ impl SteamServiceClient {
             })?;
 
         let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
 
-        let mut lines = BufReader::new(stdout).lines();
+        let mut out_lines = BufReader::new(stdout).lines();
+        let mut err_lines = BufReader::new(stderr).lines();
+        // P2：双流尾部缓冲（stdout 120 行 / stderr 60 行），失败时拼进错误上下文；
+        // stdout 只保留 progress 实时解析，其余行进缓冲；stderr 不再继承丢失。
+        let mut out_tail = TailBuffer::new(120);
+        let mut err_tail = TailBuffer::new(60);
 
         game_cache.status = GameCacheStatus::Downloading;
         log::info!(
@@ -178,18 +185,40 @@ impl SteamServiceClient {
             install_dir.display()
         );
         self.game_cache_repos.save(game_cache).await?;
-        while let Some(line) = lines.next_line().await.map_err(|e| {
-            log::error!(
-                "读取 steamcmd 输出失败：game={} branch={} install_dir={} err={e}",
-                game_cache.game_id.as_str(),
-                game_cache.branch_name.as_str(),
-                install_dir_str
-            );
-            SteamServiceError::IoError(e)
-        })? {
-            if let Ok(Some(progress)) = progress_regex(&line) {
-                game_cache.download_progress = Some(progress);
-                self.game_cache_repos.save(game_cache).await?;
+
+        // 双流并行消费（避免 stderr 管道缓冲写满阻塞子进程）；两路 EOF 后退出
+        let mut out_done = false;
+        let mut err_done = false;
+        while !out_done || !err_done {
+            tokio::select! {
+                l = out_lines.next_line(), if !out_done => match l {
+                    Ok(Some(line)) => {
+                        if let Ok(Some(progress)) = progress_regex(&line) {
+                            game_cache.download_progress = Some(progress);
+                            self.game_cache_repos.save(game_cache).await?;
+                        } else if steamcmd_error_line(&line) {
+                            // steamcmd 的 ERROR!/Error! 原话实时转发进 node-agent.log（P2）
+                            log::error!("steamcmd stdout: {}", line);
+                        }
+                        out_tail.push(line);
+                    }
+                    Ok(None) => out_done = true,
+                    Err(e) => return Err(steamcmd_stream_read_error(
+                        game_cache, install_dir_str, "stdout", e,
+                    )),
+                },
+                l = err_lines.next_line(), if !err_done => match l {
+                    Ok(Some(line)) => {
+                        if steamcmd_error_line(&line) {
+                            log::error!("steamcmd stderr: {}", line);
+                        }
+                        err_tail.push(line);
+                    }
+                    Ok(None) => err_done = true,
+                    Err(e) => return Err(steamcmd_stream_read_error(
+                        game_cache, install_dir_str, "stderr", e,
+                    )),
+                },
             }
         }
 
@@ -204,10 +233,17 @@ impl SteamServiceClient {
         })?;
 
         if !status.success() {
+            // P2：把 steamcmd 输出尾部作为失败上下文带进错误（进日志 / 后续 last_error）
+            let tail = format!(
+                "stdout 尾部:\n{}stderr 尾部:\n{}",
+                out_tail.tail(30),
+                err_tail.tail(30)
+            );
             return Err(SteamServiceError::DownloadError(
                 game_cache.game_id.clone(),
                 game_cache.branch_name.clone(),
                 status,
+                tail,
             ));
         }
 
@@ -248,6 +284,8 @@ impl SteamServiceClient {
                 game_cache.game_id.clone(),
                 game_cache.branch_name.clone(),
                 status,
+                // 卸载流程暂不捕获输出尾部（改动最小；后续如需再加）
+                String::new(),
             ));
         }
 
@@ -335,4 +373,115 @@ async fn dir_size(root: &std::path::Path) -> std::io::Result<u64> {
         }
     }
     Ok(total)
+}
+
+// ============================================================
+// P2（下载可观测性，见 docs/game-cache-download-observability-design.md）：
+// steamcmd 输出尾部缓冲 + 错误行判定 + 流读取错误统一包装
+// ============================================================
+
+/// steamcmd 输出尾部环形缓冲：只保留最近 cap 行，行数超限丢弃头部并计数。
+/// 失败时由 `tail()` 产出错误上下文（限制进日志/错误消息的长度）。
+struct TailBuffer {
+    cap: usize,
+    buf: std::collections::VecDeque<String>,
+    dropped: usize,
+}
+
+impl TailBuffer {
+    fn new(cap: usize) -> Self {
+        Self {
+            cap: cap.max(1),
+            buf: std::collections::VecDeque::new(),
+            dropped: 0,
+        }
+    }
+
+    fn push(&mut self, line: String) {
+        if self.buf.len() >= self.cap {
+            self.buf.pop_front();
+            self.dropped += 1;
+        }
+        self.buf.push_back(line);
+    }
+
+    /// 从尾部取最多 max_lines 行；因容量/取数截断时带「已截断 N 行」提示。
+    fn tail(&self, max_lines: usize) -> String {
+        let skip = self.buf.len().saturating_sub(max_lines);
+        let mut out = String::new();
+        if self.dropped > 0 || skip > 0 {
+            out.push_str(&format!("[已截断 {} 行]\n", self.dropped + skip));
+        }
+        for line in self.buf.iter().skip(skip) {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
+    }
+}
+
+/// steamcmd 错误行判定（stdout/stderr 中 `Error!`/`ERROR!` 原话即时转发进 node-agent.log）。
+/// 实测 steamcmd 下载失败输出形如 `Error! App '294420' state is 0x202 after update job.`
+/// 或 `ERROR! ...`（详见设计稿 §2 事故复盘）。
+fn steamcmd_error_line(line: &str) -> bool {
+    line.contains("Error!") || line.contains("ERROR!")
+}
+
+/// 流读取失败统一包装：先打上下文日志，再返回 IoError（下载任务无人消费 JoinHandle，
+/// 失败反馈以日志 + DB Unavailable 为主）。
+fn steamcmd_stream_read_error(
+    game_cache: &GameCache,
+    install_dir: &str,
+    stream: &str,
+    e: std::io::Error,
+) -> SteamServiceError {
+    log::error!(
+        "读取 steamcmd {stream} 失败：game={} branch={} install_dir={} err={e}",
+        game_cache.game_id.as_str(),
+        game_cache.branch_name.as_str(),
+        install_dir
+    );
+    SteamServiceError::IoError(e)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tail_buffer_truncates_head_and_counts() {
+        let mut t = TailBuffer::new(3);
+        for i in 0..10 {
+            t.push(format!("line{i}"));
+        }
+        assert_eq!(t.dropped, 7, "容量 3、压入 10 行应丢弃头部 7 行");
+        let tail = t.tail(2);
+        assert!(tail.contains("line8"), "尾部应含倒数第二行: {tail}");
+        assert!(tail.contains("line9"), "尾部应含最后一行: {tail}");
+        assert!(!tail.contains("line5"), "早期行应被截掉: {tail}");
+        assert!(tail.contains("已截断"), "截断应有提示: {tail}");
+    }
+
+    #[test]
+    fn tail_buffer_short_no_truncate_marker() {
+        let mut t = TailBuffer::new(10);
+        t.push("a".to_string());
+        t.push("b".to_string());
+        let tail = t.tail(5);
+        assert_eq!(tail, "a\nb\n");
+        assert!(!tail.contains("已截断"));
+    }
+
+    #[test]
+    fn error_line_detection() {
+        // 事故现场（见设计稿 §2）：294420 磁盘不足 steamcmd stdout 只有这一句
+        assert!(steamcmd_error_line(
+            "Error! App '294420' state is 0x202 after update job."
+        ));
+        assert!(steamcmd_error_line("ERROR! Not enough disk space"));
+        // 正常进度/内容行不应误报
+        assert!(!steamcmd_error_line("Update state (0x0) unknown, progress: 0.00 (0 / 0)"));
+        assert!(!steamcmd_error_line("Downloading 105 chunks for depot 1006"));
+        assert!(!steamcmd_error_line("Redirecting stderr to '/root/.local/share/Steam/logs/stderr.txt'"));
+    }
 }

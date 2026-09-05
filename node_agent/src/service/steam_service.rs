@@ -10,8 +10,10 @@ use crate::domain::GameCache;
 pub enum SteamServiceError {
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
+    /// tail：steamcmd 失败时的输出尾部上下文（stdout/stderr），供日志与 last_error 透传。
+    /// 见 docs/game-cache-download-observability-design.md（P2）。
     #[error("Download Game {0} branch {1} error code {2}.")]
-    DownloadError(String, String, ExitStatus),
+    DownloadError(String, String, ExitStatus, String),
     #[error("Repository operate error")]
     RepositoryOperateError(#[from] anyhow::Error),
     #[error("Empty Download Path Error")]
