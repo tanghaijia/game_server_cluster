@@ -47,9 +47,24 @@
               <option value="arm64">arm64</option>
             </select>
           </div>
-          <div class="min-w-[200px] flex-1">
+          <div class="min-w-[280px] flex-1">
             <label class="mb-1 block text-xs text-muted-foreground">二进制文件</label>
-            <input type="file" class="block w-full text-sm" @change="onPickFile" />
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="rounded-md border px-3 py-1.5 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                :disabled="busy"
+                @click="onClickPickFile"
+              >
+                选择文件…
+              </button>
+              <span v-if="relForm.file" class="truncate font-mono text-xs text-foreground" :title="relForm.file.name">
+                ✓ {{ relForm.file.name }}（{{ formatSize(relForm.file.size) }}）
+              </span>
+              <span v-else class="text-xs text-muted-foreground">未选择</span>
+            </div>
+            <!-- 原生 file input 隐藏，由按钮触发；每次打开前清空 value 以支持重复选择同一文件 -->
+            <input ref="relFileInput" type="file" class="hidden" @change="onPickFile" />
           </div>
           <div>
             <label class="mb-1 block text-xs text-muted-foreground">备注（可选）</label>
@@ -257,6 +272,7 @@ const relForm = reactive<{ version: string; os: string; arch: string; note: stri
   note: '',
   file: null,
 })
+const relFileInput = ref<HTMLInputElement | null>(null)
 
 function formatSize(n?: number) {
   if (!n) return '0B'
@@ -320,6 +336,20 @@ function onPickFile(e: Event) {
   relForm.file = input.files?.[0] || null
 }
 
+// 显式打开文件选择器：先清空 value，保证再次选择同一个文件也能触发 @change
+function onClickPickFile() {
+  const el = relFileInput.value
+  if (!el) return
+  el.value = ''
+  el.click()
+}
+
+function resetFileInput() {
+  const el = relFileInput.value
+  if (el) el.value = ''
+  relForm.file = null
+}
+
 async function onUploadRelease() {
   if (!relForm.file) {
     error.value = '请选择二进制文件'
@@ -343,7 +373,7 @@ async function onUploadRelease() {
     })
     relForm.version = ''
     relForm.note = ''
-    relForm.file = null
+    resetFileInput() // 清空已选文件 + 原生 input value（下次可再选同一文件）
     notice.value = '版本已发布'
     setTimeout(() => (notice.value = ''), 4000)
     await load()
