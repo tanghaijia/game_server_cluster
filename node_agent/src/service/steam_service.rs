@@ -18,6 +18,9 @@ pub enum SteamServiceError {
     RepositoryOperateError(#[from] anyhow::Error),
     #[error("Empty Download Path Error")]
     EmptyDownloadPathError,
+    /// P3 磁盘预检拒绝（下载前拦截必然失败的下载，见 docs/game-cache-download-observability-design.md）
+    #[error("{0}")]
+    PreflightRejected(String),
 }
 
 #[async_trait]

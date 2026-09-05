@@ -1,14 +1,18 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::println;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime};
 
 use anyhow::anyhow;
 use regex::Regex;
+use sysinfo::Disks;
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tonic::async_trait;
 
+use crate::common::GAME_CACHE_SERVER_ROOT_PATH;
 use crate::domain::{GameCache, GameCacheStatus};
 use crate::ports::GameCacheRepository;
 use crate::service::{SteamService, SteamServiceError};
@@ -58,6 +62,23 @@ impl SteamServiceClient {
                 .join(final_dir.file_name().unwrap_or_default()),
             None => final_dir.clone(),
         };
+
+        // P3（磁盘预检）：spawn steamcmd 前拦截「必然失败」的下载（磁盘不足，见设计稿 §4.3）。
+        // 需求大小：优先同 (game,branch) 历史版本实测大小；首下无参考时向 steamcmd
+        // app_info_print 查询 size_on_disk（缓存 12h）；都拿不到则仅硬闸 1 GiB。
+        if let Some(reject) = self.preflight_check(&game_cache).await {
+            log::error!(
+                "下载预检拒绝：game={} branch={} build={} final={} reason={}",
+                game_cache.game_id.as_str(),
+                game_cache.branch_name.as_str(),
+                game_cache.build_id.as_str(),
+                path_str.as_str(),
+                reject
+            );
+            game_cache.status = GameCacheStatus::Unavailable;
+            let _ = self.game_cache_repos.save(&game_cache).await;
+            return Err(SteamServiceError::PreflightRejected(reject));
+        }
 
         // 清理上次崩溃残留的 staging（半成品）
         if staging_dir.exists() {
@@ -129,6 +150,41 @@ impl SteamServiceClient {
                 Err(e)
             }
         }
+    }
+
+    /// P3（磁盘预检，见设计稿 §4.3）：返回拒绝原因（None=放行）。
+    /// 在 spawn steamcmd 之前调用，避免「下载前预分配 16.4G 失败」这类必然失败白跑一次。
+    async fn preflight_check(&self, game_cache: &GameCache) -> Option<String> {
+        let available = match cache_root_free_bytes() {
+            Some(a) => a,
+            None => {
+                // 无法定位缓存盘（如开发机/容器无 /server 挂载）→ 放行 + WARN，不误伤
+                log::warn!(
+                    "磁盘预检跳过：无法定位 {} 所在挂载点（cache_root_free_bytes=None）",
+                    GAME_CACHE_SERVER_ROOT_PATH
+                );
+                return None;
+            }
+        };
+        let needed = self.estimate_needed_bytes(game_cache).await;
+        preflight_reject_reason(available, needed)
+    }
+
+    /// 需求大小估算（bytes）：① 同 (game,branch) 历史版本实测大小（更新/重复下载几乎总有）；
+    /// ② 首下无参考 → steamcmd app_info_print 查询 size_on_disk（进程内缓存 12h）；失败返回 None。
+    async fn estimate_needed_bytes(&self, game_cache: &GameCache) -> Option<u64> {
+        if let Ok(versions) = self
+            .game_cache_repos
+            .get_versions(&game_cache.game_id, &game_cache.branch_name)
+            .await
+        {
+            // 目标版本自身的残留记录 size=0（从未成功），天然被 size_bytes>0 过滤；
+            // 若目标版本曾成功下载（size>0）而被清理，取其大小作参考同样合理。
+            if let Some(known) = versions.iter().map(|v| v.size_bytes).max().filter(|&s| s > 0) {
+                return Some(known);
+            }
+        }
+        query_size_on_disk_cached(&game_cache.game_id).await
     }
 
     /// 实际的 steamcmd 下载流程（force_install_dir = staging 目录），
@@ -444,6 +500,128 @@ fn steamcmd_stream_read_error(
     SteamServiceError::IoError(e)
 }
 
+// ============================================================
+// P3（磁盘预检，见 docs/game-cache-download-observability-design.md §4.3）
+// ============================================================
+
+/// 缓存根目录所在挂载点的可用字节数；无法判定返回 None（调用方放行 + WARN）。
+/// 选「挂载点与 /server 互为前缀」中最深的挂载点（/server 挂独立盘时取它，否则取 /）。
+fn cache_root_free_bytes() -> Option<u64> {
+    let root = GAME_CACHE_SERVER_ROOT_PATH;
+    let disks = Disks::new();
+    let mut chosen: Option<(u64, usize)> = None; // (available, mount_len)
+    for d in disks.iter() {
+        let mp = d.mount_point().to_string_lossy().to_string();
+        let matches = root.starts_with(&mp) || mp.starts_with(root);
+        if matches && chosen.map_or(true, |(_, n)| mp.len() > n) {
+            chosen = Some((d.available_space(), mp.len()));
+        }
+    }
+    chosen.map(|(available, _)| available)
+}
+
+/// 下载前磁盘预检判定（纯函数，可单测）：available=可用字节，needed=需求字节（None=未知）。
+/// 返回拒绝原因（None=放行）。硬闸 1 GiB；需求已知时需额外 0.5 GiB 余量。
+fn preflight_reject_reason(available: u64, needed: Option<u64>) -> Option<String> {
+    const MIN_FREE_BYTES: u64 = 1 << 30; // 1 GiB
+    const HEADROOM_BYTES: u64 = 512 << 20; // 0.5 GiB
+    if available < MIN_FREE_BYTES {
+        return Some(format!(
+            "磁盘可用空间不足：仅剩 {}，低于最低阈值 1 GiB",
+            fmt_bytes(available)
+        ));
+    }
+    if let Some(n) = needed {
+        let demand = n.saturating_add(HEADROOM_BYTES);
+        if available < demand {
+            return Some(format!(
+                "磁盘可用空间不足：下载需约 {}（含 {} 余量），当前可用 {}",
+                fmt_bytes(demand),
+                fmt_bytes(HEADROOM_BYTES),
+                fmt_bytes(available)
+            ));
+        }
+    }
+    None
+}
+
+/// 人类可读字节数（GiB/MiB）
+fn fmt_bytes(n: u64) -> String {
+    const G: u64 = 1 << 30;
+    const M: u64 = 1 << 20;
+    if n >= G {
+        format!("{:.1} GiB", n as f64 / G as f64)
+    } else if n >= M {
+        format!("{:.0} MiB", n as f64 / M as f64)
+    } else {
+        format!("{n} B")
+    }
+}
+
+/// 进程级缓存：appid -> (size_on_disk 总字节, 查询时间)；TTL 12h。
+static SIZE_ON_DISK_CACHE: OnceLock<Mutex<HashMap<String, (u64, SystemTime)>>> = OnceLock::new();
+const SIZE_CACHE_TTL: Duration = Duration::from_secs(12 * 3600);
+
+/// 带缓存的 app_info_print 大小查询（先查缓存，避免每次下载都跑一次 steamcmd）。
+async fn query_size_on_disk_cached(app_id: &str) -> Option<u64> {
+    {
+        let cache = SIZE_ON_DISK_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        let guard = cache.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some((bytes, at)) = guard.get(app_id) {
+            if at.elapsed().ok()? < SIZE_CACHE_TTL {
+                return Some(*bytes);
+            }
+        }
+    }
+    let bytes = query_size_on_disk(app_id).await;
+    if let Some(b) = bytes {
+        let cache = SIZE_ON_DISK_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut guard = cache.lock().unwrap_or_else(|p| p.into_inner());
+        guard.insert(app_id.to_string(), (b, SystemTime::now()));
+    }
+    bytes
+}
+
+/// steamcmd `+app_info_print` 查询 App 的安装需求大小（各 depot `size_on_disk` 求和近似）。
+/// 失败/无数据返回 None（调用方放行）。仅首下无参考时调用，成功结果缓存 12h。
+async fn query_size_on_disk(app_id: &str) -> Option<u64> {
+    log::info!("查询 App {} 磁盘需求大小（app_info_print）…", app_id);
+    let mut child = Command::new("steamcmd")
+        .args(["+login", "anonymous", "+app_info_print", app_id, "+quit"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    let stdout = child.stdout.take()?;
+    let mut text = String::new();
+    BufReader::new(stdout).read_to_string(&mut text).await.ok()?;
+    let status = child.wait().await.ok()?;
+    if !status.success() {
+        log::warn!("app_info_print 失败（App {app_id}），跳过大小预检");
+        return None;
+    }
+    let total = parse_total_size_on_disk(&text);
+    if let Some(t) = total {
+        log::info!("App {app_id} 磁盘需求 ≈ {}", fmt_bytes(t));
+    }
+    total
+}
+
+/// 解析 app_info_print 输出（VDF 文本）：收集所有 `"size_on_disk" "N"`（字节）求和。
+/// 无匹配返回 None。
+fn parse_total_size_on_disk(output: &str) -> Option<u64> {
+    let re = Regex::new(r#""size_on_disk"\s+"(\d+)""#).ok()?;
+    let mut total: u64 = 0;
+    let mut found = false;
+    for cap in re.captures_iter(output) {
+        if let Some(v) = cap.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            total = total.saturating_add(v);
+            found = true;
+        }
+    }
+    found.then_some(total)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -483,5 +661,43 @@ mod tests {
         assert!(!steamcmd_error_line("Update state (0x0) unknown, progress: 0.00 (0 / 0)"));
         assert!(!steamcmd_error_line("Downloading 105 chunks for depot 1006"));
         assert!(!steamcmd_error_line("Redirecting stderr to '/root/.local/share/Steam/logs/stderr.txt'"));
+    }
+
+    #[test]
+    fn preflight_rejects_only_when_short() {
+        let g = 1u64 << 30;
+        // 硬闸：可用 < 1 GiB 无条件拒
+        assert!(preflight_reject_reason(g - 1, None).is_some());
+        // 需求已知且不足（16.4G 需求 + 0.5G 余量 > 11G 可用 → 拒，即 294420 事故场景）
+        assert!(preflight_reject_reason(11 * g, Some(16 * g + 400 * (1 << 20))).is_some());
+        // 充足 → 放行
+        assert_eq!(preflight_reject_reason(20 * g, Some(16 * g)), None);
+        // 需求未知（首下查询失败）→ 仅硬闸后放行
+        assert_eq!(preflight_reject_reason(5 * g, None), None);
+        // 拒绝文案带两侧数值，可读
+        let msg = preflight_reject_reason(11 * g, Some(16 * g)).unwrap();
+        assert!(msg.contains("GiB"), "文案应含数值: {msg}");
+    }
+
+    #[test]
+    fn parse_size_on_disk_sums_depot_values() {
+        // 近似 app_info_print 的 VDF 输出片段
+        let sample = r#"stuff
+"depots"
+{
+    "1006"
+    {
+        "name" "7d2d dedicated"
+        "size_on_disk" "3485494806"
+        "maxsize" "3485494806"
+    }
+    "294420"
+    {
+        "size_on_disk" "14000000000"
+    }
+}"#;
+        assert_eq!(parse_total_size_on_disk(sample), Some(17485494806u64));
+        assert_eq!(parse_total_size_on_disk("no depot sizes here"), None);
+        assert_eq!(parse_total_size_on_disk(""), None);
     }
 }
