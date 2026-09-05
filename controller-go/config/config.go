@@ -36,6 +36,10 @@ type Config struct {
 
 	// node_agent 一键更新（P1，见 docs/node-agent-upgrade-design.md）：发布二进制本地存储目录
 	AgentReleaseDir string
+	// agent 拉取发布二进制的 controller 下载端点基础地址（node 侧可达，默认本机冒烟；生产配 controller 内网地址）
+	AgentUpdateBaseURL string
+	// 单节点更新等待心跳回归新版本的超时（秒）
+	AgentUpdateWaitSec int
 
 	// 调度器（P1）
 	SchedulerScoreWeights      string  // json: {"region":1.0,"bandwidth":0.8,"locality":0.5,"history":0.6,"balance":0.7,"degraded_penalty":2.0,"frequency":0.0,"cache":2.0}
@@ -111,6 +115,10 @@ func Load() *Config {
 
 		// node_agent 一键更新：发布二进制本地目录（默认 ./agent-releases）
 		AgentReleaseDir: getEnv("AGENT_RELEASE_DIR", "./agent-releases"),
+		// agent 拉取下载端点 base（默认本机 HTTP 端口；生产需配置为 node 可达的 controller 地址）
+		AgentUpdateBaseURL: getEnv("AGENT_UPDATE_BASE_URL", "http://127.0.0.1:8090"),
+		// 等待心跳回归新版本超时（默认 120s：下载+替换+重启+心跳）
+		AgentUpdateWaitSec: getEnvInt("AGENT_UPDATE_WAIT_SEC", 120),
 
 		// 调度器（P1）
 		SchedulerScoreWeights:      getEnv("SCHEDULER_SCORE_WEIGHTS", ""),

@@ -182,7 +182,16 @@ func main() {
 	nodeUseCase := biz.NewNodeUseCase(nodeRepo, nodeAgentRepo)
 	nodeAgentUseCase := biz.NewNodeAgentUseCase(nodeAgentRepo, nodeRepo)
 	// P1：node_agent 发布版本管理（本地 ReleaseStore，见 docs/node-agent-upgrade-design.md）
-	agentReleaseUC := biz.NewAgentReleaseUseCase(repogorm.NewAgentReleaseRepo(db), biz.NewLocalReleaseStore(cfg.AgentReleaseDir))
+	agentReleaseRepo := repogorm.NewAgentReleaseRepo(db)
+	agentReleaseStore := biz.NewLocalReleaseStore(cfg.AgentReleaseDir)
+	agentReleaseUC := biz.NewAgentReleaseUseCase(agentReleaseRepo, agentReleaseStore)
+	// P3：一键更新编排（串行滚动；下载端点 base 供 node_agent 拉取）
+	updateOrchestrator := biz.NewNodeAgentUpdateOrchestrator(
+		nodeAgentRepo, nodeRepo, gameInstanceRepo, agentReleaseRepo, nodeAgentClients,
+		agentReleaseStore, cfg.AgentUpdateBaseURL,
+		time.Duration(cfg.RPCTimeoutSec)*time.Second,
+		time.Duration(cfg.AgentUpdateWaitSec)*time.Second,
+	)
 	debugUseCase := biz.NewDebugUseCase(dispatcher, gameInstanceRepo, containerPortMappingRepo, nodeAgentRepo, nodeRepo, scheduler)
 	fileSessionIssuer := biz.NewFileSessionIssuer(cfg.NodeAgentFileSecret, 30*time.Minute)
 	observerUseCase := biz.NewObserverUseCase(
@@ -288,6 +297,7 @@ func main() {
 	handler.NewFileSessionHandler(gameInstanceUseCase, nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewNodeAgentLogSessionHandler(nodeAgentRepo, nodeRepo, fileSessionIssuer, cfg.NodeAgentFilePortOffset).RegisterRoutes(router)
 	handler.NewAgentReleaseHandler(agentReleaseUC).RegisterRoutes(router)
+	handler.NewNodeAgentUpdateHandler(updateOrchestrator, agentReleaseUC).RegisterRoutes(router)
 	handler.NewDebugHandler(debugUseCase).RegisterRoutes(router)
 	handler.NewObserverHandler(observerUseCase).RegisterRoutes(router)
 

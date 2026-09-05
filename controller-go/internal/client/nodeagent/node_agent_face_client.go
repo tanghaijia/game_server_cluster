@@ -231,3 +231,15 @@ func (c *NodeAgentFaceClient) RemoveCache(ctx context.Context, in *nodeagentv1.R
 	}
 	return out, nil
 }
+
+// ---------------------------------------------------------------------------
+// 一键更新（P2，见 docs/node-agent-upgrade-design.md）
+// ---------------------------------------------------------------------------
+
+func (c *NodeAgentFaceClient) UpdateNodeAgent(ctx context.Context, in *nodeagentv1.UpdateNodeAgentRequest, opts ...grpc.CallOption) (*nodeagentv1.UpdateNodeAgentResponse, error) {
+	out, err := c.client.UpdateNodeAgent(ctx, in, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("update node agent: %w", err)
+	}
+	return out, nil
+}
