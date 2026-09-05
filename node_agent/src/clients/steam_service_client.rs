@@ -71,7 +71,10 @@ impl SteamServiceClient {
             })?;
         }
 
+        // P1（下载可观测性）：整段计时，失败/成功日志均带耗时与双路径（见 docs/game-cache-download-observability-design.md）
+        let started = std::time::Instant::now();
         let result = self.run_download(&mut game_cache, &staging_dir).await;
+        let elapsed = started.elapsed();
 
         match result {
             Ok(()) => {
@@ -93,14 +96,29 @@ impl SteamServiceClient {
                 game_cache.size_bytes = dir_size(&final_dir).await.unwrap_or(0);
                 game_cache.status = GameCacheStatus::Available;
                 self.game_cache_repos.save(&game_cache).await?;
+                log::info!(
+                    "下载完成：game={} branch={} build={} final={} size={}B elapsed={:.1}s",
+                    game_cache.game_id.as_str(),
+                    game_cache.branch_name.as_str(),
+                    game_cache.build_id.as_str(),
+                    final_dir.display(),
+                    game_cache.size_bytes,
+                    elapsed.as_secs_f64()
+                );
                 Ok(())
             }
             Err(e) => {
+                // P1：失败日志必须携带根因（错误对象含退出码/tail）+ 耗时 + staging/final 双路径，
+                // 不再让失败原因只存在于 steamcmd 私有日志（content_log.txt）或 DB 之外。
                 log::error!(
-                    "下载失败：{} {} 在路径 {}",
+                    "下载失败：game={} branch={} build={} final={} staging={} elapsed={:.1}s error={:?}",
                     game_cache.game_id.as_str(),
                     game_cache.branch_name.as_str(),
-                    path_str.as_str()
+                    game_cache.build_id.as_str(),
+                    path_str.as_str(),
+                    staging_dir.display(),
+                    elapsed.as_secs_f64(),
+                    e
                 );
                 // 清理半成品 staging，释放暂存空间（§8.4）
                 if staging_dir.exists() {
@@ -114,16 +132,17 @@ impl SteamServiceClient {
     }
 
     /// 实际的 steamcmd 下载流程（force_install_dir = staging 目录），
-    /// 所有错误原样上抛给 download 统一处理。
+    /// 所有错误原样上抛给 download 统一处理（每处错误先打日志带操作上下文，P1 可观测性）。
     async fn run_download(
         &self,
         game_cache: &mut GameCache,
         install_dir: &std::path::Path,
     ) -> Result<(), SteamServiceError> {
+        let install_dir_str = install_dir.to_str().unwrap_or_default();
         let mut child = Command::new("steamcmd")
             .args([
                 "+force_install_dir",
-                install_dir.to_str().unwrap_or_default(),
+                install_dir_str,
                 "+login",
                 "anonymous",
                 "+app_update",
@@ -134,7 +153,17 @@ impl SteamServiceClient {
                 "+quit",
             ])
             .stdout(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .map_err(|e| {
+                // spawn 失败（steamcmd 不在 PATH / 依赖缺失等）：带 install_dir 上下文打日志
+                log::error!(
+                    "steamcmd 启动失败：game={} branch={} install_dir={} err={e}",
+                    game_cache.game_id.as_str(),
+                    game_cache.branch_name.as_str(),
+                    install_dir_str
+                );
+                SteamServiceError::IoError(e)
+            })?;
 
         let stdout = child.stdout.take().unwrap();
 
@@ -142,20 +171,37 @@ impl SteamServiceClient {
 
         game_cache.status = GameCacheStatus::Downloading;
         log::info!(
-            "开始下载：{} {} staging 路径 {}",
+            "开始下载：game={} branch={} build={} staging={}",
             game_cache.game_id.as_str(),
             game_cache.branch_name.as_str(),
+            game_cache.build_id.as_str(),
             install_dir.display()
         );
         self.game_cache_repos.save(game_cache).await?;
-        while let Some(line) = lines.next_line().await? {
+        while let Some(line) = lines.next_line().await.map_err(|e| {
+            log::error!(
+                "读取 steamcmd 输出失败：game={} branch={} install_dir={} err={e}",
+                game_cache.game_id.as_str(),
+                game_cache.branch_name.as_str(),
+                install_dir_str
+            );
+            SteamServiceError::IoError(e)
+        })? {
             if let Ok(Some(progress)) = progress_regex(&line) {
                 game_cache.download_progress = Some(progress);
                 self.game_cache_repos.save(game_cache).await?;
             }
         }
 
-        let status = child.wait().await?;
+        let status = child.wait().await.map_err(|e| {
+            log::error!(
+                "等待 steamcmd 退出失败：game={} branch={} install_dir={} err={e}",
+                game_cache.game_id.as_str(),
+                game_cache.branch_name.as_str(),
+                install_dir_str
+            );
+            SteamServiceError::IoError(e)
+        })?;
 
         if !status.success() {
             return Err(SteamServiceError::DownloadError(
